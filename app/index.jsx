@@ -1,7 +1,6 @@
-import React from 'react';
 import {StyleSheet, View, Text, Button, Image} from "react-native";
-import bookList from "../assets/bookList_LOGO.png"
-export default function App() {
+import bookList from "../assets/BookLogo_lightMode.png"
+const Home = () => {
     return (
         <View style={styles.container}>
             <Image
@@ -16,15 +15,15 @@ export default function App() {
 
         </View>
 
-
-
-
     )
 }
 
+export default Home;
+
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: 'beige',
+        backgroundColor: '#FDFBEE',
+        // #2A203B dark purple (dark mode)
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
