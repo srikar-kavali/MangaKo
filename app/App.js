@@ -1,15 +1,15 @@
 import React from 'react';
 import {StyleSheet, View, Text, Button, Image} from "react-native";
-import TennisBall from "../assets/tennisBall.png"
+import bookList from "../assets/bookList_LOGO.png"
 export default function App() {
     return (
         <View style={styles.container}>
             <Image
-                source={TennisBall}
+                source={bookList}
                 style={styles.image}
             />
 
-            <Text style={[styles.title, {color : 'darkgreen'}]}>Hello World</Text>
+            <Text style={[styles.title, {color : 'black'}]}>Hello World</Text>
             <Text style={{marginTop : 10, marginBottom : 30}}>
                 First App
             </Text>
@@ -24,6 +24,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
     container: {
+        backgroundColor: 'beige',
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
