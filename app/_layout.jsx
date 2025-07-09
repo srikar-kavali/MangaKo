@@ -1,33 +1,14 @@
-import { Stack, Slot } from 'expo-router';
-import { ThemeProvider } from '../contexts/ThemeContext';
-import {StyleSheet, Text, useColorScheme, View} from 'react-native';
-import { Colors } from "../constants/Colors"
+import { Slot } from 'expo-router';
+import { AuthProvider } from "../context/AuthContext";
+import {Amplify} from "aws-amplify";
+import awsconfig from '../src/aws-exports';
 
+Amplify.configure(awsconfig);
 
-const InnerLayout = () => {
-    const colorScheme = useColorScheme();
-    const theme = Colors[colorScheme] ?? Colors.light;
-
+export default function Layout() {
     return (
-        <ThemeProvider>
-            <Stack screenOptions={{
-                headerStyle: { backgroundColor: 'theme.background' },
-                headerTintColor: 'theme.title',
-            }}>
-                <Stack.Screen name="index" options={{title: 'Home'}}/>
-                <Stack.Screen name="about" options={{title: 'About'}} />
-                <Stack.Screen name="contact" options={{title: 'Contact'}} />
-            </Stack>
-        </ThemeProvider>
-    )
-}
-
-const RootLayout = () => {
-    return (
-        <ThemeProvider>
-            <InnerLayout />
-        </ThemeProvider>
+        <AuthProvider>
+            <Slot />
+        </AuthProvider>
     );
-};
-
-export default RootLayout;
+}
