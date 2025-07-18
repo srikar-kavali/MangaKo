@@ -1,20 +1,41 @@
-import { signIn as authSignIn, signUp as authSignUp,
+import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp,
     confirmSignUp as auth_confirmSignUp, resendSignUpCode as auth_resendSignUpCode,
-} from '@aws-amplify/auth';
+getCurrentUser as auth_getCurrentUser, resetPassword as auth_resetPassword,
+confirmResetPassword as auth_confirmResetPassword} from '@aws-amplify/auth';
 
 export async function signIn(email, password) {
     try {
-        const { isSignedIn, nextStep } = await authSignIn({
-            username: email,
-            password
-        });
-        console.log("SignIn result:", { isSignedIn, nextStep });
-        return { success: true, user: { username: email } };
+        if (!email || !password) {
+            return { success: false, error: 'Email and password are required.' };
+        }
+
+        // First, sign out any existing user
+        try {
+            await authSignOut();
+        } catch (signOutError) {
+            // Ignore signOut errors – usually means no user was signed in
+        }
+
+        const username = email.trim().toLowerCase();
+        const response = await authSignIn({ username, password });
+
+        return { success: true, user: response };
     } catch (error) {
-        console.error('Login error', error);
-        return { success: false, error: error.message || 'Login failed' };
+        const message = error?.message || error?.name || 'Login failed';
+        return { success: false, error: message };
     }
 }
+
+export async function signOut() {
+    try {
+        await authSignOut();
+        return { success: true };
+    } catch (error) {
+        console.error('Sign out error:', error);
+        return { success: false, error: error.message || 'Sign out failed' };
+    }
+}
+
 
 export async function signUp(email, password) {
     try {
@@ -55,5 +76,41 @@ export async function resendSignUpCode(email) {
     } catch (error) {
         console.error('Resend error', error);
         return { success: false, error: error.message || 'Resend failed' };
+    }
+}
+
+export async function getCurrentUser() {
+    try {
+        const user = await auth_getCurrentUser();
+        return user;
+    } catch {
+        return null;
+    }
+}
+
+export async function resetPassword(email) {
+    try{
+        const result = await auth_resetPassword({ username: email});
+        console.log("Reset password initialized:", result);
+        return { success: true };
+    } catch (error)
+    {
+        console.error('Reset Password error', error);
+        return { success: false, error: error.message || 'Reset Password failed' };
+    }
+}
+
+export async function confirmResetPassword(email, code, newPassword) {
+    try{
+        await auth_confirmResetPassword({
+            username: email,
+            confirmationCode: code,
+            newPassword,
+        });
+        return { success: true };
+    }catch(error) {
+        console.error('Confirm Reset password error', error);
+        return { success: false, error: error.message || 'Password confirmation failed' };
+
     }
 }

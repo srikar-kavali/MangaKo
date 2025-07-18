@@ -57,43 +57,43 @@ export default function SignUp() {
                       touched,
                       isValid,
                   }) => (
-                        <>
-                            <View style={styles.inputContainer}>
-                                <Ionicons name="mail-outline" size={25} style={styles.icon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Email"
-                                    value={values.email}
-                                    onChangeText={handleChange('email')}
-                                    onBlur={handleBlur('email')}
-                                    autoCapitalize="none"
-                                    keyboardType="email-address"
-                                />
-                            </View>
-                            {touched.email && errors.email && (
-                                <Text style={styles.errorText}>{errors.email}</Text>
-                            )}
+                    <>
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="mail-outline" size={25} style={styles.icon} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Email"
+                                value={values.email}
+                                onChangeText={handleChange('email')}
+                                onBlur={handleBlur('email')}
+                                autoCapitalize="none"
+                                keyboardType="email-address"
+                            />
+                        </View>
+                        {touched.email && errors.email && (
+                            <Text style={styles.errorText}>{errors.email}</Text>
+                        )}
 
-                            <View style={styles.inputContainer}>
-                                <Ionicons name="lock-closed-outline" size={25} style={styles.icon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Password"
-                                    secureTextEntry
-                                    value={values.password}
-                                    onChangeText={handleChange('password')}
-                                    onBlur={handleBlur('password')}
-                                />
-                            </View>
-                            {touched.password && errors.password && (
-                                <Text style={styles.errorText}>{errors.password}</Text>
-                            )}
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="lock-closed-outline" size={25} style={styles.icon} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Password"
+                                secureTextEntry
+                                value={values.password}
+                                onChangeText={handleChange('password')}
+                                onBlur={handleBlur('password')}
+                            />
+                        </View>
+                        {touched.password && errors.password && (
+                            <Text style={styles.errorText}>{errors.password}</Text>
+                        )}
 
-                            <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-                                <Text  style={styles.buttonText}>Sign Up</Text>
-                            </TouchableOpacity>
-                        </>
-                    )}
+                        <TouchableOpacity style={styles.button} onPress={handleSubmit}>
+                            <Text  style={styles.buttonText}>Sign Up</Text>
+                        </TouchableOpacity>
+                    </>
+                )}
             </Formik>
         </View>
     )

@@ -1,29 +1,49 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation} from "@react-navigation/native"
 import {Formik} from 'formik';
 import * as yup from 'yup';
-import { signIn } from "../auth/cognito";
+import { signIn, getCurrentUser} from "../auth/cognito";
 import dragonCircle from "../assets/dragonCircle.png"
+import { useEffect } from "react";
 import { router } from 'expo-router'
 
 const loginValidationSchema = yup.object().shape({
-        email: yup
-            .string()
-            .email('Please enter a valid email')
-            .required('Email is required'),
-        password: yup
-            .string()
-            .min(8, ({ min }) => `Password must be at least ${min} characters`)
+    email: yup
+        .string()
+        .email('Please enter a valid email')
+        .required('Email is required'),
+    password: yup
+        .string()
+        .min(8, ({ min }) => `Password must be at least ${min} characters`)
         .required('Password is required'),
-    });
+});
 
 export default function Login() {
+    useEffect(() => {
+        const checkUser = async () => {
+            try {
+                const user = await getCurrentUser();
+                if (!user) return;
+
+                // Ping Cognito to verify session
+                await fetchUserAttributes(); // optional
+            } catch (error) {
+                // If there's an error getting user data, force sign-out
+                await signOut();
+                return;
+            }
+
+            router.replace('/tabs');
+        };
+
+        checkUser();
+    }, []);
+
     return (
         <View style={styles.container}>
-            <Image source={dragonCircle} style={styles.logo} />
-            <Text style={styles.title}>Login</Text>
+                <Image source={dragonCircle} style={styles.logo} />
+                <Text style={styles.title}>Login</Text>
 
             <Formik
                 validationSchema={loginValidationSchema}
@@ -31,7 +51,7 @@ export default function Login() {
                 onSubmit={async (values, { setSubmitting }) => {
                     const { success, error } = await signIn(values.email, values.password);
                     if (success) {
-                        router.replace('/home');
+                        router.replace('/tabs');
                     } else {
                         Alert.alert('Login Failed', error);
                     }
