@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import {SafeAreaView, View, Text, StyleSheet, Image, Pressable, TextInput, FlatList} from 'react-native';
-import dragonLogo from "../../assets/dragonLogoTransparent.png"
-import { useRouter } from 'expo-router'
+import { SafeAreaView, View, Text, StyleSheet, Image, Pressable, TextInput, FlatList, } from 'react-native';
+import dragonLogo from '../../assets/dragonLogoTransparent.png';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { signOut } from "../../auth/cognito";
+import { signOut } from '../../auth/cognito';
 import { getRecentSearches, saveRecentSearches } from '../searchStorage';
-import { searchManga } from '../../api/mangadex'
+import { searchManga } from '../../api/mangadex';
 
 const Home = () => {
     const [searchActive, setSearchActive] = useState(false);
@@ -23,17 +23,37 @@ const Home = () => {
         loadSearches();
     }, []);
 
+    useEffect(() => {
+        const delayDebounce = setTimeout(async () => {
+            const currentQuery = query.trim();
+            if (!currentQuery) {
+                setSearchResults([]);
+                return;
+            }
+
+            try {
+                const results = await searchManga(currentQuery);
+                setSearchResults(results);
+            } catch (error) {
+                console.log('Live search failed', error);
+                setSearchResults([]);
+            }
+        }, 400);
+
+        return () => clearTimeout(delayDebounce);
+    }, [query]);
+
     const handleAddSearch = async (text) => {
         const trimmed = text.trim();
         if (!trimmed) return;
 
-        const updated = [trimmed, ...recentSearches.filter(item => item !== trimmed)].slice(0, 10);
+        const updated = [trimmed, ...recentSearches.filter((item) => item !== trimmed)].slice(0, 10);
         setRecentSearches(updated);
         await saveRecentSearches(updated);
     };
 
     const removeSearch = async (text) => {
-        const updated = recentSearches.filter(item => item !== text);
+        const updated = recentSearches.filter((item) => item !== text);
         setRecentSearches(updated);
         await saveRecentSearches(updated);
     };
@@ -47,22 +67,17 @@ const Home = () => {
                     </Pressable>
                     <Text style={styles.logoText}>Mangako</Text>
                 </View>
-                <View>
-                    <Pressable onPress={() => {
-                        setSearchActive(true);
-                        setDropdownVisible(false);
-                    }}>
-                        <Ionicons name='search-circle-outline' style={styles.icon} size={40} />
-                    </Pressable>
-
-                </View>
-                <View style={styles.profileRight}>
-                    <Pressable style={styles.logo} onPress={() => setDropdownVisible(!dropdownVisible)}>
-                        <Ionicons name="person-circle-outline" size={40} style={styles.icon} />
-                    </Pressable>
-                </View>
-
+                <Pressable onPress={() => {
+                    setSearchActive(true);
+                    setDropdownVisible(false);
+                }}>
+                    <Ionicons name='search-circle-outline' style={styles.icon} size={40} />
+                </Pressable>
+                <Pressable onPress={() => setDropdownVisible(!dropdownVisible)}>
+                    <Ionicons name="person-circle-outline" size={40} style={styles.icon} />
+                </Pressable>
             </View>
+
             {dropdownVisible && (
                 <>
                     <View style={styles.triangle} />
@@ -73,7 +88,6 @@ const Home = () => {
                         }}>
                             <Text style={styles.dropdownItem}>Settings</Text>
                         </Pressable>
-
                         <Pressable onPress={async () => {
                             setDropdownVisible(false);
                             await signOut();
@@ -84,93 +98,100 @@ const Home = () => {
                     </View>
                 </>
             )}
+
             <View style={styles.borderLine} />
 
             {searchActive && (
                 <View style={styles.searchOverlay}>
                     <SafeAreaView style={styles.searchContainer}>
-                    <View style={styles.searchBar}>
-                        <Ionicons name="search" size={20} color="#aaa" style={styles.searchIcon} />
-                        <TextInput
-                            placeholder="Search"
-                            placeholderTextColor="#aaa"
-                            style={styles.input}
-                            value={query}
-                            onChangeText={setQuery}
-                            autoFocus
-                            onSubmitEditing={async () => {
-                                const currentQuery = query.trim();
-                                if(!currentQuery) return;
+                        <View style={styles.searchBar}>
+                            <Ionicons name="search" size={20} color="#aaa" style={styles.searchIcon} />
+                            <TextInput
+                                placeholder="Search"
+                                placeholderTextColor="#aaa"
+                                style={styles.input}
+                                value={query}
+                                onChangeText={setQuery}
+                                autoFocus
+                                onSubmitEditing={async () => {
+                                    const currentQuery = query.trim();
+                                    if (!currentQuery) return;
+                                    handleAddSearch(currentQuery);
 
-                                handleAddSearch(currentQuery);
+                                    try {
+                                        const results = await searchManga(currentQuery);
+                                        setSearchResults(results);
+                                    } catch (error) {
+                                        console.log('Search failed', error);
+                                        setSearchResults([]);
+                                    }
 
-                                try {
-                                    const results = await searchManga(currentQuery);
-                                    setSearchResults(results);
-                                }catch(error) {
-                                    console.log('Search failed', error);
-                                    setSearchResults([]);
-                                }
+                                    setQuery('');
+                                }}
+                            />
+                            <Pressable onPress={() => setSearchActive(false)}>
+                                <Text style={styles.cancel}>Cancel</Text>
+                            </Pressable>
+                        </View>
 
-                                setQuery(' ');
-                            }}
-                        />
-                        <Pressable onPress={() => setSearchActive(false)}>
-                            <Text style={styles.cancel}>Cancel</Text>
-                        </Pressable>
-                    </View>
-
-                    <FlatList
-                        data={recentSearches}
-                        keyExtractor={(item, index) => index.toString()}
-                        renderItem={({ item }) => (
-                            <View style={styles.historyRow}>
-                                <View style={styles.historyLeft}>
-                                    <Ionicons name="time-outline" size={20} color="#aaa" />
-                                    <Text style={styles.historyText}>{item}</Text>
+                        <FlatList
+                            data={recentSearches}
+                            keyExtractor={(item, index) => index.toString()}
+                            renderItem={({ item }) => (
+                                <View style={styles.historyRow}>
+                                    <View style={styles.historyLeft}>
+                                        <Ionicons name="time-outline" size={20} color="#aaa" />
+                                        <Text style={styles.historyText}>{item}</Text>
+                                    </View>
+                                    <Pressable onPress={() => removeSearch(item)}>
+                                        <Ionicons name="close-outline" size={18} color="#aaa" />
+                                    </Pressable>
                                 </View>
-                                <Pressable onPress={() => removeSearch(item)}>
-                                    <Ionicons name="close-outline" size={18} color="#aaa" />
-                                </Pressable>
-                            </View>
-                        )}
-                    />
+                            )}
+                        />
 
                         {searchResults.length > 0 && (
                             <FlatList
                                 data={searchResults}
                                 keyExtractor={(item) => item.id}
-                                renderItem={({ item }) => (
-                                    <Pressable onPress={() => {
-                                        // Navigate to details page later
-                                        console.log('Selected Manga:', item);
-                                    }}>
-                                        <View style={styles.resultRow}>
-                                            <Text style={styles.resultTitle}>{item.attributes.title.en || 'Untitled'}</Text>
-                                        </View>
-                                    </Pressable>
-                                )}
+                                renderItem={({ item }) => {
+                                    const title = item.attributes?.title?.en || 'No title';
+                                    const coverRel = item.relationships?.find((r) => r.type === 'cover_art');
+                                    const coverFile = coverRel?.attributes?.fileName;
+                                    const coverUrl = coverFile
+                                        ? `https://uploads.mangadex.org/covers/${item.id}/${coverFile}.256.jpg`
+                                        : null;
+
+                                    return (
+                                        <Pressable
+                                            onPress={() => router.push(`/MangaDetails?mangaId=${item.id}`)}
+                                            style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderColor: '#eee' }}
+                                        >
+                                            {coverUrl && (
+                                                <Image
+                                                    source={{ uri: coverUrl }}
+                                                    style={{ width: 50, height: 75, marginRight: 12, borderRadius: 4 }}
+                                                />
+                                            )}
+                                            <Text style={{ fontSize: 16, color: '#000', flexShrink: 1 }}>{title}</Text>
+                                        </Pressable>
+                                    );
+                                }}
                             />
                         )}
                     </SafeAreaView>
                 </View>
             )}
         </SafeAreaView>
-
     );
 };
 
 export default Home;
 
 const styles = StyleSheet.create({
-    container: {
+    screen: {
         flex: 1,
         backgroundColor: '#fff',
-    },
-    borderLine: {
-        height: 1,
-        backgroundColor: '#ccc',
-        width: '100%',
     },
     header: {
         flexDirection: 'row',
@@ -194,10 +215,6 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
         color: '#1E1E1E',
-    },
-    profileRight: {
-        flexDirection: 'row',
-        alignItems: 'center',
     },
     icon: {
         color: '#333',
@@ -238,15 +255,23 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#333',
     },
-    dropdownSeparator: {
+    borderLine: {
         height: 1,
-        backgroundColor: '#eee',
-        marginVertical: 4,
+        backgroundColor: '#ccc',
+        width: '100%',
     },
-    rightIcon: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12
+    searchOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: '#fff',
+        zIndex: 999,
+        elevation: 10,
+    },
+    searchContainer: {
+        flex: 1,
     },
     searchBar: {
         flexDirection: 'row',
@@ -284,33 +309,6 @@ const styles = StyleSheet.create({
     historyText: {
         color: '#333',
         fontSize: 16,
+        marginLeft: 8,
     },
-    searchOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: '#fff',
-        zIndex: 999,
-        elevation: 10 //Android only
-    },
-    screen: {
-        flex: 1,
-        backgroundColor: '#fff'
-    },
-    searchContainer: {
-        flex: 1
-    },
-    resultRow: {
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        borderBottomColor: '#eee',
-        borderBottomWidth: 1,
-    },
-    resultTitle: {
-        fontSize: 16,
-        color: '#000',
-    }
-
 });

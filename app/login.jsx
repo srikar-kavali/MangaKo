@@ -7,7 +7,7 @@ import { signIn, getCurrentUser} from "../auth/cognito";
 import dragonCircle from "../assets/dragonCircle.png"
 import { useEffect } from "react";
 import { router } from 'expo-router'
-
+import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 const loginValidationSchema = yup.object().shape({
     email: yup
         .string()
@@ -41,86 +41,93 @@ export default function Login() {
     }, []);
 
     return (
-        <View style={styles.container}>
-                <Image source={dragonCircle} style={styles.logo} />
-                <Text style={styles.title}>Login</Text>
-
-            <Formik
-                validationSchema={loginValidationSchema}
-                initialValues={{ email: '', password: '' }}
-                onSubmit={async (values, { setSubmitting }) => {
-                    const { success, error } = await signIn(values.email, values.password);
-                    if (success) {
-                        router.replace('/tabs');
-                    } else {
-                        Alert.alert('Login Failed', error);
-                    }
-                    setSubmitting(false);
-                }}
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{flex: 1}}
             >
-                {({
-                      handleChange,
-                      handleBlur,
-                      handleSubmit,
-                      values,
-                      errors,
-                      touched,
-                      isValid,
-                  }) => (
-                    <>
-                        <View style={styles.inputContainer}>
-                            <Ionicons name="mail-outline" size={25} style={styles.icon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Email"
-                                value={values.email}
-                                onChangeText={handleChange('email')}
-                                onBlur={handleBlur('email')}
-                                autoCapitalize="none"
-                                keyboardType="email-address"
-                            />
-                        </View>
-                        {touched.email && errors.email && (
-                            <Text style={styles.errorText}>{errors.email}</Text>
+            <ScrollView contentContainerStyle={{flexGrow: 1}}>
+                <View style={styles.container}>
+                    <Image source={dragonCircle} style={styles.logo} />
+                    <Text style={styles.title}>Login</Text>
+
+                    <Formik
+                        validationSchema={loginValidationSchema}
+                        initialValues={{ email: '', password: '' }}
+                        onSubmit={async (values, { setSubmitting }) => {
+                            const { success, error } = await signIn(values.email, values.password);
+                            if (success) {
+                                router.replace('/tabs');
+                            } else {
+                                Alert.alert('Login Failed', error);
+                            }
+                            setSubmitting(false);
+                        }}
+                    >
+                        {({
+                              handleChange,
+                              handleBlur,
+                              handleSubmit,
+                              values,
+                              errors,
+                              touched,
+                              isValid,
+                          }) => (
+                            <>
+                                <View style={styles.inputContainer}>
+                                    <Ionicons name="mail-outline" size={25} style={styles.icon} />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Email"
+                                        value={values.email}
+                                        onChangeText={handleChange('email')}
+                                        onBlur={handleBlur('email')}
+                                        autoCapitalize="none"
+                                        keyboardType="email-address"
+                                    />
+                                </View>
+                                {touched.email && errors.email && (
+                                    <Text style={styles.errorText}>{errors.email}</Text>
+                                )}
+
+                                <View style={styles.inputContainer}>
+                                    <Ionicons name="lock-closed-outline" size={25} style={styles.icon} />
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Password"
+                                        secureTextEntry
+                                        value={values.password}
+                                        onChangeText={handleChange('password')}
+                                        onBlur={handleBlur('password')}
+                                    />
+                                </View>
+                                {touched.password && errors.password && (
+                                    <Text style={styles.errorText}>{errors.password}</Text>
+                                )}
+
+                                <TouchableOpacity onPress={() => router.push('/forget')}>
+                                    <Text style={styles.forgotPassword}>Forgot Password?</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.button}
+                                    onPress={handleSubmit}
+                                    disabled={!isValid}
+                                >
+                                    <Text style={styles.buttonText}>Login</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity onPress={() => router.push('/signup')}>
+                                    <Text style={styles.signUp}>
+                                        Don't have an account?{' '}
+                                        <Text style={styles.signUpLink}>Sign Up</Text>
+                                    </Text>
+                                </TouchableOpacity>
+                            </>
                         )}
-
-                        <View style={styles.inputContainer}>
-                            <Ionicons name="lock-closed-outline" size={25} style={styles.icon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Password"
-                                secureTextEntry
-                                value={values.password}
-                                onChangeText={handleChange('password')}
-                                onBlur={handleBlur('password')}
-                            />
-                        </View>
-                        {touched.password && errors.password && (
-                            <Text style={styles.errorText}>{errors.password}</Text>
-                        )}
-
-                        <TouchableOpacity onPress={() => router.push('/forget')}>
-                            <Text style={styles.forgotPassword}>Forgot Password?</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={styles.button}
-                            onPress={handleSubmit}
-                            disabled={!isValid}
-                        >
-                            <Text style={styles.buttonText}>Login</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity onPress={() => router.push('/signup')}>
-                            <Text style={styles.signUp}>
-                                Don't have an account?{' '}
-                                <Text style={styles.signUpLink}>Sign Up</Text>
-                            </Text>
-                        </TouchableOpacity>
-                    </>
-                )}
-            </Formik>
-        </View>
+                    </Formik>
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
     );
 }
 

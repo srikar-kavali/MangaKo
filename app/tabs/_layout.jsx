@@ -1,5 +1,4 @@
 import { Tabs } from 'expo-router';
-import { AuthProvider } from "../../context/AuthContext";
 import { Amplify } from 'aws-amplify';
 import awsconfig from '../../src/aws-exports';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,7 +7,6 @@ Amplify.configure(awsconfig);
 
 export default function Layout() {
     return (
-        <AuthProvider>
             <Tabs screenOptions={{ headerShown: false }}>
                 <Tabs.Screen
                     name="home"
@@ -47,6 +45,5 @@ export default function Layout() {
                     }}
                 />
             </Tabs>
-        </AuthProvider>
     );
 }

@@ -11,7 +11,7 @@ export function AuthProvider({ children }) {
         const loadEmail = async () => {
             try{
                 const savedEmail = await AsyncStorage.getItem('tempEmail');
-                if (savedEmail) setTempEmail(savedEmail);
+                if (savedEmail) setTempEmailState(savedEmail);
             } catch (error) {
                 console.error('Failed to load tempEmail', error);
             }
@@ -23,11 +23,11 @@ export function AuthProvider({ children }) {
     const setTempEmail = async (email) => {
         try {
             await AsyncStorage.setItem('tempEmail', email);
-            setTempEmail(email);
+            setTempEmailState(email);
         } catch (error) {
             console.error('Failed to save tempEmail', error);
         }
-    }
+    };
 
     return (
         <AuthContext.Provider value={{ tempEmail, setTempEmail }}>
