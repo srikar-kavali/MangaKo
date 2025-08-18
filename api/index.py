@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from scrapers.weebcentral_scraper import WeebCentralScraper, Chapter as ChapterDC, Manga as MangaDC
 
-app = FastAPI(title="WeebCentral API (Vercel)")
+app = FastAPI(title="WeebCentral API (Vercel)", root_path="/api/index")
 scraper = WeebCentralScraper()
 
 app.add_middleware(
