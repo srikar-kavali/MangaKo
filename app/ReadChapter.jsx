@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { View, SafeAreaView, ScrollView, Image, StyleSheet, Pressable, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { getChapterPages } from "../api/mangaAPI";
-import { getWeebcentralManga } from "../api/weebcentral";
+import { getChapterPages } from "../manga_api/mangaAPI";
+import { getWeebcentralManga } from "../manga_api/weebcentral";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { Picker } from "@react-native-picker/picker";
 

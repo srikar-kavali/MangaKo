@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
 import { getRecentSearches, saveRecentSearches } from '../searchStorage';
-import { searchMangaDex } from '../../api/mangadex';
+import { searchMangaDex } from '../../manga_api/mangadex';
 
 const Home = () => {
     const [searchActive, setSearchActive] = useState(false);

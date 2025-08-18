@@ -5,9 +5,9 @@ import dragonLogo from "../assets/dragonLogoTransparent.png";
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
-import { getMangaDexDetails, normalizeMangaDex } from '../api/mangadex';
-import { searchManga } from '../api/mangaAPI';
-import { getWeebcentralManga } from '../api/weebcentral';
+import { getMangaDexDetails, normalizeMangaDex } from '../manga_api/mangadex';
+import { searchManga } from '../manga_api/mangaAPI';
+import { getWeebcentralManga } from '../manga_api/weebcentral';
 
 const MangaDetails = () => {
     const { mangadexId, weebcentralUrl: wcUrlParam } = useLocalSearchParams();
