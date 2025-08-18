@@ -1,25 +1,21 @@
-# manga_api/index.py
+# api/index.py
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-
-# import your scraper
 from scrapers.weebcentral_scraper import WeebCentralScraper, Chapter as ChapterDC, Manga as MangaDC
 
 app = FastAPI(title="WeebCentral API (Vercel)")
 scraper = WeebCentralScraper()
 
-# --- CORS so Expo can call it from anywhere ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],         # tighten later if you want
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Models for responses ---
 class SearchItem(BaseModel):
     id: str
     title: str
@@ -45,15 +41,21 @@ class Manga(BaseModel):
     cover_url: Optional[str]
     chapters: List[Chapter]
 
-# --- Routes ---
-@app.get("/manga_api/search", response_model=List[SearchItem])
+@app.get("/")
+@app.get("")  # support both /api/index and /api/index/
+def root():
+    return {"service": "weebcentral-api", "ok": True}
+
+@app.get("/search")
+@app.get("/search/")
 def search(q: str = Query(..., min_length=1), limit: int = 20):
     try:
         return scraper.search(q, limit=limit)
     except Exception as e:
         raise HTTPException(500, str(e))
 
-@app.get("/manga_api/manga", response_model=Manga)
+@app.get("/manga")
+@app.get("/manga/")
 def manga(id_or_url: str):
     try:
         m: MangaDC = scraper.get_manga(id_or_url)
@@ -66,7 +68,8 @@ def manga(id_or_url: str):
     except Exception as e:
         raise HTTPException(500, str(e))
 
-@app.get("/manga_api/chapter/pages", response_model=List[str])
+@app.get("/chapter/pages")
+@app.get("/chapter/pages/")
 def chapter_pages(id_or_url: str):
     try:
         return scraper.get_chapter_pages(id_or_url)
