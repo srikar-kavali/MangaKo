@@ -1,49 +1,85 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { View, SafeAreaView, ScrollView, Image, StyleSheet, Pressable, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { getChapterPages } from "../api/mangadex";
+import { getChapterPages } from "../api/mangaAPI";
+import { getWeebcentralManga } from "../api/weebcentral";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { Picker } from "@react-native-picker/picker";
 
 const ReadChapter = () => {
-    const { chapterId, mangaId } = useLocalSearchParams();
-    const [pageUrls, setPageUrls] = useState([]);
-    const [chapters, setChapters] = useState([]);
-    const [selectedChapter, setSelectedChapter] = useState(chapterId);
-    const [offset, setOffset] = useState(0);
+    const { chapterUrl: chapterUrlParam, weebcentralUrl, mangadexId, chapterId: mdChapterId } = useLocalSearchParams();
     const router = useRouter();
+    const [selectedChapter, setSelectedChapter] = useState(chapterUrlParam || null);
+    const [pickerItems, setPickerItems] = useState([]);
+    const [pageUrls, setPageUrls] = useState([]);
 
-    const limit = 100;
-
-    // Load pages when selectedChapter changes
     useEffect(() => {
-        const fetchChapterPages = async () => {
+        let cancelled = false;
+        (async () => {
             try {
-                const urls = await getChapterPages(selectedChapter);
-                setPageUrls(urls);
+                if (!selectedChapter) {
+                    setPageUrls([]);
+                    return;
+                }
+                const urls = await getChapterPages("weebcentral", selectedChapter);
+                if (!cancelled) setPageUrls(urls || []);
             } catch (error) {
-                console.error("Failed to load chapter pages:", error);
+                console.error("Failed to load chapter pages (WC):", error);
+                if (!cancelled) setPageUrls([]);
             }
-        };
-
-        fetchChapterPages();
+        })();
+        return () => { cancelled = true; };
     }, [selectedChapter]);
 
-    // Load chapters list for the manga
     useEffect(() => {
-        const fetchChapters = async () => {
+        let cancelled = false;
+        (async () => {
             try {
-                const url = `https://api.mangadex.org/chapter?manga=${mangaId}&translatedLanguage[]=en&includeExternalUrl=0&order[chapter]=asc&limit=${limit}&offset=${offset}`;
-                const response = await fetch(url);
-                const json = await response.json();
-                setChapters(json.data || []);
-            } catch (err) {
-                console.error("Failed to fetch chapters:", err);
-            }
-        };
+                if (weebcentralUrl) {
+                    const wc = await getWeebcentralManga(weebcentralUrl);
+                    const items = (wc?.chapters || []).map(ch => ({
+                        key: ch.id,
+                        label: `Ch ${ch.number || '–'}${ch.title ? ` - ${ch.title}` : ''}`,
+                        value: ch.url,
+                    }));
+                    if (!cancelled) {
+                        setPickerItems(items);
+                        if (!chapterUrlParam && items.length > 0) {
+                            setSelectedChapter(items[0].value);
+                        }
+                    }
+                    return;
+                }
 
-        fetchChapters();
-    }, [mangaId, offset]);
+                if (mangadexId) {
+                    const url = `https://api.mangadex.org/chapter?manga=${mangadexId}&translatedLanguage[]=en&includeExternalUrl=0&order[chapter]=asc&limit=100&offset=0`;
+                    const resp = await fetch(url);
+                    const json = await resp.json();
+                    const chapters = json?.data || [];
+                    const items = chapters.map(ch => ({
+                        key: ch.id,
+                        label: `Ch ${ch.attributes?.chapter || '–'}`,
+                        value: ch.id,
+                    }));
+                    if (!cancelled) {
+                        setPickerItems(items);
+                        if (!chapterUrlParam && items.length > 0 && mdChapterId) return;
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load chapter list:", err);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [weebcentralUrl, mangadexId, chapterUrlParam, mdChapterId]);
+
+    const handlePickerChange = (value) => {
+        if (typeof value === "string" && value.startsWith("http")) {
+            setSelectedChapter(value); // WC URL
+        } else {
+            console.warn("Selected a MangaDex chapter id; pages are WC-only. Provide weebcentralUrl for full picker support.");
+        }
+    };
 
     return (
         <SafeAreaView style={styles.container}>
@@ -56,16 +92,12 @@ const ReadChapter = () => {
                 </View>
 
                 <Picker
-                    selectedValue={selectedChapter}
-                    onValueChange={(value) => setSelectedChapter(value)}
-                    style={{ color: 'white', backgroundColor: '#222' }}
+                    selectedValue={selectedChapter || mdChapterId || ""}
+                    onValueChange={handlePickerChange}
+                    style={{ color: 'white', backgroundColor: '#222', minWidth: 160 }}
                 >
-                    {chapters.map((chapter) => (
-                        <Picker.Item
-                            key={chapter.id}
-                            label={`Ch ${chapter.attributes.chapter || '–'}`}
-                            value={chapter.id}
-                        />
+                    {pickerItems.map((item) => (
+                        <Picker.Item key={item.key} label={item.label} value={item.value} />
                     ))}
                 </Picker>
             </View>
@@ -74,6 +106,9 @@ const ReadChapter = () => {
                 {pageUrls.map((url, index) => (
                     <Image key={index} source={{ uri: url }} style={styles.pageImage} />
                 ))}
+                {!pageUrls.length && (
+                    <Text style={{ color: "#888", marginTop: 16 }}>No pages found.</Text>
+                )}
             </ScrollView>
         </SafeAreaView>
     );
@@ -95,19 +130,7 @@ const styles = StyleSheet.create({
         marginBottom: 10,
     },
     logoImage: { width: 50, height: 50, resizeMode: 'contain', marginRight: 8 },
-    headerText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    scroll: {
-        alignItems: 'center',
-        paddingBottom: 20,
-    },
-    pageImage: {
-        width: '100%',
-        aspectRatio: 0.7,
-        resizeMode: 'contain',
-        marginBottom: 10,
-    },
+    headerText: { color: '#fff', fontSize: 18, fontWeight: '600' },
+    scroll: { alignItems: 'center', paddingBottom: 20 },
+    pageImage: { width: '100%', aspectRatio: 0.7, resizeMode: 'contain', marginBottom: 10 },
 });

@@ -8,7 +8,7 @@ const CONTENT_RATINGS = [
     "pornographic"
 ];
 
-export const searchManga = async (title) => {
+export const searchMangaDex = async (title) => {
     try {
         const params = new URLSearchParams();
         params.append("title", title);
@@ -38,7 +38,7 @@ export const searchManga = async (title) => {
     }
 };
 
-export const getMangaDetails = async (mangaId) => {
+export const getMangaDexDetails = async (mangaId) => {
     try {
         const url = `${BASE_URL}/manga/${mangaId}?includes[]=cover_art&includes[]=author&includes[]=artist`;
         const response = await fetch(url);
@@ -50,7 +50,7 @@ export const getMangaDetails = async (mangaId) => {
     }
 };
 
-export const getChapters = async (mangaId, offset = 0, limit = 100) => {
+export const getMangaDexChapters = async (mangaId, offset = 0, limit = 100) => {
     try {
         const params = new URLSearchParams();
         params.append("manga", mangaId);
@@ -69,7 +69,7 @@ export const getChapters = async (mangaId, offset = 0, limit = 100) => {
     }
 };
 
-export const getChapterPages = async (chapterId) => {
+export const getMangaDexChapterPages = async (chapterId) => {
     try {
         const url = `${BASE_URL}/at-home/server/${chapterId}`;
         const response = await fetch(url);
@@ -86,3 +86,52 @@ export const getChapterPages = async (chapterId) => {
         return [];
     }
 };
+
+// --- Helpers for clean MD data ---
+function pickEn(obj) {
+    if (!obj) return "";
+    if (typeof obj === "string") return obj;
+    return obj.en ?? Object.values(obj)[0] ?? "";
+}
+
+function buildCoverUrl(mangaId, fileName, size = 512) {
+    if (!mangaId || !fileName) return null;
+    return `https://uploads.mangadex.org/covers/${mangaId}/${fileName}.${size}.jpg`;
+}
+
+export function normalizeMangaDex(mdData) {
+    if (!mdData) return null;
+    const attrs = mdData.attributes || {};
+    const title = pickEn(attrs.title);
+    const description = pickEn(attrs.description);
+
+    const relationships = Array.isArray(mdData.relationships) ? mdData.relationships : [];
+
+    const authors = relationships
+        .filter(r => r.type === "author")
+        .map(r => r.attributes?.name)
+        .filter(Boolean);
+
+    const artists = relationships
+        .filter(r => r.type === "artist")
+        .map(r => r.attributes?.name)
+        .filter(Boolean);
+
+    const coverRel = relationships.find(r => r.type === "cover_art");
+    const coverFile = coverRel?.attributes?.fileName;
+    const coverUrl = buildCoverUrl(mdData.id, coverFile, 512);
+
+    const tags = (attrs.tags || [])
+        .map(t => pickEn(t.attributes?.name))
+        .filter(Boolean);
+
+    return {
+        id: mdData.id,
+        title,
+        description,
+        authors,
+        artists,
+        tags,
+        coverUrl,
+    };
+}

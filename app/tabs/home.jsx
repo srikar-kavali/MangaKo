@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
 import { getRecentSearches, saveRecentSearches } from '../searchStorage';
-import { searchManga } from '../../api/mangadex';
+import { searchMangaDex } from '../../api/mangadex';
 
 const Home = () => {
     const [searchActive, setSearchActive] = useState(false);
@@ -32,7 +32,7 @@ const Home = () => {
             }
 
             try {
-                const results = await searchManga(currentQuery);
+                const results = await searchMangaDex(currentQuery);
                 setSearchResults(results);
             } catch (error) {
                 console.log('Live search failed', error);
@@ -119,7 +119,7 @@ const Home = () => {
                                     handleAddSearch(currentQuery);
 
                                     try {
-                                        const results = await searchManga(currentQuery);
+                                        const results = await searchMangaDex(currentQuery);
                                         setSearchResults(results);
                                     } catch (error) {
                                         console.log('Search failed', error);
@@ -164,7 +164,10 @@ const Home = () => {
 
                                     return (
                                         <Pressable
-                                            onPress={() => router.push(`/MangaDetails?mangaId=${item.id}`)}
+                                            onPress={() => {
+                                                    setSearchActive(false);
+                                                    router.push(`/MangaDetails?mangadexId=${item.id}`);
+                                                }}
                                             style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderColor: '#eee' }}
                                         >
                                             {coverUrl && (

@@ -1,48 +1,72 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, ScrollView, Pressable, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { getMangaDetails, getChapters } from '../api/mangadex';
+import dragonLogo from "../assets/dragonLogoTransparent.png";
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import dragonLogo from "../assets/dragonLogoTransparent.png";
 dayjs.extend(relativeTime);
+import { getMangaDexDetails, normalizeMangaDex } from '../api/mangadex';
+import { searchManga } from '../api/mangaAPI';
+import { getWeebcentralManga } from '../api/weebcentral';
 
 const MangaDetails = () => {
-    const { mangaId } = useLocalSearchParams();
-    const [manga, setManga] = useState(null);
-    const [chapters, setChapters] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [ascending, setAscending] = useState(false);
+    const { mangadexId, weebcentralUrl: wcUrlParam } = useLocalSearchParams();
     const router = useRouter();
 
-    const validChapters = chapters.filter(ch =>
-        ch.attributes &&
-        ch.attributes.pages > 0 &&
-        ch.attributes.translatedLanguage?.includes('en') &&
-        ch.attributes.chapter
-    );
+    const [loading, setLoading] = useState(true);
+    const [ascending, setAscending] = useState(false);
+
+    const [md, setMd] = useState(null);
+    const [weebcentralUrl, setWeebcentralUrl] = useState(wcUrlParam || null);
+    const [wcChapters, setWcChapters] = useState([]);
 
     useEffect(() => {
-        const fetchDetails = async () => {
+        let cancelled = false;
+        (async () => {
+            setLoading(true);
             try {
-                const data = await getMangaDetails(mangaId);
-                setManga(data);
-
-                const chapterData = await getChapters(mangaId);
-                setChapters(chapterData);
+                const mdRaw = await getMangaDexDetails(mangadexId);
+                const mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
+                if (!cancelled) setMd(mdNorm);
+                let wcUrl = wcUrlParam ?? null;
+                if (!wcUrl && mdNorm?.title) {
+                    const wcResults = await searchManga('weebcentral', mdNorm.title);
+                    if (Array.isArray(wcResults) && wcResults.length > 0) {
+                        wcUrl = wcResults[0].url;
+                    }
+                }
+                if (!cancelled) setWeebcentralUrl(wcUrl || null);
+                if (wcUrl) {
+                    const wc = await getWeebcentralManga(wcUrl);
+                    if (!cancelled) setWcChapters(wc?.chapters || []);
+                } else {
+                    if (!cancelled) setWcChapters([]);
+                }
             } catch (err) {
                 console.error('Failed to fetch details:', err);
+                if (!cancelled) {
+                    setMd(null);
+                    setWcChapters([]);
+                }
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
-        };
+        })();
 
-        fetchDetails();
-    }, [mangaId]);
+        return () => { cancelled = true; };
+    }, [mangadexId, wcUrlParam]);
 
-    const toggleOrder = () => {
-        setAscending(!ascending);
-    };
+    const toggleOrder = () => setAscending((v) => !v);
+
+    const sortedChapters = useMemo(() => {
+        const arr = Array.isArray(wcChapters) ? [...wcChapters] : [];
+        arr.sort((a, b) => {
+            const na = parseFloat(a.number || '0');
+            const nb = parseFloat(b.number || '0');
+            return ascending ? na - nb : nb - na;
+        });
+        return arr;
+    }, [wcChapters, ascending]);
 
     if (loading) {
         return (
@@ -52,7 +76,7 @@ const MangaDetails = () => {
         );
     }
 
-    if (!manga) {
+    if (!md) {
         return (
             <View style={styles.centered}>
                 <Text>Something went wrong.</Text>
@@ -60,21 +84,12 @@ const MangaDetails = () => {
         );
     }
 
-    const { attributes, relationships } = manga;
-    const title = attributes.title?.en || 'No title';
-    const description = attributes.description?.en || 'No description';
-    const coverFileName = relationships?.find(r => r.type === 'cover_art')?.attributes?.fileName;
-    const coverUrl = coverFileName
-        ? `https://uploads.mangadex.org/covers/${manga.id}/${coverFileName}.256.jpg`
-        : null;
-    const author = relationships?.find(r => r.type === 'author')?.attributes?.name || 'Unknown';
-    const artist = relationships?.find(r => r.type === 'artist')?.attributes?.name || 'Unknown';
-
-    const sortedChapters = [...validChapters].sort((a, b) => {
-        const aNum = parseFloat(a.attributes.chapter) || 0;
-        const bNum = parseFloat(b.attributes.chapter) || 0;
-        return ascending ? aNum - bNum : bNum - aNum;
-    });
+    const title = md.title || 'No title';
+    const description = md.description || 'No description';
+    const coverUrl = md.coverUrl || null;
+    const author = md.authors?.[0] || 'Unknown';
+    const artist = md.artists?.[0] || 'Unknown';
+    const tags = md.tags || [];
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -101,50 +116,59 @@ const MangaDetails = () => {
                     <Text style={styles.description}>{description}</Text>
                 </ScrollView>
 
-                {attributes?.tags?.length > 0 && (
+                {!!tags.length && (
                     <>
                         <Text style={styles.sectionTitle}>Tags</Text>
                         <View style={styles.tagContainer}>
-                            {attributes.tags.map((tag, index) => (
-                                <View key={index} style={styles.tag}>
-                                    <Text style={styles.tagText}>{tag.attributes.name?.en}</Text>
+                            {tags.map((t, idx) => (
+                                <View key={`${t}-${idx}`} style={styles.tag}>
+                                    <Text style={styles.tagText}>{t}</Text>
                                 </View>
                             ))}
                         </View>
                     </>
                 )}
 
-                {chapters.length > 0 && (
-                    <>
-                        <View style={styles.chapterHeader}>
-                            <Text style={styles.sectionTitle}>Chapters</Text>
-                            <Pressable onPress={toggleOrder}>
-                                <Text style={styles.toggleOrder}>
-                                    {ascending ? '↑ Oldest First' : '↓ Newest First'}
-                                </Text>
-                            </Pressable>
-                        </View>
-                        {sortedChapters.map((chapter) => {
-                            const chapNum = chapter.attributes.chapter || '–';
-                            const chapTitle = chapter.attributes.title || '';
-                            const updatedAt = chapter.attributes.updatedAt || chapter.attributes.publishAt;
-                            const readableTime = dayjs(updatedAt).fromNow();
-                            const group = chapter.relationships?.find(r => r.type === 'scanlation_group')?.attributes?.name || 'Unknown';
+                <View style={styles.chapterHeader}>
+                    <Text style={styles.sectionTitle}>Chapters (WeebCentral)</Text>
+                    <Pressable onPress={toggleOrder}>
+                        <Text style={styles.toggleOrder}>
+                            {ascending ? '↑ Oldest First' : '↓ Newest First'}
+                        </Text>
+                    </Pressable>
+                </View>
 
-                            return (
-                                <Pressable
-                                    key={chapter.id}
-                                    onPress={() => router.push(`/ReadChapter?chapterId=${chapter.id}&mangaId=${manga.id}`)}
-                                    style={styles.chapterRow}
-                                >
-                                    <View style={styles.chapterInfo}>
-                                        <Text style={styles.chapterTitle}>Ch. {chapNum} {chapTitle && `- ${chapTitle}`}</Text>
-                                        <Text style={styles.chapterMeta}>{readableTime} • {group}</Text>
-                                    </View>
-                                </Pressable>
-                            );
-                        })}
-                    </>
+                {!!sortedChapters.length ? (
+                    sortedChapters.map((chapter) => {
+                        const chapNum = chapter.number || '–';
+                        const chapTitle = chapter.title || '';
+                        let updatedText = chapter.updated || '';
+                        if (updatedText && /^\d{4}-\d{2}-\d{2}/.test(updatedText)) {
+                            updatedText = dayjs(updatedText).fromNow();
+                        }
+                        return (
+                            <Pressable
+                                key={chapter.id}
+                                onPress={() => router.push(
+                                     `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangadexId=${mangadexId}&weebcentralUrl=${encodeURIComponent(weebcentralUrl || '')}`
+                                    )}
+                                style={styles.chapterRow}
+                            >
+                                <View style={styles.chapterInfo}>
+                                    <Text style={styles.chapterTitle}>
+                                        Ch. {chapNum}{chapTitle ? ` - ${chapTitle}` : ''}
+                                    </Text>
+                                    {!!updatedText && (
+                                        <Text style={styles.chapterMeta}>{updatedText}</Text>
+                                    )}
+                                </View>
+                            </Pressable>
+                        );
+                    })
+                ) : (
+                    <Text style={{ color: '#666' }}>
+                        {weebcentralUrl ? 'No chapters found on WeebCentral.' : 'Could not find this on WeebCentral.'}
+                    </Text>
                 )}
             </ScrollView>
         </SafeAreaView>
@@ -156,7 +180,7 @@ export default MangaDetails;
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: '#fff' },
     header: {
-        backgroundColor: '#fff',      // White like home
+        backgroundColor: '#fff',
         paddingVertical: 12,
         paddingHorizontal: 16,
         borderBottomColor: '#ddd',
@@ -164,11 +188,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
     },
-
-    logoImage: {
-        width: 40,   // Bigger than 32
-        height: 40,
-    },
+    logoImage: { width: 40, height: 40 },
 
     container: { padding: 16, paddingBottom: 60 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -180,9 +200,10 @@ const styles = StyleSheet.create({
         resizeMode: 'cover',
         borderRadius: 8,
         marginRight: 16,
+        backgroundColor: '#eee',
     },
     metaInfo: { flex: 1, justifyContent: 'center' },
-    title: { fontSize: 22, fontWeight: 'bold', marginBottom: 8 },
+    title: { fontSize: 22, fontWeight: 'bold', marginBottom: 8, color: '#1E1E1E' },
     author: { fontSize: 14, color: '#555', marginBottom: 4 },
     artist: { fontSize: 14, color: '#555' },
 
@@ -191,6 +212,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginTop: 20,
         marginBottom: 8,
+        color: '#1E1E1E',
     },
     descriptionBox: {
         maxHeight: 200,
@@ -200,11 +222,8 @@ const styles = StyleSheet.create({
         padding: 10,
         backgroundColor: '#fdfdfd',
     },
-    description: {
-        fontSize: 15,
-        lineHeight: 22,
-        color: '#444',
-    },
+    description: { fontSize: 15, lineHeight: 22, color: '#444' },
+
     tagContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     tag: {
         backgroundColor: '#e0e0e0',
@@ -223,10 +242,8 @@ const styles = StyleSheet.create({
         marginTop: 20,
         marginBottom: 8,
     },
-    toggleOrder: {
-        color: '#007AFF',
-        fontSize: 14,
-    },
+    toggleOrder: { color: '#007AFF', fontSize: 14 },
+
     chapterRow: {
         paddingVertical: 12,
         paddingHorizontal: 16,
@@ -236,17 +253,7 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         marginBottom: 6,
     },
-    chapterInfo: {
-        flexDirection: 'column',
-    },
-    chapterTitle: {
-        fontSize: 16,
-        color: '#000',
-        fontWeight: '500',
-    },
-    chapterMeta: {
-        fontSize: 13,
-        color: '#666',
-        marginTop: 2,
-    },
+    chapterInfo: { flexDirection: 'column' },
+    chapterTitle: { fontSize: 16, color: '#000', fontWeight: '500' },
+    chapterMeta: { fontSize: 13, color: '#666', marginTop: 2 },
 });
