@@ -1,4 +1,4 @@
-# api/index.py
+# manga_api/index.py
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -46,14 +46,14 @@ class Manga(BaseModel):
     chapters: List[Chapter]
 
 # --- Routes ---
-@app.get("/api/search", response_model=List[SearchItem])
+@app.get("/manga_api/search", response_model=List[SearchItem])
 def search(q: str = Query(..., min_length=1), limit: int = 20):
     try:
         return scraper.search(q, limit=limit)
     except Exception as e:
         raise HTTPException(500, str(e))
 
-@app.get("/api/manga", response_model=Manga)
+@app.get("/manga_api/manga", response_model=Manga)
 def manga(id_or_url: str):
     try:
         m: MangaDC = scraper.get_manga(id_or_url)
@@ -66,7 +66,7 @@ def manga(id_or_url: str):
     except Exception as e:
         raise HTTPException(500, str(e))
 
-@app.get("/api/chapter/pages", response_model=List[str])
+@app.get("/manga_api/chapter/pages", response_model=List[str])
 def chapter_pages(id_or_url: str):
     try:
         return scraper.get_chapter_pages(id_or_url)
