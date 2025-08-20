@@ -6,6 +6,8 @@ import awsconfig from '../src/aws-exports';
 Amplify.configure(awsconfig);
 
 export default function RootLayout() {
+    console.log("WeebCentral API =", process.env.EXPO_PUBLIC_WEEBCENTRAL_API);
+
     return (
         <AuthProvider>
             <Slot />

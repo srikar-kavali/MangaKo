@@ -16,6 +16,36 @@ const Home = () => {
     const router = useRouter();
 
     useEffect(() => {
+        const base = process.env.EXPO_PUBLIC_WEEBCENTRAL_API;
+
+        // Test the ping route
+        fetch(`${base}/ping`)
+            .then(r => r.json())
+            .then(j => console.log("ping ->", j))
+            .catch(e => console.log("ping error ->", e));
+
+        // Test the search-best route
+        (async () => {
+            try {
+                const resp = await fetch(`${base}/search-best`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: "One Piece",
+                        alt_titles: ["ワンピース", "OP"],
+                        limit: 40,
+                    }),
+                });
+                console.log("search-best status", resp.status);
+                const data = await resp.json().catch(() => null);
+                console.log("search-best data", data);
+            } catch (err) {
+                console.log("search-best error", err);
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
         const loadSearches = async () => {
             const saved = await getRecentSearches();
             setRecentSearches(saved);
