@@ -16,24 +16,24 @@ const Home = () => {
     const router = useRouter();
 
     useEffect(() => {
-        const base = process.env.EXPO_PUBLIC_MANGAPILL_API; // .../api/mangapill
+        const base = process.env.EXPO_PUBLIC_MANGAPILL_API;
         console.log('MANGAPILL API =', base);
         if (!base) return;
 
         (async () => {
             try {
-                const pr = await fetch(`${base}/ping`);
-                const pj = await pr.json();         // now JSON because route exists
-                console.log('ping ->', pj);
+                const r = await fetch(`${base}/ping`);
+                const txt = await r.text();
+                console.log('ping status', r.status, 'body:', txt);
             } catch (e) {
                 console.log('ping error ->', e);
             }
 
             try {
                 const q = encodeURIComponent('one piece');
-                const sr = await fetch(`${base}/search?q=${q}&limit=5`);
-                const sj = await sr.json();
-                console.log('search sample ->', sj);
+                const r = await fetch(`${base}/search?q=${q}&limit=5`);
+                const txt = await r.text();
+                console.log('search status', r.status, 'body:', txt);
             } catch (e) {
                 console.log('search error ->', e);
             }
