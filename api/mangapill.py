@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from scrapers.mangapill_scraper import MangapillScraper
 
-app = FastAPI(title="Mangapill API")
+app = FastAPI(title="Mangapill API", root_path="/api/mangapill")
 
 app.add_middleware(
     CORSMiddleware,
