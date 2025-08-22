@@ -23,17 +23,24 @@ const Home = () => {
         (async () => {
             try {
                 const r = await fetch(`${base}/ping`);
-                const txt = await r.text();
-                console.log('ping status', r.status, 'body:', txt);
+                if (!r.ok) {
+                    const body = await r.text();
+                    console.log('ping status', r.status, 'body:', body);
+                    return;
+                }
+                console.log('ping ->', await r.json());
             } catch (e) {
                 console.log('ping error ->', e);
             }
 
             try {
-                const q = encodeURIComponent('one piece');
-                const r = await fetch(`${base}/search?q=${q}&limit=5`);
-                const txt = await r.text();
-                console.log('search status', r.status, 'body:', txt);
+                const r = await fetch(`${base}/search?q=one%20piece&limit=3`);
+                if (!r.ok) {
+                    const body = await r.text();
+                    console.log('search status', r.status, 'body:', body);
+                    return;
+                }
+                console.log('search ->', await r.json());
             } catch (e) {
                 console.log('search error ->', e);
             }
