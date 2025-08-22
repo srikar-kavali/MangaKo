@@ -2,7 +2,6 @@
 from typing import List
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from scrapers.mangapill_scraper import MangapillScraper
 
 app = FastAPI(title="Mangapill API")
 
@@ -13,19 +12,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-scraper = MangapillScraper()
-
-@app.get("/")  # <--- add this
+@app.get("/")
 def root():
     return {"ok": True, "service": "mangapill"}
 
 @app.get("/ping")
 def ping():
-    return {"ok": True, "service": "mangapill"}
+    return {"ok": True}
 
+# stub search so we can test wiring even before the scraper
 @app.get("/search")
-def search(q: str = Query(..., min_length=1), limit: int = 20):
-    try:
-        return scraper.search(q, limit)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def search(q: str = Query(..., min_length=1), limit: int = 5) -> List[dict]:
+    # return fake results to prove the route works
+    return [{"id": "demo-1", "title": f"{q} (demo)", "url": "https://mangapill.com"}]
