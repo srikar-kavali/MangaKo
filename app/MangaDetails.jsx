@@ -5,48 +5,56 @@ import dragonLogo from "../assets/dragonLogoTransparent.png";
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 dayjs.extend(relativeTime);
+
 import { getMangaDexDetails, normalizeMangaDex } from '../manga_api/mangadex';
-import { searchManga } from '../manga_api/mangaAPI';
-import { getWeebcentralManga } from '../manga_api/weebcentral';
+import { searchMangaDex } from '../manga_api/mangadex'; // (kept if you use it elsewhere)
+import { searchMangapill, getMangapillManga } from '../manga_api/mangapill';
 
 const MangaDetails = () => {
-    const { mangadexId, weebcentralUrl: wcUrlParam } = useLocalSearchParams();
+    const { mangadexId, mangapillUrl: mpUrlParam } = useLocalSearchParams();
     const router = useRouter();
 
     const [loading, setLoading] = useState(true);
     const [ascending, setAscending] = useState(false);
 
     const [md, setMd] = useState(null);
-    const [weebcentralUrl, setWeebcentralUrl] = useState(wcUrlParam || null);
-    const [wcChapters, setWcChapters] = useState([]);
+    const [mangapillUrl, setMangapillUrl] = useState(mpUrlParam || null);
+    const [mpChapters, setMpChapters] = useState([]);
 
     useEffect(() => {
         let cancelled = false;
+
         (async () => {
             setLoading(true);
             try {
+                // 1) MangaDex for metadata
                 const mdRaw = await getMangaDexDetails(mangadexId);
                 const mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
                 if (!cancelled) setMd(mdNorm);
-                let wcUrl = wcUrlParam ?? null;
-                if (!wcUrl && mdNorm?.title) {
-                    const wcResults = await searchManga('weebcentral', mdNorm.title);
-                    if (Array.isArray(wcResults) && wcResults.length > 0) {
-                        wcUrl = wcResults[0].url;
+
+                // 2) Find Mangapill URL (use param if provided, else search by title)
+                let mpUrl = mpUrlParam ?? null;
+                if (!mpUrl && mdNorm?.title) {
+                    const hits = await searchMangapill(mdNorm.title, 20);
+                    if (Array.isArray(hits) && hits.length > 0) {
+                        // hits: [{ id, title, url }]
+                        mpUrl = hits[0].url;
                     }
                 }
-                if (!cancelled) setWeebcentralUrl(wcUrl || null);
-                if (wcUrl) {
-                    const wc = await getWeebcentralManga(wcUrl);
-                    if (!cancelled) setWcChapters(wc?.chapters || []);
+                if (!cancelled) setMangapillUrl(mpUrl || null);
+
+                // 3) If found, fetch chapters from Mangapill
+                if (mpUrl) {
+                    const mp = await getMangapillManga(mpUrl);
+                    if (!cancelled) setMpChapters(mp?.chapters || []);
                 } else {
-                    if (!cancelled) setWcChapters([]);
+                    if (!cancelled) setMpChapters([]);
                 }
             } catch (err) {
                 console.error('Failed to fetch details:', err);
                 if (!cancelled) {
                     setMd(null);
-                    setWcChapters([]);
+                    setMpChapters([]);
                 }
             } finally {
                 if (!cancelled) setLoading(false);
@@ -54,19 +62,19 @@ const MangaDetails = () => {
         })();
 
         return () => { cancelled = true; };
-    }, [mangadexId, wcUrlParam]);
+    }, [mangadexId, mpUrlParam]);
 
-    const toggleOrder = () => setAscending((v) => !v);
+    const toggleOrder = () => setAscending(v => !v);
 
     const sortedChapters = useMemo(() => {
-        const arr = Array.isArray(wcChapters) ? [...wcChapters] : [];
+        const arr = Array.isArray(mpChapters) ? [...mpChapters] : [];
         arr.sort((a, b) => {
             const na = parseFloat(a.number || '0');
             const nb = parseFloat(b.number || '0');
             return ascending ? na - nb : nb - na;
         });
         return arr;
-    }, [wcChapters, ascending]);
+    }, [mpChapters, ascending]);
 
     if (loading) {
         return (
@@ -130,7 +138,7 @@ const MangaDetails = () => {
                 )}
 
                 <View style={styles.chapterHeader}>
-                    <Text style={styles.sectionTitle}>Chapters (WeebCentral)</Text>
+                    <Text style={styles.sectionTitle}>Chapters (Mangapill)</Text>
                     <Pressable onPress={toggleOrder}>
                         <Text style={styles.toggleOrder}>
                             {ascending ? '↑ Oldest First' : '↓ Newest First'}
@@ -149,9 +157,11 @@ const MangaDetails = () => {
                         return (
                             <Pressable
                                 key={chapter.id}
-                                onPress={() => router.push(
-                                     `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangadexId=${mangadexId}&weebcentralUrl=${encodeURIComponent(weebcentralUrl || '')}`
-                                    )}
+                                onPress={() =>
+                                    router.push(
+                                        `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangadexId=${mangadexId}&mangapillUrl=${encodeURIComponent(mangapillUrl || '')}`
+                                    )
+                                }
                                 style={styles.chapterRow}
                             >
                                 <View style={styles.chapterInfo}>
@@ -167,7 +177,7 @@ const MangaDetails = () => {
                     })
                 ) : (
                     <Text style={{ color: '#666' }}>
-                        {weebcentralUrl ? 'No chapters found on WeebCentral.' : 'Could not find this on WeebCentral.'}
+                        {mangapillUrl ? 'No chapters found on Mangapill.' : 'Could not find this on Mangapill.'}
                     </Text>
                 )}
             </ScrollView>

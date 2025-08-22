@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SafeAreaView, View, Text, StyleSheet, Image, Pressable, TextInput, FlatList, } from 'react-native';
+import { SafeAreaView, View, Text, StyleSheet, Image, Pressable, TextInput, FlatList } from 'react-native';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,41 +16,34 @@ const Home = () => {
     const router = useRouter();
 
     useEffect(() => {
-        const base = process.env.EXPO_PUBLIC_WEEBCENTRAL_API;
+        const base = process.env.EXPO_PUBLIC_MANGAPILL_API; // ✅ fixed name
+
+        if (!base) {
+            console.warn('EXPO_PUBLIC_MANGAPILL_API is not set');
+            return;
+        }
 
         // Test the ping route
         fetch(`${base}/ping`)
             .then(r => r.json())
-            .then(j => console.log("ping ->", j))
-            .catch(e => console.log("ping error ->", e));
+            .then(j => console.log('ping ->', j))
+            .catch(e => console.log('ping error ->', e));
 
-        // Test the search-best route
-        (async () => {
-            try {
-                const resp = await fetch(`${base}/search-best`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        title: "One Piece",
-                        alt_titles: ["ワンピース", "OP"],
-                        limit: 40,
-                    }),
-                });
-                console.log("search-best status", resp.status);
-                const data = await resp.json().catch(() => null);
-                console.log("search-best data", data);
-            } catch (err) {
-                console.log("search-best error", err);
-            }
-        })();
+        // Optional: quick search test against your Mangapill API
+        fetch(`${base}/search?q=${encodeURIComponent('One Piece')}&limit=3`)
+            .then(r => {
+                console.log('search status', r.status);
+                return r.json().catch(() => null);
+            })
+            .then(j => console.log('search sample ->', j))
+            .catch(e => console.log('search error ->', e));
     }, []);
 
     useEffect(() => {
-        const loadSearches = async () => {
+        (async () => {
             const saved = await getRecentSearches();
             setRecentSearches(saved);
-        };
-        loadSearches();
+        })();
     }, []);
 
     useEffect(() => {
@@ -97,10 +90,7 @@ const Home = () => {
                     </Pressable>
                     <Text style={styles.logoText}>Mangako</Text>
                 </View>
-                <Pressable onPress={() => {
-                    setSearchActive(true);
-                    setDropdownVisible(false);
-                }}>
+                <Pressable onPress={() => { setSearchActive(true); setDropdownVisible(false); }}>
                     <Ionicons name='search-circle-outline' style={styles.icon} size={40} />
                 </Pressable>
                 <Pressable onPress={() => setDropdownVisible(!dropdownVisible)}>
@@ -112,17 +102,10 @@ const Home = () => {
                 <>
                     <View style={styles.triangle} />
                     <View style={styles.dropdown}>
-                        <Pressable onPress={() => {
-                            setDropdownVisible(false);
-                            router.push('/settings');
-                        }}>
+                        <Pressable onPress={() => { setDropdownVisible(false); router.push('/settings'); }}>
                             <Text style={styles.dropdownItem}>Settings</Text>
                         </Pressable>
-                        <Pressable onPress={async () => {
-                            setDropdownVisible(false);
-                            await signOut();
-                            router.replace('/login');
-                        }}>
+                        <Pressable onPress={async () => { setDropdownVisible(false); await signOut(); router.replace('/login'); }}>
                             <Text style={styles.dropdownItem}>Sign Out</Text>
                         </Pressable>
                     </View>
@@ -195,9 +178,9 @@ const Home = () => {
                                     return (
                                         <Pressable
                                             onPress={() => {
-                                                    setSearchActive(false);
-                                                    router.push(`/MangaDetails?mangadexId=${item.id}`);
-                                                }}
+                                                setSearchActive(false);
+                                                router.push(`/MangaDetails?mangadexId=${item.id}`);
+                                            }}
                                             style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderColor: '#eee' }}
                                         >
                                             {coverUrl && (
@@ -222,126 +205,23 @@ const Home = () => {
 export default Home;
 
 const styles = StyleSheet.create({
-    screen: {
-        flex: 1,
-        backgroundColor: '#fff',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        zIndex: 1,
-    },
-    logoLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    logoImage: {
-        width: 50,
-        height: 50,
-        resizeMode: 'contain',
-        marginRight: 8,
-    },
-    logoText: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1E1E1E',
-    },
-    icon: {
-        color: '#333',
-    },
-    triangle: {
-        position: 'absolute',
-        top: 115,
-        right: 28,
-        width: 12,
-        height: 12,
-        backgroundColor: '#fff',
-        transform: [{ rotate: '45deg' }],
-        borderTopColor: '#ccc',
-        borderLeftColor: '#ccc',
-        borderTopWidth: 1,
-        borderLeftWidth: 1,
-        zIndex: 101,
-    },
-    dropdown: {
-        position: 'absolute',
-        top: 120,
-        right: 16,
-        backgroundColor: '#fff',
-        borderColor: '#ccc',
-        borderWidth: 1,
-        borderRadius: 6,
-        paddingVertical: 8,
-        zIndex: 99,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 5,
-    },
-    dropdownItem: {
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        fontSize: 16,
-        color: '#333',
-    },
-    borderLine: {
-        height: 1,
-        backgroundColor: '#ccc',
-        width: '100%',
-    },
-    searchOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: '#fff',
-        zIndex: 999,
-        elevation: 10,
-    },
-    searchContainer: {
-        flex: 1,
-    },
-    searchBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        margin: 12,
-        backgroundColor: '#f1f1f1',
-        borderRadius: 10,
-        paddingHorizontal: 12,
-        height: 44,
-    },
-    searchIcon: {
-        marginRight: 8,
-    },
-    input: {
-        flex: 1,
-        color: '#000',
-    },
-    cancel: {
-        color: '#007AFF',
-        marginLeft: 10,
-    },
-    historyRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        borderBottomColor: '#eee',
-        borderBottomWidth: 1,
-    },
-    historyLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    historyText: {
-        color: '#333',
-        fontSize: 16,
-        marginLeft: 8,
-    },
+    screen: { flex: 1, backgroundColor: '#fff' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, zIndex: 1 },
+    logoLeft: { flexDirection: 'row', alignItems: 'center' },
+    logoImage: { width: 50, height: 50, resizeMode: 'contain', marginRight: 8 },
+    logoText: { fontSize: 20, fontWeight: 'bold', color: '#1E1E1E' },
+    icon: { color: '#333' },
+    triangle: { position: 'absolute', top: 115, right: 28, width: 12, height: 12, backgroundColor: '#fff', transform: [{ rotate: '45deg' }], borderTopColor: '#ccc', borderLeftColor: '#ccc', borderTopWidth: 1, borderLeftWidth: 1, zIndex: 101 },
+    dropdown: { position: 'absolute', top: 120, right: 16, backgroundColor: '#fff', borderColor: '#ccc', borderWidth: 1, borderRadius: 6, paddingVertical: 8, zIndex: 99, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 5 },
+    dropdownItem: { paddingVertical: 10, paddingHorizontal: 16, fontSize: 16, color: '#333' },
+    borderLine: { height: 1, backgroundColor: '#ccc', width: '100%' },
+    searchOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 999, elevation: 10 },
+    searchContainer: { flex: 1 },
+    searchBar: { flexDirection: 'row', alignItems: 'center', margin: 12, backgroundColor: '#f1f1f1', borderRadius: 10, paddingHorizontal: 12, height: 44 },
+    searchIcon: { marginRight: 8 },
+    input: { flex: 1, color: '#000' },
+    cancel: { color: '#007AFF', marginLeft: 10 },
+    historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderBottomColor: '#eee', borderBottomWidth: 1 },
+    historyLeft: { flexDirection: 'row', alignItems: 'center' },
+    historyText: { color: '#333', fontSize: 16, marginLeft: 8 },
 });
