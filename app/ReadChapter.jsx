@@ -1,85 +1,60 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { View, SafeAreaView, ScrollView, Image, StyleSheet, Pressable, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { getChapterPages } from "../manga_api/mangaAPI";
-import { getWeebcentralManga } from "../manga_api/weebcentral";
-import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { Picker } from "@react-native-picker/picker";
+import dragonLogo from "../assets/dragonLogoTransparent.png";
+import { getChapterPages } from "../manga_api/mangaAPI";
+import { getMangapillManga } from "../manga_api/mangapill";
 
 const ReadChapter = () => {
-    const { chapterUrl: chapterUrlParam, weebcentralUrl, mangadexId, chapterId: mdChapterId } = useLocalSearchParams();
+    const { chapterUrl: chapterUrlParam, mangapillUrl, mangadexId } = useLocalSearchParams();
+
     const router = useRouter();
-    const [selectedChapter, setSelectedChapter] = useState(chapterUrlParam || null);
+    const [selectedChapterUrl, setSelectedChapterUrl] = useState(chapterUrlParam || null);
     const [pickerItems, setPickerItems] = useState([]);
     const [pageUrls, setPageUrls] = useState([]);
 
+    // Load pages when selected chapter changes
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                if (!selectedChapter) {
-                    setPageUrls([]);
-                    return;
-                }
-                const urls = await getChapterPages("weebcentral", selectedChapter);
+                if (!selectedChapterUrl) { setPageUrls([]); return; }
+                const urls = await getChapterPages("mangapill", selectedChapterUrl);
                 if (!cancelled) setPageUrls(urls || []);
             } catch (error) {
-                console.error("Failed to load chapter pages (WC):", error);
+                console.error("Failed to load chapter pages (Mangapill):", error);
                 if (!cancelled) setPageUrls([]);
             }
         })();
         return () => { cancelled = true; };
-    }, [selectedChapter]);
+    }, [selectedChapterUrl]);
 
+    // Load chapters list for the Mangapill series
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                if (weebcentralUrl) {
-                    const wc = await getWeebcentralManga(weebcentralUrl);
-                    const items = (wc?.chapters || []).map(ch => ({
-                        key: ch.id,
-                        label: `Ch ${ch.number || '–'}${ch.title ? ` - ${ch.title}` : ''}`,
-                        value: ch.url,
-                    }));
-                    if (!cancelled) {
-                        setPickerItems(items);
-                        if (!chapterUrlParam && items.length > 0) {
-                            setSelectedChapter(items[0].value);
-                        }
-                    }
-                    return;
-                }
-
-                if (mangadexId) {
-                    const url = `https://api.mangadex.org/chapter?manga=${mangadexId}&translatedLanguage[]=en&includeExternalUrl=0&order[chapter]=asc&limit=100&offset=0`;
-                    const resp = await fetch(url);
-                    const json = await resp.json();
-                    const chapters = json?.data || [];
-                    const items = chapters.map(ch => ({
-                        key: ch.id,
-                        label: `Ch ${ch.attributes?.chapter || '–'}`,
-                        value: ch.id,
-                    }));
-                    if (!cancelled) {
-                        setPickerItems(items);
-                        if (!chapterUrlParam && items.length > 0 && mdChapterId) return;
+                if (!mangapillUrl) return;
+                const mp = await getMangapillManga(mangapillUrl);
+                const items = (mp?.chapters || []).map(ch => ({
+                    key: ch.id,
+                    label: `Ch ${ch.number || '–'}${ch.title ? ` - ${ch.title}` : ''}`,
+                    value: ch.url, // use full URL so we can fetch pages directly
+                }));
+                if (!cancelled) {
+                    setPickerItems(items);
+                    // Default to first chapter if none provided in params
+                    if (!chapterUrlParam && items.length > 0) {
+                        setSelectedChapterUrl(items[0].value);
                     }
                 }
             } catch (err) {
-                console.error("Failed to load chapter list:", err);
+                console.error("Failed to fetch Mangapill chapters:", err);
             }
         })();
         return () => { cancelled = true; };
-    }, [weebcentralUrl, mangadexId, chapterUrlParam, mdChapterId]);
-
-    const handlePickerChange = (value) => {
-        if (typeof value === "string" && value.startsWith("http")) {
-            setSelectedChapter(value); // WC URL
-        } else {
-            console.warn("Selected a MangaDex chapter id; pages are WC-only. Provide weebcentralUrl for full picker support.");
-        }
-    };
+    }, [mangapillUrl, chapterUrlParam]);
 
     return (
         <SafeAreaView style={styles.container}>
@@ -92,8 +67,8 @@ const ReadChapter = () => {
                 </View>
 
                 <Picker
-                    selectedValue={selectedChapter || mdChapterId || ""}
-                    onValueChange={handlePickerChange}
+                    selectedValue={selectedChapterUrl || ""}
+                    onValueChange={(value) => setSelectedChapterUrl(value)}
                     style={{ color: 'white', backgroundColor: '#222', minWidth: 160 }}
                 >
                     {pickerItems.map((item) => (

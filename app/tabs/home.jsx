@@ -16,27 +16,28 @@ const Home = () => {
     const router = useRouter();
 
     useEffect(() => {
-        const base = process.env.EXPO_PUBLIC_MANGAPILL_API; // ✅ fixed name
+        const base = process.env.EXPO_PUBLIC_MANGAPILL_API; // .../api/mangapill
+        console.log('MANGAPILL API =', base);
+        if (!base) return;
 
-        if (!base) {
-            console.warn('EXPO_PUBLIC_MANGAPILL_API is not set');
-            return;
-        }
+        (async () => {
+            try {
+                const pr = await fetch(`${base}/ping`);
+                const pj = await pr.json();         // now JSON because route exists
+                console.log('ping ->', pj);
+            } catch (e) {
+                console.log('ping error ->', e);
+            }
 
-        // Test the ping route
-        fetch(`${base}/ping`)
-            .then(r => r.json())
-            .then(j => console.log('ping ->', j))
-            .catch(e => console.log('ping error ->', e));
-
-        // Optional: quick search test against your Mangapill API
-        fetch(`${base}/search?q=${encodeURIComponent('One Piece')}&limit=3`)
-            .then(r => {
-                console.log('search status', r.status);
-                return r.json().catch(() => null);
-            })
-            .then(j => console.log('search sample ->', j))
-            .catch(e => console.log('search error ->', e));
+            try {
+                const q = encodeURIComponent('one piece');
+                const sr = await fetch(`${base}/search?q=${q}&limit=5`);
+                const sj = await sr.json();
+                console.log('search sample ->', sj);
+            } catch (e) {
+                console.log('search error ->', e);
+            }
+        })();
     }, []);
 
     useEffect(() => {
@@ -53,7 +54,6 @@ const Home = () => {
                 setSearchResults([]);
                 return;
             }
-
             try {
                 const results = await searchMangaDex(currentQuery);
                 setSearchResults(results);
@@ -69,7 +69,6 @@ const Home = () => {
     const handleAddSearch = async (text) => {
         const trimmed = text.trim();
         if (!trimmed) return;
-
         const updated = [trimmed, ...recentSearches.filter((item) => item !== trimmed)].slice(0, 10);
         setRecentSearches(updated);
         await saveRecentSearches(updated);
