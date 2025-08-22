@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from typing import List
 from scrapers.mangapill_scraper import MangapillScraper
 
@@ -6,7 +6,7 @@ app = FastAPI()
 scraper = MangapillScraper()
 
 @app.get("/")
-def chapter_pages(url: str) -> List[str]:
+def chapter_pages(url: str = Query(...)) -> List[str]:
     try:
         return scraper.get_chapter_pages(url)
     except Exception as e:
