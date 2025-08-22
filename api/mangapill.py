@@ -3,9 +3,10 @@ from typing import List
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from scrapers.mangapill_scraper import MangapillScraper  # <- your scraper
+from scrapers.mangapill_scraper import MangapillScraper
 
 app = FastAPI(title="Mangapill API")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
