@@ -4,9 +4,10 @@ from scrapers.mangapill_scraper import MangapillScraper
 app = FastAPI()
 scraper = MangapillScraper()
 
+
 @app.get("/")
-def manga(url: str):
+async def manga(url: str):
     try:
-        return scraper.get_manga(url)
+        return await scraper.get_manga(url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
