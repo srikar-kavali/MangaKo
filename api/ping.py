@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="mangapill-ping")
+app = FastAPI()
 
 @app.get("/")
 def ping():

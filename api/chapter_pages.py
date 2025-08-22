@@ -1,19 +1,13 @@
+from fastapi import FastAPI, HTTPException
 from typing import List
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
 from scrapers.mangapill_scraper import MangapillScraper
 
-app = FastAPI(title="mangapill-chapter-pages")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
-
+app = FastAPI()
 scraper = MangapillScraper()
 
 @app.get("/")
-def chapter_pages(id_or_url: str = Query(..., min_length=1)) -> List[str]:
+def chapter_pages(url: str) -> List[str]:
     try:
-        return scraper.get_chapter_pages(id_or_url)
+        return scraper.get_chapter_pages(url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
