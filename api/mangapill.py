@@ -15,25 +15,30 @@ app.add_middleware(
 
 scraper = MangapillScraper()
 
+
 @app.get("/")  # <— add this
-def root():
+async def root():
     return {"ok": True, "service": "mangapill"}
+
 
 @app.get("/ping")
-def ping():
+async def ping():
     return {"ok": True, "service": "mangapill"}
 
+
 @app.get("/search")
-def search(q: str = Query(..., min_length=1), limit: int = 20):
+async def search(q: str = Query(..., min_length=1), limit: int = 20):
     try:
-        return scraper.search(q, limit)
+        return await scraper.search(q, limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/manga")
-def manga(url: str):
-    return scraper.get_manga(url)
+async def manga(url: str):
+    return await scraper.get_manga(url)
+
 
 @app.get("/chapter/pages")
-def chapter_pages(url: str) -> List[str]:
-    return scraper.get_chapter_pages(url)
+async def chapter_pages(url: str) -> List[str]:
+    return await scraper.get_chapter_pages(url)

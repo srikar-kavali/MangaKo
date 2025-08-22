@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 import re, hashlib
 from dataclasses import dataclass
 from typing import List, Dict, Optional
-import requests
+
+import httpx
 from bs4 import BeautifulSoup
-from requests.exceptions import RequestException
+from httpx import HTTPError
 
 BASE_URL = "https://mangapill.com"
 HEADERS = {
@@ -21,10 +23,11 @@ HEADERS = {
 REQ_TIMEOUT = 20
 
 
-def _get(url: str, params: Optional[dict] = None) -> requests.Response:
-    r = requests.get(url, params=params, headers=HEADERS, timeout=REQ_TIMEOUT)
-    r.raise_for_status()
-    return r
+async def _get(url: str, params: Optional[dict] = None) -> httpx.Response:
+    async with httpx.AsyncClient(headers=HEADERS, timeout=REQ_TIMEOUT) as client:
+        r = await client.get(url, params=params)
+        r.raise_for_status()
+        return r
 
 
 def _slugify(s: str) -> str:
@@ -62,7 +65,7 @@ class MangapillScraper:
         self.base_url = base_url.rstrip("/")
 
     # ---------- SEARCH ----------
-    def search(self, query: str, limit: int = 20) -> List[Dict[str, str]]:
+    async def search(self, query: str, limit: int = 20) -> List[Dict[str, str]]:
         q = (query or "").strip()
         if not q:
             return []
@@ -70,8 +73,8 @@ class MangapillScraper:
         url = f"{self.base_url}/search"
         params = {"q": q}
         try:
-            resp = _get(url, params=params)
-        except RequestException as e:
+            resp = await _get(url, params=params)
+        except HTTPError as e:
             # Mangapill is pretty stable; surface the error if any
             raise e
 
@@ -114,13 +117,13 @@ class MangapillScraper:
         return results
 
     # ---------- MANGA ----------
-    def get_manga(self, manga_url_or_id: str) -> Manga:
+    async def get_manga(self, manga_url_or_id: str) -> Manga:
         url = (manga_url_or_id or "").strip()
         if not url.startswith("http"):
             # Accept "<id>" or "<id>/<slug>"
             url = f"{self.base_url}/manga/{url.lstrip('/')}"
 
-        resp = _get(url)
+        resp = await _get(url)
         soup = BeautifulSoup(resp.text, "html.parser")
 
         # Title: often inside h1
@@ -170,13 +173,13 @@ class MangapillScraper:
         )
 
     # ---------- PAGES ----------
-    def get_chapter_pages(self, chapter_url_or_id: str) -> List[str]:
+    async def get_chapter_pages(self, chapter_url_or_id: str) -> List[str]:
         url = (chapter_url_or_id or "").strip()
         if not url.startswith("http"):
             # Mangapill chapters look like: /chapter/<id>/<slug>
             url = f"{self.base_url}/chapter/{url.lstrip('/')}"
 
-        resp = _get(url)
+        resp = await _get(url)
         soup = BeautifulSoup(resp.text, "html.parser")
 
         # Mangapill usually renders <img> with src or data-src for reader pages
