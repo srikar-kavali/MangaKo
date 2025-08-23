@@ -1,271 +1,165 @@
+# scrapers/mangapill_scraper.py
 from __future__ import annotations
-import re, hashlib
-from dataclasses import dataclass
-from typing import List, Dict, Optional
-import requests
-from bs4 import BeautifulSoup
-from requests.exceptions import RequestException
+from typing import List, Dict
+from urllib.parse import urljoin, urlencode, quote_plus
 
-BASE_URL = "https://mangapill.com"
-HEADERS = {
+import httpx
+from bs4 import BeautifulSoup
+
+BASE = "https://mangapill.com"
+
+BROWSER_HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Cache-Control": "no-cache",
     "Pragma": "no-cache",
-    "Referer": BASE_URL + "/",
+    "Connection": "keep-alive",
 }
-REQ_TIMEOUT = 20
-
-
-def _get(url: str, params: Optional[dict] = None) -> requests.Response:
-    r = requests.get(url, params=params, headers=HEADERS, timeout=REQ_TIMEOUT)
-    r.raise_for_status()
-    return r
-
-
-def _slugify(s: str) -> str:
-    import re
-    s = re.sub(r"[^a-zA-Z0-9\- ]", "", s).strip().lower().replace(" ", "-")
-    return re.sub(r"-+", "-", s)
-
-
-@dataclass
-class Chapter:
-    id: str
-    number: str
-    title: Optional[str]
-    url: str
-    updated: Optional[str]
-
-
-@dataclass
-class Manga:
-    id: str
-    title: str
-    url: str
-    alt_titles: List[str]
-    authors: List[str]
-    artists: List[str]
-    status: Optional[str]
-    tags: List[str]
-    description: Optional[str]
-    cover_url: Optional[str]
-    chapters: List[Chapter]
-
 
 class MangapillScraper:
-    def __init__(self, base_url: str = BASE_URL):
-        self.base_url = base_url.rstrip("/")
+    def __init__(self) -> None:
+        self.client = httpx.Client(
+            headers=BROWSER_HEADERS,
+            http2=True,
+            timeout=30.0,
+            follow_redirects=True,
+        )
 
-    # ---------- SEARCH ----------
-    def search(self, query: str, limit: int = 20) -> List[Dict[str, str]]:
-        q = (query or "").strip()
-        if not q:
-            return []
+    # ---- helpers -------------------------------------------------------------
+    def _abs(self, href: str) -> str:
+        return urljoin(BASE, href)
 
-        url = f"{self.base_url}/search"
-        params = {"q": q}
-        try:
-            resp = _get(url, params=params)
-        except RequestException as e:
-            # Mangapill is pretty stable; surface the error if any
-            raise e
+    def _soup(self, url: str) -> BeautifulSoup:
+        if not url.startswith("http"):
+            url = self._abs(url)
+        r = self.client.get(url)
+        r.raise_for_status()
+        return BeautifulSoup(r.text, "html.parser")
 
-        soup = BeautifulSoup(resp.text, "html.parser")
-        results: List[Dict[str, str]] = []
-        seen = set()
+    # ---- /search -------------------------------------------------------------
+    def search(self, q: str, limit: int = 20) -> List[Dict]:
+        """
+        Scrapes Mangapill search results. Current site uses /search?q=...
+        Cards link to /manga/<id>/<slug> (id now appears first).
+        """
+        url = f"{BASE}/search?{urlencode({'q': q})}"
+        soup = self._soup(url)
 
-        # Typical search result links look like: /manga/<id>/<slug>
+        results: List[Dict] = []
+
+        # Primary selector: result cards
+        # Typical structure:
+        #   <a href="/manga/3258/one-piece-digital-colored-comics" ...>
+        #     <div>...<h3>Title</h3>...<p>Author/desc</p>...</div>
+        #   </a>
         for a in soup.select('a[href^="/manga/"]'):
-            href = (a.get("href") or "").strip()
-            if not href:
-                continue
-            full = self._abs_url(href)
-
-            if "/manga/" not in full:
-                continue
-            if full in seen:
-                continue
-            seen.add(full)
-
-            # Try to get a title from the card
-            title = (a.get("title") or a.get_text(" ", strip=True) or "").strip()
-            if not title:
-                # fallback to any <h3> or <p> near the link
-                parent = a.find_parent()
-                if parent:
-                    h = parent.find(["h2", "h3", "p"])
-                    if h:
-                        title = h.get_text(" ", strip=True)
-
-            if not title:
+            href = a.get("href", "")
+            # Avoid nav links that aren’t cards
+            if not href or "/chapter" in href:
                 continue
 
-            mid = self._extract_manga_id(full, title)
-            results.append({"id": mid, "title": title, "url": full})
+            title_el = a.select_one("h3, h2, .line-clamp-2, .text-base, .text-lg")
+            title = (title_el.get_text(strip=True) if title_el else a.get_text(strip=True)) or "Unknown"
 
-            if len(results) >= limit:
+            img_el = a.select_one("img")
+            cover = None
+            if img_el:
+                cover = img_el.get("src") or img_el.get("data-src")
+                if cover:
+                    cover = self._abs(cover)
+
+            results.append({
+                "title": title,
+                "url": self._abs(href),
+                "cover": cover,
+                "source": "mangapill",
+            })
+            if len(results) >= max(1, limit):
                 break
 
         return results
 
-    # ---------- MANGA ----------
-    def get_manga(self, manga_url_or_id: str) -> Manga:
-        url = (manga_url_or_id or "").strip()
-        if not url.startswith("http"):
-            # Accept "<id>" or "<id>/<slug>"
-            url = f"{self.base_url}/manga/{url.lstrip('/')}"
+    # ---- /manga?url=... ------------------------------------------------------
+    def get_manga(self, url: str) -> Dict:
+        """
+        Accepts an absolute or site-relative URL to a manga page.
+        Extracts title, description, tags, and the list of chapters.
+        """
+        soup = self._soup(url)
 
-        resp = _get(url)
-        soup = BeautifulSoup(resp.text, "html.parser")
-
-        # Title: often inside h1
-        title_el = soup.select_one("h1, h1.title, .manga-title, h2")
-        title = (title_el.get_text(strip=True) if title_el else "Unknown").strip()
+        # Title
+        title_el = soup.select_one("h1, h2.text-2xl, h1.text-3xl")
+        title = title_el.get_text(strip=True) if title_el else "Unknown"
 
         # Description
-        description = None
-        desc_el = soup.select_one(".description, .prose, #description, .summary")
-        if desc_el:
-            description = desc_el.get_text(" ", strip=True)
+        desc_el = soup.select_one("div.prose, .prose p, #description, article p")
+        description = desc_el.get_text(" ", strip=True) if desc_el else None
 
-        # Tags / genres
-        tags: List[str] = []
-        for tag_el in soup.select('a[href*="/genres/"], .genres a, .tags a'):
-            t = tag_el.get_text(strip=True)
-            if t and t.lower() not in [x.lower() for x in tags]:
-                tags.append(t)
+        # Tags
+        tags = [t.get_text(strip=True) for t in soup.select("a[href*='/genres'], .badge, .tag, .chip")]
 
-        # Authors / artists (Mangapill often shows these in a details block)
-        authors = self._extract_list_after_label(soup, ["Author", "Authors"])
-        artists = self._extract_list_after_label(soup, ["Artist", "Artists"])
-        status = self._extract_text_after_label(soup, ["Status"])
-        alt_titles = self._extract_list_after_label(soup, ["Alternative", "Alt", "Also known"])
+        # Chapters (new structure has ids like /chapters/8287-10001000/<slug> or similar)
+        chapters = []
+        for a in soup.select('a[href^="/chapters/"]'):
+            ch_href = a.get("href")
+            if not ch_href:
+                continue
+            name = a.get_text(strip=True)
+            chapters.append({
+                "name": name,
+                "url": self._abs(ch_href),
+            })
 
-        # Cover image
-        cover_url = None
-        c = soup.select_one("img[alt*='cover' i], img.cover, .cover img, .object-cover")
-        if c:
-            cover_url = (c.get("data-src") or c.get("src") or "").strip() or None
+        # De-dup & order (best effort)
+        seen = set()
+        uniq = []
+        for ch in chapters:
+            if ch["url"] in seen:
+                continue
+            seen.add(ch["url"])
+            uniq.append(chapters:=ch)  # noqa
 
-        chapters = self._parse_chapters(soup)
+        return {
+            "title": title,
+            "description": description,
+            "tags": tags,
+            "chapters": uniq or chapters,
+            "source": "mangapill",
+            "url": url if url.startswith("http") else self._abs(url),
+        }
 
-        mid = self._extract_manga_id(url, title)
-        return Manga(
-            id=mid,
-            title=title,
-            url=url,
-            alt_titles=alt_titles,
-            authors=authors,
-            artists=artists,
-            status=status,
-            tags=tags,
-            description=description,
-            cover_url=cover_url,
-            chapters=chapters,
-        )
+    # ---- /chapter_pages?url=... ----------------------------------------------
+    def get_chapter_pages(self, url: str) -> List[str]:
+        """
+        Returns a list of image URLs for a chapter page.
+        Images may be in <img src> or <img data-src>.
+        """
+        soup = self._soup(url)
 
-    # ---------- PAGES ----------
-    def get_chapter_pages(self, chapter_url_or_id: str) -> List[str]:
-        url = (chapter_url_or_id or "").strip()
-        if not url.startswith("http"):
-            # Mangapill chapters look like: /chapter/<id>/<slug>
-            url = f"{self.base_url}/chapter/{url.lstrip('/')}"
-
-        resp = _get(url)
-        soup = BeautifulSoup(resp.text, "html.parser")
-
-        # Mangapill usually renders <img> with src or data-src for reader pages
         imgs: List[str] = []
         for img in soup.select("img"):
-            src = (img.get("data-src") or img.get("src") or "").strip()
-            if src.startswith("http"):
-                imgs.append(src)
-
-        return self._dedupe(imgs)
-
-    # ---------- Helpers ----------
-    def _abs_url(self, href: str) -> str:
-        if href.startswith("http"):
-            return href
-        if not href.startswith("/"):
-            href = f"/{href}"
-        return f"{self.base_url}{href}"
-
-    @staticmethod
-    def _extract_manga_id(href: str, title: str) -> str:
-        slug = _slugify(title)
-        h = hashlib.md5(href.encode("utf-8")).hexdigest()[:8]
-        return f"{slug}-{h}"
-
-    @staticmethod
-    def _dedupe(items: List[str]) -> List[str]:
-        out, seen = [], set()
-        for x in items:
-            if x not in seen:
-                seen.add(x)
-                out.append(x)
-        return out
-
-    @staticmethod
-    def _extract_list_after_label(soup: BeautifulSoup, labels: List[str], limit: int = 10) -> List[str]:
-        out: List[str] = []
-        for label in labels:
-            els = soup.find_all(string=re.compile(rf"^{label}\s*:", re.I))
-            for el in els:
-                parent = getattr(el, "parent", None)
-                if not parent:
-                    continue
-                for a in parent.find_all("a"):
-                    t = a.get_text(strip=True)
-                    if t and t not in out:
-                        out.append(t)
-        return out[:limit]
-
-    @staticmethod
-    def _extract_text_after_label(soup: BeautifulSoup, labels: List[str]) -> Optional[str]:
-        for label in labels:
-            els = soup.find_all(string=re.compile(rf"^{label}\s*:", re.I))
-            for el in els:
-                parent = getattr(el, "parent", None)
-                if not parent:
-                    continue
-                text = parent.get_text(" ", strip=True)
-                value = re.sub(rf"^{label}\s*:\s*", "", text, flags=re.I).strip()
-                if value:
-                    return value
-        return None
-
-    def _parse_chapters(self, soup: BeautifulSoup) -> List[Chapter]:
-        chapters: List[Chapter] = []
-        seen = set()
-
-        # Typical chapter links look like: /chapter/<id>/<slug>
-        for a in soup.select('a[href^="/chapter/"]'):
-            href = (a.get("href") or "").strip()
-            if not href:
+            src = img.get("src") or img.get("data-src") or img.get("data-original")
+            if not src:
                 continue
-            full = self._abs_url(href)
-            if full in seen:
+            # Skip icons/sprites
+            if any(bad in src for bad in (".svg", "data:image")):
                 continue
-            seen.add(full)
+            imgs.append(self._abs(src))
 
-            text = a.get_text(" ", strip=True)
-            # Try to extract chapter number
-            m = re.search(r"(?:ch(?:apter)?\.?\s*)?(\d+(?:\.\d+)?)", text, flags=re.I)
-            number = m.group(1) if m else ""
+        # Best-effort fallback: sometimes images are inside <picture><source srcset=...>
+        if not imgs:
+            for source in soup.select("picture source"):
+                srcset = source.get("srcset")
+                if not srcset:
+                    continue
+                # Pick the first URL in srcset
+                first = srcset.split(",")[0].strip().split(" ")[0]
+                if first:
+                    imgs.append(self._abs(first))
 
-            # Optional chapter title after a dash
-            title = None
-            t = re.search(r"(?:-|–|—)\s*(.+)$", text)
-            if t:
-                title = t.group(1).strip() or None
-
-            cid = hashlib.md5(full.encode("utf-8")).hexdigest()[:10]
-            chapters.append(Chapter(id=cid, number=number, title=title, url=full, updated=None))
-
-        return chapters
+        return imgs
