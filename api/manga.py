@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from scrapers.mangapill_scraper import MangapillScraper
 
-app = FastAPI()
+app = FastAPI(root_path="/api/manga")
 scraper = MangapillScraper()
 
 @app.get("/")

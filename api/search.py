@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from typing import List, Dict
 from scrapers.mangapill_scraper import MangapillScraper
 
-app = FastAPI()
+app = FastAPI(root_path="/api/search")
 scraper = MangapillScraper()
 
 @app.get("/")
