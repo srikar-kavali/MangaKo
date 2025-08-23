@@ -25,7 +25,6 @@ class MangapillScraper:
     def __init__(self) -> None:
         self.client = httpx.Client(
             headers=BROWSER_HEADERS,
-            http2=True,
             timeout=30.0,
             follow_redirects=True,
         )
