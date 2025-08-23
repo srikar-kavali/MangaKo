@@ -59,7 +59,7 @@ class MangapillScraper:
         #   </a>
         for a in soup.select('a[href^="/manga/"]'):
             href = a.get("href", "")
-            # Avoid nav links that aren’t cards
+            # Avoid nav links that aren't cards
             if not href or "/chapter" in href:
                 continue
 
@@ -122,7 +122,7 @@ class MangapillScraper:
             if ch["url"] in seen:
                 continue
             seen.add(ch["url"])
-            uniq.append(chapters:=ch)  # noqa
+            uniq.append(ch)  # Fixed: removed invalid walrus operator syntax
 
         return {
             "title": title,
