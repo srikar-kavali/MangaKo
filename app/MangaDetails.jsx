@@ -1,21 +1,33 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// MangaDetails.jsx
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, ScrollView, Pressable, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
-import dayjs from 'dayjs';
-import relativeTime from 'dayjs/plugin/relativeTime';
-dayjs.extend(relativeTime);
-
 import { getMangaDexDetails, normalizeMangaDex } from '../manga_api/mangadex';
-import { searchMangaDex } from '../manga_api/mangadex'; // (kept if you use it elsewhere)
 import { searchMangapill, getMangapillManga } from '../manga_api/mangapill';
+
+const PAGE_SIZE = 50;
+
+function extractChapterNumber(ch) {
+    const s = ch?.number ?? ch?.name ?? ch?.url ?? '';
+    const m = String(s).match(/(\d+(\.\d+)?)/);
+    return m ? parseFloat(m[1]) : NaN;
+}
+function displayChapterTitle(ch) {
+    if (ch?.name) return ch.name;
+    const slug = (ch?.url || '').split('/').filter(Boolean).pop() || '';
+    const pretty = slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return pretty || 'Chapter';
+}
 
 const MangaDetails = () => {
     const { mangadexId, mangapillUrl: mpUrlParam } = useLocalSearchParams();
     const router = useRouter();
+    const scrollRef = useRef(null);
 
     const [loading, setLoading] = useState(true);
     const [ascending, setAscending] = useState(false);
+    const [page, setPage] = useState(1); // <-- pagination page (1-based)
 
     const [md, setMd] = useState(null);
     const [mangapillUrl, setMangapillUrl] = useState(mpUrlParam || null);
@@ -23,73 +35,83 @@ const MangaDetails = () => {
 
     useEffect(() => {
         let cancelled = false;
-
         (async () => {
             setLoading(true);
             try {
-                // 1) MangaDex for metadata
                 const mdRaw = await getMangaDexDetails(mangadexId);
                 const mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
                 if (!cancelled) setMd(mdNorm);
 
-                // 2) Find Mangapill URL (use param if provided, else search by title)
                 let mpUrl = mpUrlParam ?? null;
                 if (!mpUrl && mdNorm?.title) {
                     const hits = await searchMangapill(mdNorm.title, 20);
-                    if (Array.isArray(hits) && hits.length > 0) {
-                        // hits: [{ id, title, url }]
-                        mpUrl = hits[0].url;
-                    }
+                    if (Array.isArray(hits) && hits.length > 0) mpUrl = hits[0].url;
                 }
                 if (!cancelled) setMangapillUrl(mpUrl || null);
 
-                // 3) If found, fetch chapters from Mangapill
                 if (mpUrl) {
                     const mp = await getMangapillManga(mpUrl);
-                    if (!cancelled) setMpChapters(mp?.chapters || []);
+                    if (!cancelled) setMpChapters(Array.isArray(mp?.chapters) ? mp.chapters : []);
                 } else {
                     if (!cancelled) setMpChapters([]);
                 }
             } catch (err) {
                 console.error('Failed to fetch details:', err);
-                if (!cancelled) {
-                    setMd(null);
-                    setMpChapters([]);
-                }
+                if (!cancelled) { setMd(null); setMpChapters([]); }
             } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
-
         return () => { cancelled = true; };
     }, [mangadexId, mpUrlParam]);
 
     const toggleOrder = () => setAscending(v => !v);
 
+    // full sorted list
     const sortedChapters = useMemo(() => {
         const arr = Array.isArray(mpChapters) ? [...mpChapters] : [];
         arr.sort((a, b) => {
-            const na = parseFloat(a.number || '0');
-            const nb = parseFloat(b.number || '0');
+            const na = extractChapterNumber(a);
+            const nb = extractChapterNumber(b);
+            if (isNaN(na) && isNaN(nb)) return 0;
+            if (isNaN(na)) return 1;
+            if (isNaN(nb)) return -1;
             return ascending ? na - nb : nb - na;
         });
         return arr;
     }, [mpChapters, ascending]);
 
-    if (loading) {
-        return (
-            <View style={styles.centered}>
-                <ActivityIndicator size="large" />
-            </View>
-        );
-    }
+    // clamp/reset page when list or sort order changes
+    useEffect(() => {
+        const totalPages = Math.max(1, Math.ceil(sortedChapters.length / PAGE_SIZE));
+        setPage(p => Math.min(Math.max(1, p), totalPages));
+    }, [sortedChapters]);
 
+    // current page slice
+    const total = sortedChapters.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const startIdx = (page - 1) * PAGE_SIZE;
+    const endIdx = Math.min(startIdx + PAGE_SIZE, total);
+    const pagedChapters = sortedChapters.slice(startIdx, endIdx);
+
+    const goPrevPage = () => {
+        if (page > 1) {
+            setPage(p => p - 1);
+            scrollRef.current?.scrollTo({ y: 0, animated: true });
+        }
+    };
+    const goNextPage = () => {
+        if (page < totalPages) {
+            setPage(p => p + 1);
+            scrollRef.current?.scrollTo({ y: 0, animated: true });
+        }
+    };
+
+    if (loading) {
+        return <View style={styles.centered}><ActivityIndicator size="large" /></View>;
+    }
     if (!md) {
-        return (
-            <View style={styles.centered}>
-                <Text>Something went wrong.</Text>
-            </View>
-        );
+        return <View style={styles.centered}><Text>Something went wrong.</Text></View>;
     }
 
     const title = md.title || 'No title';
@@ -109,7 +131,7 @@ const MangaDetails = () => {
             </View>
 
             {/* Scrollable manga info */}
-            <ScrollView contentContainerStyle={styles.container}>
+            <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
                 <View style={styles.headerSection}>
                     {coverUrl && <Image source={{ uri: coverUrl }} style={styles.cover} />}
                     <View style={styles.metaInfo}>
@@ -139,24 +161,38 @@ const MangaDetails = () => {
 
                 <View style={styles.chapterHeader}>
                     <Text style={styles.sectionTitle}>Chapters (Mangapill)</Text>
-                    <Pressable onPress={toggleOrder}>
-                        <Text style={styles.toggleOrder}>
-                            {ascending ? '↑ Oldest First' : '↓ Newest First'}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <Text style={styles.rangeText}>
+                            {total ? `${startIdx + 1}–${endIdx} of ${total}` : '0 of 0'}
                         </Text>
+                        <Pressable onPress={toggleOrder}>
+                            <Text style={styles.toggleOrder}>
+                                {ascending ? '↑ Oldest First' : '↓ Newest First'}
+                            </Text>
+                        </Pressable>
+                    </View>
+                </View>
+
+                {/* Page controls (top) */}
+                <View style={styles.pagerRow}>
+                    <Pressable onPress={goPrevPage} disabled={page <= 1} style={[styles.pagerBtn, page <= 1 && styles.pagerBtnDisabled]}>
+                        <Text style={styles.pagerText}>Prev {PAGE_SIZE}</Text>
+                    </Pressable>
+                    <Text style={styles.pageNum}>Page {page}/{totalPages}</Text>
+                    <Pressable onPress={goNextPage} disabled={page >= totalPages} style={[styles.pagerBtn, page >= totalPages && styles.pagerBtnDisabled]}>
+                        <Text style={styles.pagerText}>Next {PAGE_SIZE}</Text>
                     </Pressable>
                 </View>
 
-                {!!sortedChapters.length ? (
-                    sortedChapters.map((chapter) => {
-                        const chapNum = chapter.number || '–';
-                        const chapTitle = chapter.title || '';
-                        let updatedText = chapter.updated || '';
-                        if (updatedText && /^\d{4}-\d{2}-\d{2}/.test(updatedText)) {
-                            updatedText = dayjs(updatedText).fromNow();
-                        }
+                {!!pagedChapters.length ? (
+                    pagedChapters.map((chapter) => {
+                        const n = extractChapterNumber(chapter);
+                        const left = isNaN(n) ? 'Ch.' : `Ch. ${n}`;
+                        const right = displayChapterTitle(chapter);
+
                         return (
                             <Pressable
-                                key={chapter.id}
+                                key={chapter.url}
                                 onPress={() =>
                                     router.push(
                                         `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangadexId=${mangadexId}&mangapillUrl=${encodeURIComponent(mangapillUrl || '')}`
@@ -166,11 +202,8 @@ const MangaDetails = () => {
                             >
                                 <View style={styles.chapterInfo}>
                                     <Text style={styles.chapterTitle}>
-                                        Ch. {chapNum}{chapTitle ? ` - ${chapTitle}` : ''}
+                                        {left}{right && !String(right).toLowerCase().startsWith('ch') ? ` - ${right}` : ''}
                                     </Text>
-                                    {!!updatedText && (
-                                        <Text style={styles.chapterMeta}>{updatedText}</Text>
-                                    )}
                                 </View>
                             </Pressable>
                         );
@@ -180,6 +213,17 @@ const MangaDetails = () => {
                         {mangapillUrl ? 'No chapters found on Mangapill.' : 'Could not find this on Mangapill.'}
                     </Text>
                 )}
+
+                {/* Page controls (bottom) */}
+                <View style={[styles.pagerRow, { marginTop: 8, marginBottom: 24 }]}>
+                    <Pressable onPress={goPrevPage} disabled={page <= 1} style={[styles.pagerBtn, page <= 1 && styles.pagerBtnDisabled]}>
+                        <Text style={styles.pagerText}>Prev {PAGE_SIZE}</Text>
+                    </Pressable>
+                    <Text style={styles.pageNum}>Page {page}/{totalPages}</Text>
+                    <Pressable onPress={goNextPage} disabled={page >= totalPages} style={[styles.pagerBtn, page >= totalPages && styles.pagerBtnDisabled]}>
+                        <Text style={styles.pagerText}>Next {PAGE_SIZE}</Text>
+                    </Pressable>
+                </View>
             </ScrollView>
         </SafeAreaView>
     );
@@ -205,65 +249,52 @@ const styles = StyleSheet.create({
 
     headerSection: { flexDirection: 'row', marginBottom: 16 },
     cover: {
-        width: 110,
-        height: 160,
-        resizeMode: 'cover',
-        borderRadius: 8,
-        marginRight: 16,
-        backgroundColor: '#eee',
+        width: 110, height: 160, resizeMode: 'cover',
+        borderRadius: 8, marginRight: 16, backgroundColor: '#eee',
     },
     metaInfo: { flex: 1, justifyContent: 'center' },
     title: { fontSize: 22, fontWeight: 'bold', marginBottom: 8, color: '#1E1E1E' },
     author: { fontSize: 14, color: '#555', marginBottom: 4 },
     artist: { fontSize: 14, color: '#555' },
 
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        marginTop: 20,
-        marginBottom: 8,
-        color: '#1E1E1E',
-    },
+    sectionTitle: { fontSize: 18, fontWeight: '600', marginTop: 20, marginBottom: 8, color: '#1E1E1E' },
     descriptionBox: {
-        maxHeight: 200,
-        borderWidth: 1,
-        borderColor: '#eee',
-        borderRadius: 6,
-        padding: 10,
-        backgroundColor: '#fdfdfd',
+        maxHeight: 200, borderWidth: 1, borderColor: '#eee',
+        borderRadius: 6, padding: 10, backgroundColor: '#fdfdfd',
     },
     description: { fontSize: 15, lineHeight: 22, color: '#444' },
 
     tagContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     tag: {
-        backgroundColor: '#e0e0e0',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 16,
-        marginRight: 8,
-        marginBottom: 8,
+        backgroundColor: '#e0e0e0', paddingHorizontal: 10, paddingVertical: 5,
+        borderRadius: 16, marginRight: 8, marginBottom: 8,
     },
     tagText: { fontSize: 13, color: '#333' },
 
     chapterHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: 20,
-        marginBottom: 8,
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+        marginTop: 20, marginBottom: 8,
     },
     toggleOrder: { color: '#007AFF', fontSize: 14 },
+    rangeText: { color: '#666', fontSize: 12 },
 
     chapterRow: {
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-        backgroundColor: '#f9f9f9',
-        borderRadius: 6,
-        marginBottom: 6,
+        paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1,
+        borderBottomColor: '#eee', backgroundColor: '#f9f9f9',
+        borderRadius: 6, marginBottom: 6,
     },
     chapterInfo: { flexDirection: 'column' },
     chapterTitle: { fontSize: 16, color: '#000', fontWeight: '500' },
-    chapterMeta: { fontSize: 13, color: '#666', marginTop: 2 },
+
+    pagerRow: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, marginVertical: 8,
+    },
+    pagerBtn: {
+        flex: 1, backgroundColor: '#efefef', paddingVertical: 10,
+        borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#ddd',
+    },
+    pagerBtnDisabled: { opacity: 0.4 },
+    pagerText: { color: '#111', fontWeight: '600' },
+    pageNum: { minWidth: 90, textAlign: 'center', color: '#444' },
 });

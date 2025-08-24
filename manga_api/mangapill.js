@@ -7,15 +7,15 @@ export async function searchMangapill(title, limit = 10) {
     return r.json();
 }
 
-export async function getMangapillManga(idOrUrl) {
-    const url = `${BASE}/manga?id_or_url=${encodeURIComponent(idOrUrl)}`;
+export async function getMangapillManga(mangaUrl) {
+    const url = `${BASE}/manga?url=${encodeURIComponent(mangaUrl)}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(`manga failed: ${r.status}`);
     return r.json();
 }
 
-export async function getChapterPagesMangapill(idOrUrl) {
-    const url = `${BASE}/chapter_pages?id_or_url=${encodeURIComponent(idOrUrl)}`;
+export async function getChapterPagesMangapill(chapterUrl) {
+    const url = `${BASE}/chapter_pages?url=${encodeURIComponent(chapterUrl)}`;
     const r = await fetch(url);
     if (!r.ok) throw new Error(`chapter pages failed: ${r.status}`);
     return r.json();
