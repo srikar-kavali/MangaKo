@@ -195,7 +195,7 @@ const MangaDetails = () => {
                                 key={chapter.url}
                                 onPress={() =>
                                     router.push(
-                                        `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangadexId=${mangadexId}&mangapillUrl=${encodeURIComponent(mangapillUrl || '')}`
+                                        `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}`
                                     )
                                 }
                                 style={styles.chapterRow}
@@ -210,6 +210,7 @@ const MangaDetails = () => {
                     })
                 ) : (
                     <Text style={{ color: '#666' }}>
+
                         {mangapillUrl ? 'No chapters found on Mangapill.' : 'Could not find this on Mangapill.'}
                     </Text>
                 )}

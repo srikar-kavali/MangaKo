@@ -16,6 +16,7 @@ const ReadChapter = () => {
     const [loadingPages, setLoadingPages] = useState(false);
     const [loadingChapters, setLoadingChapters] = useState(false);
 
+    // Fetch pages for selected chapter
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -25,6 +26,7 @@ const ReadChapter = () => {
                 const urls = await getChapterPagesMangapill(selectedChapterUrl);
                 console.log("chapter_pages ->", selectedChapterUrl, Array.isArray(urls) ? urls.length : urls);
 
+                // map through proxy (handles webp)
                 const proxiedUrls = (Array.isArray(urls) ? urls : []).map(u => proxied(u));
                 if (!cancelled) setPageUrls(proxiedUrls);
             } catch (e) {
@@ -37,6 +39,7 @@ const ReadChapter = () => {
         return () => { cancelled = true; };
     }, [selectedChapterUrl]);
 
+    // Fetch chapters list (for Prev/Next)
     useEffect(() => {
         let cancelled = false;
         (async () => {
