@@ -1,11 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { SafeAreaView, View, Text, StyleSheet, Image, Pressable, TextInput, FlatList } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { SafeAreaView, View, Text, StyleSheet, Image, Pressable, TextInput, FlatList, ActivityIndicator } from 'react-native';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
 import { getRecentSearches, saveRecentSearches } from '../searchStorage';
-import { searchMangaDex } from '../../manga_api/mangadex';
+import { searchMangapill, proxied } from '../../manga_api/mangapill';
+
+const LIVE_DELAY_MS = 120;   // snappy live search
+
+// --- helper: derive human-readable title from url if API says "Unknown"
+function deriveTitleFromUrl(url = '') {
+    try {
+        const parts = String(url).split('/').filter(Boolean);
+        const last = parts[parts.length - 1] || '';
+        const decoded = decodeURIComponent(last);
+        const spaced = decoded.replace(/[-_]+/g, ' ').trim();
+        return spaced.replace(/\b\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1)) || 'Unknown';
+    } catch {
+        return 'Unknown';
+    }
+}
 
 const Home = () => {
     const [searchActive, setSearchActive] = useState(false);
@@ -13,78 +28,94 @@ const Home = () => {
     const [recentSearches, setRecentSearches] = useState([]);
     const [searchResults, setSearchResults] = useState([]);
     const [dropdownVisible, setDropdownVisible] = useState(false);
+    const [isSearching, setIsSearching] = useState(false);
+
     const router = useRouter();
 
+    // simple in-memory cache for live feel
+    const cacheRef = useRef(new Map()); // key: qLower, value: results[]
+    const timerRef = useRef(null);
+    const abortRef = useRef(null);
+
     useEffect(() => {
-        const base = process.env.EXPO_PUBLIC_MANGAPILL_API;
-        console.log('MANGAPILL API =', base);
-        if (!base) return;
-
-        (async () => {
-            try {
-                const r = await fetch(`${base}/ping`);
-                if (!r.ok) {
-                    const body = await r.text();
-                    console.log('ping status', r.status, 'body:', body);
-                    return;
-                }
-                console.log('ping ->', await r.json());
-            } catch (e) {
-                console.log('ping error ->', e);
-            }
-
-            try {
-                const r = await fetch(`${base}/search?q=one%20piece&limit=3`);
-                if (!r.ok) {
-                    const body = await r.text();
-                    console.log('search status', r.status, 'body:', body);
-                    return;
-                }
-                console.log('search ->', await r.json());
-            } catch (e) {
-                console.log('search error ->', e);
-            }
-        })();
+        (async () => setRecentSearches(await getRecentSearches()))();
     }, []);
 
+    // smart/live search
     useEffect(() => {
-        (async () => {
-            const saved = await getRecentSearches();
-            setRecentSearches(saved);
-        })();
-    }, []);
+        const q = query.trim();
+        const qLower = q.toLowerCase();
 
-    useEffect(() => {
-        const delayDebounce = setTimeout(async () => {
-            const currentQuery = query.trim();
-            if (!currentQuery) {
-                setSearchResults([]);
-                return;
-            }
+        if (!q) {
+            setSearchResults([]);
+            setIsSearching(false);
+            if (abortRef.current) abortRef.current.abort();
+            if (timerRef.current) clearTimeout(timerRef.current);
+            return;
+        }
+
+        // show cached results instantly
+        if (cacheRef.current.has(qLower)) {
+            setSearchResults(cacheRef.current.get(qLower));
+        }
+
+        if (timerRef.current) clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(async () => {
+            if (abortRef.current) abortRef.current.abort();
+            const controller = new AbortController();
+            abortRef.current = controller;
+
+            setIsSearching(true);
             try {
-                const results = await searchMangaDex(currentQuery);
-                setSearchResults(results);
-            } catch (error) {
-                console.log('Live search failed', error);
-                setSearchResults([]);
+                const raw = await searchMangapill(q, 15);
+                const seen = new Set();
+                const unique = [];
+                for (const it of Array.isArray(raw) ? raw : []) {
+                    const key = it?.url || it?.title || '';
+                    if (!seen.has(key)) {
+                        seen.add(key);
+                        const displayTitle =
+                            it?.title && it.title.toLowerCase() !== 'unknown'
+                                ? it.title
+                                : deriveTitleFromUrl(it?.url);
+                        unique.push({ ...it, displayTitle });
+                    }
+                }
+                if (!controller.signal.aborted) {
+                    cacheRef.current.set(qLower, unique);
+                    setSearchResults(unique);
+                }
+            } catch (e) {
+                if (e?.name !== 'AbortError') console.log('Live search error', e);
+                if (!controller.signal.aborted) setSearchResults([]);
+            } finally {
+                if (!controller.signal.aborted) setIsSearching(false);
             }
-        }, 400);
+        }, LIVE_DELAY_MS);
 
-        return () => clearTimeout(delayDebounce);
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
     }, [query]);
 
     const handleAddSearch = async (text) => {
         const trimmed = text.trim();
         if (!trimmed) return;
-        const updated = [trimmed, ...recentSearches.filter((item) => item !== trimmed)].slice(0, 10);
+        const updated = [trimmed, ...recentSearches.filter((i) => i !== trimmed)].slice(0, 10);
         setRecentSearches(updated);
         await saveRecentSearches(updated);
     };
 
     const removeSearch = async (text) => {
-        const updated = recentSearches.filter((item) => item !== text);
+        const updated = recentSearches.filter((i) => i !== text);
         setRecentSearches(updated);
         await saveRecentSearches(updated);
+    };
+
+    const openResult = (item) => {
+        const mangapillUrl = item?.url || '';
+        setSearchActive(false);
+        router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(mangapillUrl)}`);
     };
 
     return (
@@ -132,22 +163,16 @@ const Home = () => {
                                 value={query}
                                 onChangeText={setQuery}
                                 autoFocus
+                                returnKeyType="search"
                                 onSubmitEditing={async () => {
-                                    const currentQuery = query.trim();
-                                    if (!currentQuery) return;
-                                    handleAddSearch(currentQuery);
-
-                                    try {
-                                        const results = await searchMangaDex(currentQuery);
-                                        setSearchResults(results);
-                                    } catch (error) {
-                                        console.log('Search failed', error);
-                                        setSearchResults([]);
-                                    }
-
-                                    setQuery('');
+                                    const q = query.trim();
+                                    if (!q) return;
+                                    await handleAddSearch(q);
                                 }}
                             />
+                            {isSearching ? (
+                                <ActivityIndicator size="small" style={{ marginRight: 8 }} />
+                            ) : null}
                             <Pressable onPress={() => setSearchActive(false)}>
                                 <Text style={styles.cancel}>Cancel</Text>
                             </Pressable>
@@ -155,7 +180,7 @@ const Home = () => {
 
                         <FlatList
                             data={recentSearches}
-                            keyExtractor={(item, index) => index.toString()}
+                            keyExtractor={(item, idx) => `${item}-${idx}`}
                             renderItem={({ item }) => (
                                 <View style={styles.historyRow}>
                                     <View style={styles.historyLeft}>
@@ -169,36 +194,32 @@ const Home = () => {
                             )}
                         />
 
+                        {query.trim().length > 0 && searchResults.length === 0 && !isSearching ? (
+                            <Text style={{ padding: 16, color: '#666' }}>No results.</Text>
+                        ) : null}
+
                         {searchResults.length > 0 && (
                             <FlatList
                                 data={searchResults}
-                                keyExtractor={(item) => item.id}
+                                keyExtractor={(item, idx) => item?.url ? `${item.url}::${idx}` : `${item?.displayTitle || 'item'}::${idx}`}
                                 renderItem={({ item }) => {
-                                    const title = item.attributes?.title?.en || 'No title';
-                                    const coverRel = item.relationships?.find((r) => r.type === 'cover_art');
-                                    const coverFile = coverRel?.attributes?.fileName;
-                                    const coverUrl = coverFile
-                                        ? `https://uploads.mangadex.org/covers/${item.id}/${coverFile}.256.jpg`
-                                        : null;
-
+                                    const title = item?.displayTitle || 'Unknown';
+                                    const cover = item?.cover ? proxied(item.cover) : null;
                                     return (
-                                        <Pressable
-                                            onPress={() => {
-                                                setSearchActive(false);
-                                                router.push(`/MangaDetails?mangadexId=${item.id}`);
-                                            }}
-                                            style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderColor: '#eee' }}
-                                        >
-                                            {coverUrl && (
-                                                <Image
-                                                    source={{ uri: coverUrl }}
-                                                    style={{ width: 50, height: 75, marginRight: 12, borderRadius: 4 }}
-                                                />
+                                        <Pressable onPress={() => openResult(item)} style={rowStyles.itemRow}>
+                                            {cover ? (
+                                                <Image source={{ uri: cover }} style={rowStyles.itemCover} />
+                                            ) : (
+                                                <View style={rowStyles.itemCoverFallback} />
                                             )}
-                                            <Text style={{ fontSize: 16, color: '#000', flexShrink: 1 }}>{title}</Text>
+                                            <Text style={rowStyles.itemTitle} numberOfLines={1} ellipsizeMode="tail">
+                                                {title}
+                                            </Text>
                                         </Pressable>
                                     );
                                 }}
+                                ItemSeparatorComponent={() => <View style={rowStyles.separator} />}
+                                keyboardShouldPersistTaps="handled"
                             />
                         )}
                     </SafeAreaView>
@@ -230,4 +251,12 @@ const styles = StyleSheet.create({
     historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderBottomColor: '#eee', borderBottomWidth: 1 },
     historyLeft: { flexDirection: 'row', alignItems: 'center' },
     historyText: { color: '#333', fontSize: 16, marginLeft: 8 },
+});
+
+const rowStyles = StyleSheet.create({
+    itemRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff' },
+    itemCover: { width: 42, height: 60, borderRadius: 4, marginRight: 12, backgroundColor: '#eee' },
+    itemCoverFallback: { width: 42, height: 60, borderRadius: 4, marginRight: 12, backgroundColor: '#eee' },
+    itemTitle: { flex: 1, fontSize: 16, color: '#000' },
+    separator: { height: 1, backgroundColor: '#eee', marginLeft: 12 },
 });

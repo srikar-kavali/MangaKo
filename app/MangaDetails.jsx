@@ -1,10 +1,13 @@
-// MangaDetails.jsx
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, ScrollView, Pressable, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
-import { getMangaDexDetails, normalizeMangaDex } from '../manga_api/mangadex';
-import { searchMangapill, getMangapillManga } from '../manga_api/mangapill';
+
+// MangaDex (metadata when available)
+import { getMangaDexDetails, normalizeMangaDex, searchMangaDex } from '../manga_api/mangadex';
+
+// Mangapill (primary source for chapters; fallback metadata)
+import { searchMangapill, getMangapillManga, proxied } from '../manga_api/mangapill';
 
 const PAGE_SIZE = 50;
 
@@ -27,37 +30,88 @@ const MangaDetails = () => {
 
     const [loading, setLoading] = useState(true);
     const [ascending, setAscending] = useState(false);
-    const [page, setPage] = useState(1); // <-- pagination page (1-based)
+    const [page, setPage] = useState(1);
 
-    const [md, setMd] = useState(null);
+    const [md, setMd] = useState(null);                 // normalized MangaDex metadata (may be null)
+    const [mpMeta, setMpMeta] = useState(null);         // Mangapill meta { title, description, cover } if available
     const [mangapillUrl, setMangapillUrl] = useState(mpUrlParam || null);
-    const [mpChapters, setMpChapters] = useState([]);
+    const [mpChapters, setMpChapters] = useState([]);   // Mangapill chapters
 
     useEffect(() => {
         let cancelled = false;
         (async () => {
             setLoading(true);
             try {
-                const mdRaw = await getMangaDexDetails(mangadexId);
-                const mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
-                if (!cancelled) setMd(mdNorm);
+                let mdNorm = null;
+                let mpUrl = mpUrlParam || null;
+                let mpFull = null;
 
-                let mpUrl = mpUrlParam ?? null;
-                if (!mpUrl && mdNorm?.title) {
-                    const hits = await searchMangapill(mdNorm.title, 20);
-                    if (Array.isArray(hits) && hits.length > 0) mpUrl = hits[0].url;
-                }
-                if (!cancelled) setMangapillUrl(mpUrl || null);
+                if (mangadexId) {
+                    // 1) Have MangaDex id → try MD first
+                    try {
+                        const mdRaw = await getMangaDexDetails(mangadexId);
+                        mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
+                    } catch (e) {
+                        console.log('MangaDex fetch failed:', e);
+                    }
 
-                if (mpUrl) {
-                    const mp = await getMangapillManga(mpUrl);
-                    if (!cancelled) setMpChapters(Array.isArray(mp?.chapters) ? mp.chapters : []);
+                    // 2) If no known Mangapill URL, try searching by MD title
+                    if (!mpUrl && mdNorm?.title) {
+                        try {
+                            const hits = await searchMangapill(mdNorm.title, 20);
+                            if (Array.isArray(hits) && hits.length) mpUrl = hits[0].url;
+                        } catch (e) {
+                            console.log('Mangapill search by MD title failed:', e);
+                        }
+                    }
+
+                    // 3) Fetch Mangapill manga (chapters + meta)
+                    if (mpUrl) {
+                        try {
+                            mpFull = await getMangapillManga(mpUrl);
+                        } catch (e) {
+                            console.log('Mangapill manga fetch failed:', e);
+                        }
+                    }
                 } else {
-                    if (!cancelled) setMpChapters([]);
+                    // No MangaDex id → Mangapill first
+                    if (mpUrl) {
+                        try {
+                            mpFull = await getMangapillManga(mpUrl);
+                        } catch (e) {
+                            console.log('Mangapill manga fetch failed:', e);
+                        }
+                    }
+
+                    // Try to enrich with MangaDex using Mangapill title
+                    const guessTitle = mpFull?.title;
+                    if (guessTitle) {
+                        try {
+                            const hits = await searchMangaDex(guessTitle);
+                            const mdId = Array.isArray(hits) && hits[0]?.id ? hits[0].id : null;
+                            if (mdId) {
+                                const mdRaw = await getMangaDexDetails(mdId);
+                                mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
+                            }
+                        } catch (e) {
+                            // best-effort only
+                        }
+                    }
+                }
+
+                if (!cancelled) {
+                    setMd(mdNorm);
+                    setMangapillUrl(mpUrl || null);
+                    setMpChapters(Array.isArray(mpFull?.chapters) ? mpFull.chapters : []);
+                    setMpMeta(mpFull ? {
+                        title: mpFull.title || null,
+                        description: mpFull.description || null,
+                        cover: mpFull.cover ? proxied(mpFull.cover) : null
+                    } : null);
                 }
             } catch (err) {
                 console.error('Failed to fetch details:', err);
-                if (!cancelled) { setMd(null); setMpChapters([]); }
+                if (!cancelled) { setMd(null); setMpChapters([]); setMpMeta(null); }
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -67,7 +121,7 @@ const MangaDetails = () => {
 
     const toggleOrder = () => setAscending(v => !v);
 
-    // full sorted list
+    // ——— sort + paginate ———
     const sortedChapters = useMemo(() => {
         const arr = Array.isArray(mpChapters) ? [...mpChapters] : [];
         arr.sort((a, b) => {
@@ -81,13 +135,11 @@ const MangaDetails = () => {
         return arr;
     }, [mpChapters, ascending]);
 
-    // clamp/reset page when list or sort order changes
     useEffect(() => {
         const totalPages = Math.max(1, Math.ceil(sortedChapters.length / PAGE_SIZE));
         setPage(p => Math.min(Math.max(1, p), totalPages));
     }, [sortedChapters]);
 
-    // current page slice
     const total = sortedChapters.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const startIdx = (page - 1) * PAGE_SIZE;
@@ -110,32 +162,35 @@ const MangaDetails = () => {
     if (loading) {
         return <View style={styles.centered}><ActivityIndicator size="large" /></View>;
     }
-    if (!md) {
-        return <View style={styles.centered}><Text>Something went wrong.</Text></View>;
-    }
 
-    const title = md.title || 'No title';
-    const description = md.description || 'No description';
-    const coverUrl = md.coverUrl || null;
-    const author = md.authors?.[0] || 'Unknown';
-    const artist = md.artists?.[0] || 'Unknown';
-    const tags = md.tags || [];
+    // ——— display model (prefer MD, fallback to Mangapill) ———
+    const title = md?.title || mpMeta?.title || 'No title';
+    const description = md?.description || mpMeta?.description || 'No description';
+    const coverUrl = md?.coverUrl || mpMeta?.cover || null;
+    const author = md?.authors?.[0] || 'Unknown';
+    const artist = md?.artists?.[0] || 'Unknown';
+    const tags = md?.tags || [];
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            {/* Header with logo */}
             <View style={styles.header}>
                 <Pressable onPress={() => router.replace('/tabs/home')}>
                     <Image source={dragonLogo} style={styles.logoImage} />
                 </Pressable>
             </View>
 
-            {/* Scrollable manga info */}
             <ScrollView ref={scrollRef} contentContainerStyle={styles.container}>
                 <View style={styles.headerSection}>
                     {coverUrl && <Image source={{ uri: coverUrl }} style={styles.cover} />}
                     <View style={styles.metaInfo}>
-                        <Text style={styles.title}>{title}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={styles.title}>{title}</Text>
+                            {!md && mangapillUrl ? (
+                                <View style={styles.sourceBadge}>
+                                    <Text style={styles.sourceBadgeText}>from Mangapill</Text>
+                                </View>
+                            ) : null}
+                        </View>
                         <Text style={styles.author}>Author: {author}</Text>
                         <Text style={styles.artist}>Artist: {artist}</Text>
                     </View>
@@ -173,7 +228,6 @@ const MangaDetails = () => {
                     </View>
                 </View>
 
-                {/* Page controls (top) */}
                 <View style={styles.pagerRow}>
                     <Pressable onPress={goPrevPage} disabled={page <= 1} style={[styles.pagerBtn, page <= 1 && styles.pagerBtnDisabled]}>
                         <Text style={styles.pagerText}>Prev {PAGE_SIZE}</Text>
@@ -189,7 +243,6 @@ const MangaDetails = () => {
                         const n = extractChapterNumber(chapter);
                         const left = isNaN(n) ? 'Ch.' : `Ch. ${n}`;
                         const right = displayChapterTitle(chapter);
-
                         return (
                             <Pressable
                                 key={chapter.url}
@@ -210,12 +263,10 @@ const MangaDetails = () => {
                     })
                 ) : (
                     <Text style={{ color: '#666' }}>
-
                         {mangapillUrl ? 'No chapters found on Mangapill.' : 'Could not find this on Mangapill.'}
                     </Text>
                 )}
 
-                {/* Page controls (bottom) */}
                 <View style={[styles.pagerRow, { marginTop: 8, marginBottom: 24 }]}>
                     <Pressable onPress={goPrevPage} disabled={page <= 1} style={[styles.pagerBtn, page <= 1 && styles.pagerBtnDisabled]}>
                         <Text style={styles.pagerText}>Prev {PAGE_SIZE}</Text>
@@ -257,6 +308,9 @@ const styles = StyleSheet.create({
     title: { fontSize: 22, fontWeight: 'bold', marginBottom: 8, color: '#1E1E1E' },
     author: { fontSize: 14, color: '#555', marginBottom: 4 },
     artist: { fontSize: 14, color: '#555' },
+
+    sourceBadge: { marginLeft: 8, backgroundColor: '#eee', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+    sourceBadgeText: { fontSize: 12, color: '#555' },
 
     sectionTitle: { fontSize: 18, fontWeight: '600', marginTop: 20, marginBottom: 8, color: '#1E1E1E' },
     descriptionBox: {
