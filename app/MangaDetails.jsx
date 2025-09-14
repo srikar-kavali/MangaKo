@@ -2,12 +2,10 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, ScrollView, Pressable, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
-
-// MangaDex (metadata when available)
 import { getMangaDexDetails, normalizeMangaDex, searchMangaDex } from '../manga_api/mangadex';
-
-// Mangapill (primary source for chapters; fallback metadata)
 import { searchMangapill, getMangapillManga, proxied } from '../manga_api/mangapill';
+import { Ionicons } from '@expo/vector-icons';
+import {addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter} from "./searchStorage";
 
 const PAGE_SIZE = 50;
 
@@ -24,7 +22,7 @@ function displayChapterTitle(ch) {
 }
 
 const MangaDetails = () => {
-    const { mangadexId, mangapillUrl: mpUrlParam } = useLocalSearchParams();
+    const { mangadxId, mangapillUrl: mpUrlParam } = useLocalSearchParams();
     const router = useRouter();
     const scrollRef = useRef(null);
 
@@ -32,11 +30,35 @@ const MangaDetails = () => {
     const [ascending, setAscending] = useState(false);
     const [page, setPage] = useState(1);
 
-    const [md, setMd] = useState(null);                 // normalized MangaDex metadata (may be null)
-    const [mpMeta, setMpMeta] = useState(null);         // Mangapill meta { title, description, cover } if available
-    const [mangapillUrl, setMangapillUrl] = useState(mpUrlParam || null);
-    const [mpChapters, setMpChapters] = useState([]);   // Mangapill chapters
+    const [isFavorite, setIsFavorite] = useState(false);
 
+    const [md, setMd] = useState(null);
+    const [mpMeta, setMpMeta] = useState(null);
+    const [mangapillUrl, setMangapillUrl] = useState(mpUrlParam || null);
+    const [mpChapters, setMpChapters] = useState([]);
+
+    const [lastReadChapter, setLastReadChapter] = useState(null);
+
+    // Create storage key - prefer mangapillUrl, fall back to mangadxId
+    const storageKey = useMemo(() => {
+        return mangapillUrl || mangadxId;
+    }, [mangapillUrl, mangadxId]);
+
+    // Load last read chapter
+    useEffect(() => {
+        async function loadBookmark() {
+            if (!storageKey) return;
+            try {
+                const saved = await getLastReadChapter(storageKey);
+                setLastReadChapter(saved);
+            } catch (error) {
+                console.error('Failed to load last read chapter:', error);
+            }
+        }
+        loadBookmark();
+    }, [storageKey]);
+
+    // ---- FETCH DETAILS ----
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -46,16 +68,14 @@ const MangaDetails = () => {
                 let mpUrl = mpUrlParam || null;
                 let mpFull = null;
 
-                if (mangadexId) {
-                    // 1) Have MangaDex id → try MD first
+                if (mangadxId) {
                     try {
-                        const mdRaw = await getMangaDexDetails(mangadexId);
-                        mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
+                        const mdRaw = await getMangaDxDetails(mangadxId);
+                        mdNorm = mdRaw ? normalizeMangaDx(mdRaw) : null;
                     } catch (e) {
-                        console.log('MangaDex fetch failed:', e);
+                        console.log('MangaDx fetch failed:', e);
                     }
 
-                    // 2) If no known Mangapill URL, try searching by MD title
                     if (!mpUrl && mdNorm?.title) {
                         try {
                             const hits = await searchMangapill(mdNorm.title, 20);
@@ -65,7 +85,6 @@ const MangaDetails = () => {
                         }
                     }
 
-                    // 3) Fetch Mangapill manga (chapters + meta)
                     if (mpUrl) {
                         try {
                             mpFull = await getMangapillManga(mpUrl);
@@ -74,7 +93,6 @@ const MangaDetails = () => {
                         }
                     }
                 } else {
-                    // No MangaDex id → Mangapill first
                     if (mpUrl) {
                         try {
                             mpFull = await getMangapillManga(mpUrl);
@@ -83,15 +101,14 @@ const MangaDetails = () => {
                         }
                     }
 
-                    // Try to enrich with MangaDex using Mangapill title
                     const guessTitle = mpFull?.title;
                     if (guessTitle) {
                         try {
-                            const hits = await searchMangaDex(guessTitle);
+                            const hits = await searchMangaDx(guessTitle);
                             const mdId = Array.isArray(hits) && hits[0]?.id ? hits[0].id : null;
                             if (mdId) {
-                                const mdRaw = await getMangaDexDetails(mdId);
-                                mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
+                                const mdRaw = await getMangaDxDetails(mdId);
+                                mdNorm = mdRaw ? normalizeMangaDx(mdRaw) : null;
                             }
                         } catch (e) {
                             // best-effort only
@@ -117,11 +134,67 @@ const MangaDetails = () => {
             }
         })();
         return () => { cancelled = true; };
-    }, [mangadexId, mpUrlParam]);
+    }, [mangadxId, mpUrlParam]);
 
-    const toggleOrder = () => setAscending(v => !v);
+    // ---- FAVORITES ----
+    const title = md?.title || mpMeta?.title || 'No title';
+    const description = md?.description || mpMeta?.description || 'No description';
+    const coverUrl = md?.coverUrl || mpMeta?.cover || null;
 
-    // ——— sort + paginate ———
+    useEffect(() => {
+        (async () => {
+            try {
+                const favs = await getFavorites();
+                const exists = favs.some(f => f.url === storageKey);
+                setIsFavorite(exists);
+            } catch (err) {
+                console.log("Failed to load favorites", err);
+            }
+        })();
+    }, [storageKey]);
+
+    const toggleFavorite = async () => {
+        try {
+            if (isFavorite) {
+                await removeFavorite(storageKey);
+                setIsFavorite(false);
+            } else {
+                await addFavorite({
+                    url: storageKey,
+                    title,
+                    coverUrl,
+                    description,
+                });
+                setIsFavorite(true);
+            }
+        } catch (err) {
+            console.log("Favorite toggle failed", err);
+        }
+    };
+
+    // Handle chapter press with progress saving
+    const handleChapterPress = async (chapter) => {
+        try {
+            // Save reading progress
+            if (storageKey) {
+                await saveLastReadChapter(storageKey, chapter.url);
+                setLastReadChapter(chapter.url);
+            }
+
+            // Navigate to chapter
+            router.push(
+                `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}`
+            );
+        } catch (error) {
+            console.error('Failed to save reading progress:', error);
+            // Still navigate even if save fails
+            router.push(
+                `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}`
+            );
+        }
+    };
+
+    // ---- CHAPTER SORTING ----
     const sortedChapters = useMemo(() => {
         const arr = Array.isArray(mpChapters) ? [...mpChapters] : [];
         arr.sort((a, b) => {
@@ -163,10 +236,6 @@ const MangaDetails = () => {
         return <View style={styles.centered}><ActivityIndicator size="large" /></View>;
     }
 
-    // ——— display model (prefer MD, fallback to Mangapill) ———
-    const title = md?.title || mpMeta?.title || 'No title';
-    const description = md?.description || mpMeta?.description || 'No description';
-    const coverUrl = md?.coverUrl || mpMeta?.cover || null;
     const author = md?.authors?.[0] || 'Unknown';
     const artist = md?.artists?.[0] || 'Unknown';
     const tags = md?.tags || [];
@@ -183,16 +252,40 @@ const MangaDetails = () => {
                 <View style={styles.headerSection}>
                     {coverUrl && <Image source={{ uri: coverUrl }} style={styles.cover} />}
                     <View style={styles.metaInfo}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Text style={styles.title}>{title}</Text>
-                            {!md && mangapillUrl ? (
-                                <View style={styles.sourceBadge}>
-                                    <Text style={styles.sourceBadgeText}>from Mangapill</Text>
-                                </View>
-                            ) : null}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.title}>{title}</Text>
+                                {!md && mangapillUrl ? (
+                                    <View style={styles.sourceBadge}>
+                                        <Text style={styles.sourceBadgeText}>from Mangapill</Text>
+                                    </View>
+                                ) : null}
+                            </View>
+                            <Pressable onPress={toggleFavorite}>
+                                <Ionicons
+                                    name={isFavorite ? "star" : "star-outline"}
+                                    size={28}
+                                    color="#FFD700"
+                                />
+                            </Pressable>
                         </View>
+
                         <Text style={styles.author}>Author: {author}</Text>
                         <Text style={styles.artist}>Artist: {artist}</Text>
+
+                        {lastReadChapter && (
+                            <Pressable
+                                style={styles.continueBtn}
+                                onPress={() => {
+                                    router.push(
+                                        `/ReadChapter?chapterUrl=${encodeURIComponent(lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}`
+                                    );
+                                }}
+                            >
+                                <Ionicons name="play-circle" size={16} color="#fff" style={{ marginRight: 4 }} />
+                                <Text style={styles.continueBtnText}>Continue Reading</Text>
+                            </Pressable>
+                        )}
                     </View>
                 </View>
 
@@ -220,7 +313,7 @@ const MangaDetails = () => {
                         <Text style={styles.rangeText}>
                             {total ? `${startIdx + 1}–${endIdx} of ${total}` : '0 of 0'}
                         </Text>
-                        <Pressable onPress={toggleOrder}>
+                        <Pressable onPress={() => setAscending(v => !v)}>
                             <Text style={styles.toggleOrder}>
                                 {ascending ? '↑ Oldest First' : '↓ Newest First'}
                             </Text>
@@ -243,20 +336,30 @@ const MangaDetails = () => {
                         const n = extractChapterNumber(chapter);
                         const left = isNaN(n) ? 'Ch.' : `Ch. ${n}`;
                         const right = displayChapterTitle(chapter);
+                        const isLastRead = lastReadChapter === chapter.url;
+
                         return (
                             <Pressable
                                 key={chapter.url}
-                                onPress={() =>
-                                    router.push(
-                                        `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}`
-                                    )
-                                }
-                                style={styles.chapterRow}
+                                onPress={() => handleChapterPress(chapter)}
+                                style={[
+                                    styles.chapterRow,
+                                    isLastRead && styles.chapterRowLastRead
+                                ]}
                             >
                                 <View style={styles.chapterInfo}>
-                                    <Text style={styles.chapterTitle}>
+                                    <Text style={[
+                                        styles.chapterTitle,
+                                        isLastRead && styles.chapterTitleLastRead
+                                    ]}>
                                         {left}{right && !String(right).toLowerCase().startsWith('ch') ? ` - ${right}` : ''}
                                     </Text>
+                                    {isLastRead && (
+                                        <View style={styles.lastReadBadge}>
+                                            <Ionicons name="bookmark" size={12} color="#4CAF50" />
+                                            <Text style={styles.lastReadText}>Last Read</Text>
+                                        </View>
+                                    )}
                                 </View>
                             </Pressable>
                         );
@@ -307,7 +410,7 @@ const styles = StyleSheet.create({
     metaInfo: { flex: 1, justifyContent: 'center' },
     title: { fontSize: 22, fontWeight: 'bold', marginBottom: 8, color: '#1E1E1E' },
     author: { fontSize: 14, color: '#555', marginBottom: 4 },
-    artist: { fontSize: 14, color: '#555' },
+    artist: { fontSize: 14, color: '#555', marginBottom: 8 },
 
     sourceBadge: { marginLeft: 8, backgroundColor: '#eee', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
     sourceBadgeText: { fontSize: 12, color: '#555' },
@@ -338,8 +441,26 @@ const styles = StyleSheet.create({
         borderBottomColor: '#eee', backgroundColor: '#f9f9f9',
         borderRadius: 6, marginBottom: 6,
     },
+    chapterRowLastRead: {
+        backgroundColor: '#f0f9ff',
+        borderLeftWidth: 4,
+        borderLeftColor: '#4CAF50',
+    },
     chapterInfo: { flexDirection: 'column' },
     chapterTitle: { fontSize: 16, color: '#000', fontWeight: '500' },
+    chapterTitleLastRead: { color: '#2E7D32' },
+
+    lastReadBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    lastReadText: {
+        fontSize: 12,
+        color: '#4CAF50',
+        fontWeight: '600',
+        marginLeft: 4,
+    },
 
     pagerRow: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -352,4 +473,26 @@ const styles = StyleSheet.create({
     pagerBtnDisabled: { opacity: 0.4 },
     pagerText: { color: '#111', fontWeight: '600' },
     pageNum: { minWidth: 90, textAlign: 'center', color: '#444' },
+
+    continueBtn: {
+        marginTop: 8,
+        marginBottom: 8,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        backgroundColor: '#4CAF50',
+        borderRadius: 8,
+        alignItems: 'center',
+        flexDirection: 'row',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 2 },
+        elevation: 2,
+    },
+    continueBtnText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '600',
+    },
 });

@@ -3,6 +3,7 @@ import { View, SafeAreaView, ScrollView, Image, StyleSheet, Pressable, Text, Act
 import { useLocalSearchParams, useRouter } from "expo-router";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { getMangapillManga, getChapterPagesMangapill, proxied } from "../manga_api/mangapill";
+import { updateLastRead } from "./searchStorage";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -18,6 +19,13 @@ const ReadChapter = () => {
     const [pickerItems, setPickerItems] = useState([]);
     const [loadingPages, setLoadingPages] = useState(false);
     const [loadingChapters, setLoadingChapters] = useState(false);
+
+    useEffect(() => {
+        if (mangapillUrl && selectedChapterUrl) {
+            updateLastRead(mangapillUrl, selectedChapterUrl)
+                .catch(e => console.error("Bookmark save failed:", e));
+        }
+    }, [mangapillUrl, selectedChapterUrl]);
 
     // Helper function to get image dimensions
     const getImageDimensions = (url) => {
