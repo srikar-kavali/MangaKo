@@ -95,7 +95,7 @@ export default function Favorites() {
                         <Pressable
                             onPress={() => {
                                 const params = {};
-                                if (item.url.includes('mangadx')) {
+                                if (item.url.includes('mangadex')) {
                                     params.mangadexId = item.url;
                                 } else {
                                     params.mangapillUrl = item.url;

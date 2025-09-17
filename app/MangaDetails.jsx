@@ -22,7 +22,7 @@ function displayChapterTitle(ch) {
 }
 
 const MangaDetails = () => {
-    const { mangadxId, mangapillUrl: mpUrlParam } = useLocalSearchParams();
+    const { mangadexId, mangapillUrl: mpUrlParam } = useLocalSearchParams();
     const router = useRouter();
     const scrollRef = useRef(null);
 
@@ -39,10 +39,10 @@ const MangaDetails = () => {
 
     const [lastReadChapter, setLastReadChapter] = useState(null);
 
-    // Create storage key - prefer mangapillUrl, fall back to mangadxId
+    // Create storage key - prefer mangapillUrl, fall back to mangadexId
     const storageKey = useMemo(() => {
-        return mangapillUrl || mangadxId;
-    }, [mangapillUrl, mangadxId]);
+        return mangapillUrl || mangadexId;
+    }, [mangapillUrl, mangadexId]);
 
     // Load last read chapter
     useEffect(() => {
@@ -68,12 +68,12 @@ const MangaDetails = () => {
                 let mpUrl = mpUrlParam || null;
                 let mpFull = null;
 
-                if (mangadxId) {
+                if (mangadexId) {
                     try {
-                        const mdRaw = await getMangaDxDetails(mangadxId);
-                        mdNorm = mdRaw ? normalizeMangaDx(mdRaw) : null;
+                        const mdRaw = await getMangaDexDetails(mangadexId);
+                        mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
                     } catch (e) {
-                        console.log('MangaDx fetch failed:', e);
+                        console.log('MangaDex fetch failed:', e);
                     }
 
                     if (!mpUrl && mdNorm?.title) {
@@ -104,11 +104,11 @@ const MangaDetails = () => {
                     const guessTitle = mpFull?.title;
                     if (guessTitle) {
                         try {
-                            const hits = await searchMangaDx(guessTitle);
+                            const hits = await searchMangaDex(guessTitle);
                             const mdId = Array.isArray(hits) && hits[0]?.id ? hits[0].id : null;
                             if (mdId) {
-                                const mdRaw = await getMangaDxDetails(mdId);
-                                mdNorm = mdRaw ? normalizeMangaDx(mdRaw) : null;
+                                const mdRaw = await getMangaDexDetails(mdId);
+                                mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
                             }
                         } catch (e) {
                             // best-effort only
@@ -134,7 +134,7 @@ const MangaDetails = () => {
             }
         })();
         return () => { cancelled = true; };
-    }, [mangadxId, mpUrlParam]);
+    }, [mangadexId, mpUrlParam]);
 
     // ---- FAVORITES ----
     const title = md?.title || mpMeta?.title || 'No title';
@@ -183,13 +183,13 @@ const MangaDetails = () => {
 
             // Navigate to chapter
             router.push(
-                `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}`
+                `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}&mangadexId=${encodeURIComponent(mangadexId || "")}`
             );
         } catch (error) {
             console.error('Failed to save reading progress:', error);
             // Still navigate even if save fails
             router.push(
-                `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}`
+                `/ReadChapter?chapterUrl=${encodeURIComponent(lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}&mangadexId=${encodeURIComponent(mangadexId || "")}`
             );
         }
     };

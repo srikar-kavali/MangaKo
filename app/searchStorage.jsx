@@ -4,6 +4,7 @@ const RECENT_SEARCHES_KEY = 'recentSearches';
 const FAVORITES_KEY = 'favorites';
 const LAST_READ_KEY = 'lastReadChapters';
 
+// --- Recent Searches ---
 export async function getRecentSearches() {
     try {
         const json = await AsyncStorage.getItem(RECENT_SEARCHES_KEY);
@@ -23,6 +24,7 @@ export async function saveRecentSearches(searches) {
     }
 }
 
+// --- Favorites ---
 export async function getFavorites() {
     try {
         const json = await AsyncStorage.getItem(FAVORITES_KEY);
@@ -35,11 +37,16 @@ export async function getFavorites() {
 
 export async function addFavorite(manga) {
     try {
-        const list = await getFavorites();
+        const stored = await AsyncStorage.getItem(FAVORITES_KEY);
+        const list = stored ? JSON.parse(stored) : [];
+
         if (!list.find(item => item.url === manga.url)) {
             list.push({
-                ...manga,
-                addedAt: Date.now()
+                url: manga.url,
+                title: manga.title || "Unknown",
+                coverUrl: manga.coverUrl || "",
+                description: manga.description || "",
+                addedAt: Date.now(),
             });
             await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
         }
@@ -61,15 +68,15 @@ export async function removeFavorite(mangaUrl) {
     }
 }
 
-// Last Read Chapter Functions - Using separate storage for better performance
+// --- Last Read Chapter ---
 export async function saveLastReadChapter(mangaUrl, chapterUrl) {
     try {
         const lastReadData = await AsyncStorage.getItem(LAST_READ_KEY);
         const lastRead = lastReadData ? JSON.parse(lastReadData) : {};
 
         lastRead[mangaUrl] = {
-            chapterUrl: chapterUrl,
-            timestamp: Date.now()
+            chapterUrl,
+            timestamp: Date.now(),
         };
 
         await AsyncStorage.setItem(LAST_READ_KEY, JSON.stringify(lastRead));
@@ -105,7 +112,6 @@ export async function removeLastReadChapter(mangaUrl) {
     }
 }
 
-// Utility function to get last read chapter info with details
 export async function getLastReadChapterInfo(mangaUrl) {
     try {
         const lastReadData = await AsyncStorage.getItem(LAST_READ_KEY);
@@ -119,15 +125,7 @@ export async function getLastReadChapterInfo(mangaUrl) {
     }
 }
 
-// Legacy functions for backward compatibility
-export async function setLastReadChapter(mangaUrl, chapterUrl) {
-    return await saveLastReadChapter(mangaUrl, chapterUrl);
-}
-
-export async function updateLastRead(mangaUrl, chapterId) {
-    return await saveLastReadChapter(mangaUrl, chapterId);
-}
-
-export async function getLastRead(mangaUrl) {
-    return await getLastReadChapter(mangaUrl);
-}
+// Legacy wrappers
+export const setLastReadChapter = saveLastReadChapter;
+export const updateLastRead = saveLastReadChapter;
+export const getLastRead = getLastReadChapter;
