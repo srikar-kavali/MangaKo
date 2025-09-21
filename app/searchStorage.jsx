@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const RECENT_SEARCHES_KEY = 'recentSearches';
 const FAVORITES_KEY = 'favorites';
 const LAST_READ_KEY = 'lastReadChapters';
+const COMPLETED_KEY = 'completed_manga';
 
 // --- Recent Searches ---
 export async function getRecentSearches() {
@@ -122,6 +123,50 @@ export async function getLastReadChapterInfo(mangaUrl) {
     } catch (e) {
         console.error('Failed to get last read chapter info', e);
         return null;
+    }
+}
+
+// --- Mark as Completed ---
+export async function markCompleted(id) {
+    try {
+        const data = await AsyncStorage.getItem(COMPLETED_KEY);
+        const list = data ? JSON.parse(data) : [];
+        if (!list.includes(id)) {
+            list.push(id);
+            await AsyncStorage.setItem(COMPLETED_KEY, JSON.stringify(list));
+        }
+    } catch (err) {
+        console.error("Failed to mark completed", err);
+    }
+}
+
+export async function unmarkCompleted(id) {
+    try {
+        const data = await AsyncStorage.getItem(COMPLETED_KEY);
+        const list = data ? JSON.parse(data) : [];
+        const newList = list.filter(x => x !== id);
+        await AsyncStorage.setItem(COMPLETED_KEY, JSON.stringify(newList));
+    } catch (err) {
+        console.error("Failed to unmark completed", err);
+    }
+}
+
+export async function getCompleted() {
+    try {
+        const data = await AsyncStorage.getItem(COMPLETED_KEY);
+        return data ? JSON.parse(data) : [];
+    } catch (err) {
+        console.error("Failed to load completed", err);
+        return [];
+    }
+}
+
+export async function saveFavorites(favs) {
+    try {
+        const json = JSON.stringify(favs);
+        await AsyncStorage.setItem(FAVORITES_KEY, json);
+    } catch (e) {
+        console.error('Failed to save favorites', e);
     }
 }
 

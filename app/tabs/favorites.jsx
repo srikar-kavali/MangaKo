@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, Pressable, StyleSheet, Image, SafeAreaView, RefreshControl } from "react-native";
 import { useRouter } from "expo-router";
-import { getFavorites, getLastReadChapterInfo, removeFavorite } from "../searchStorage";
+import { getFavorites, getLastReadChapterInfo, removeFavorite, getCompleted} from "../searchStorage";
 import { Ionicons } from '@expo/vector-icons';
 
 export default function Favorites() {
@@ -18,11 +18,17 @@ export default function Favorites() {
     const loadFavorites = async () => {
         try {
             const favoritesList = await getFavorites();
-            setFavorites(favoritesList);
+
+            // Sort: ongoing first, completed last
+            let ongoing = favoritesList.filter(m => !m.completed);
+            let completed = favoritesList.filter(m => m.completed);
+            const sortedFavorites = [...ongoing, ...completed];
+
+            setFavorites(sortedFavorites);
 
             // Load last read info for each favorite
             const lastReadData = {};
-            for (const fav of favoritesList) {
+            for (const fav of sortedFavorites) {
                 const lastRead = await getLastReadChapterInfo(fav.url);
                 if (lastRead) {
                     lastReadData[fav.url] = lastRead;
@@ -37,6 +43,7 @@ export default function Favorites() {
             setRefreshing(false);
         }
     };
+
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -121,15 +128,15 @@ export default function Favorites() {
                     </View>
 
                     {/* Description */}
-                    {item.description && (
-                        <Text style={styles.description} numberOfLines={2}>
-                            {item.description}
-                        </Text>
-                    )}
+                    <Text style={styles.description} numberOfLines={2}>
+                        {item.description || "No metadata available from Mangapill."}
+                    </Text>
 
                     {/* Last Read Info */}
                     <View style={styles.readingInfo}>
-                        {lastRead ? (
+                        {item.completed ? (
+                            <Text style={styles.completedText}>Completed</Text>
+                        ) : lastRead ? (
                             <>
                                 <Pressable
                                     onPress={() =>
@@ -338,4 +345,10 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontStyle: 'italic',
     },
+    completedText: {
+        fontSize: 13,
+        fontWeight: "bold",
+        color: "#4CAF50",
+    },
+
 });

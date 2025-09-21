@@ -5,8 +5,7 @@ import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { getMangaDexDetails, normalizeMangaDex, searchMangaDex } from '../manga_api/mangadex';
 import { searchMangapill, getMangapillManga, proxied } from '../manga_api/mangapill';
 import { Ionicons } from '@expo/vector-icons';
-import {addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter} from "./searchStorage";
-
+import {addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, markCompleted, unmarkCompleted, getCompleted} from "./searchStorage";
 const PAGE_SIZE = 50;
 
 function extractChapterNumber(ch) {
@@ -38,6 +37,7 @@ const MangaDetails = () => {
     const [mpChapters, setMpChapters] = useState([]);
 
     const [lastReadChapter, setLastReadChapter] = useState(null);
+    const [isCompleted, setIsCompleted] = useState(false);
 
     // Create storage key - prefer mangapillUrl, fall back to mangadexId
     const storageKey = useMemo(() => {
@@ -56,6 +56,13 @@ const MangaDetails = () => {
             }
         }
         loadBookmark();
+    }, [storageKey]);
+
+    useEffect(() => {
+        (async () => {
+            const completedList = await getCompleted();
+            setIsCompleted(completedList.includes(storageKey));
+        })();
     }, [storageKey]);
 
     // ---- FETCH DETAILS ----
@@ -137,9 +144,20 @@ const MangaDetails = () => {
     }, [mangadexId, mpUrlParam]);
 
     // ---- FAVORITES ----
-    const title = md?.title || mpMeta?.title || 'No title';
-    const description = md?.description || mpMeta?.description || 'No description';
-    const coverUrl = md?.coverUrl || mpMeta?.cover || null;
+    const isMangapillOnly = !md && !!mangapillUrl;
+
+    const title = md?.title
+        || mpMeta?.title
+        || (isMangapillOnly ? "From Mangapill" : "No title");
+
+    const description = md?.description
+        || mpMeta?.description
+        || (isMangapillOnly ? "No extra metadata available from Mangapill." : "No description");
+
+    const coverUrl = md?.coverUrl
+        || mpMeta?.cover
+        || null;
+
 
     useEffect(() => {
         (async () => {
@@ -155,16 +173,18 @@ const MangaDetails = () => {
 
     const toggleFavorite = async () => {
         try {
+            const favData = {
+                url: storageKey,
+                title: title || "From Mangapill",
+                description: description || "No metadata available from Mangapill.",
+                coverUrl: coverUrl || null,
+            };
+
             if (isFavorite) {
                 await removeFavorite(storageKey);
                 setIsFavorite(false);
             } else {
-                await addFavorite({
-                    url: storageKey,
-                    title,
-                    coverUrl,
-                    description,
-                });
+                await addFavorite(favData);
                 setIsFavorite(true);
             }
         } catch (err) {
@@ -268,6 +288,26 @@ const MangaDetails = () => {
                                     color="#FFD700"
                                 />
                             </Pressable>
+
+                            <Pressable
+                                onPress={async () => {
+                                    if (isCompleted) {
+                                        await unmarkCompleted(storageKey);
+                                        setIsCompleted(false);
+                                    } else {
+                                        await markCompleted(storageKey);
+                                        setIsCompleted(true);
+                                    }
+                                }}
+                                style={styles.completedBtn}
+                            >
+                                <Ionicons
+                                    name={isCompleted ? "checkmark-circle" : "checkmark-circle-outline"}
+                                    size={28}
+                                    color="#4CAF50"
+                                />
+                            </Pressable>
+
                         </View>
 
                         <Text style={styles.author}>Author: {author}</Text>
@@ -495,4 +535,30 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
     },
+    followedScroll: {
+        paddingVertical: 10,
+    },
+    followedItem: {
+        marginRight: 12,
+        alignItems: 'center',
+        width: 90,
+    },
+    followedCover: {
+        width: 90,
+        height: 120,
+        borderRadius: 8,
+    },
+    followedTitle: {
+        fontSize: 12,
+        marginTop: 4,
+        textAlign: 'center',
+    },
+    followedChapter: {
+        fontSize: 11,
+        color: '#4CAF50',
+    },
+    completedBtn: {
+        marginLeft: 12,
+    },
+
 });
