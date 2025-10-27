@@ -2,29 +2,30 @@ import { signIn as authSignIn, signOut as authSignOut, signUp as authSignUp,
     confirmSignUp as auth_confirmSignUp, resendSignUpCode as auth_resendSignUpCode,
 getCurrentUser as auth_getCurrentUser, resetPassword as auth_resetPassword,
 confirmResetPassword as auth_confirmResetPassword} from '@aws-amplify/auth';
+import { Amplify } from 'aws-amplify';
+import awsconfig from '../src/aws-config-modular';
 
-export async function signIn(email, password) {
+Amplify.configure(awsconfig)
+
+export const signIn = async (email, password) => {
     try {
-        if (!email || !password) {
-            return { success: false, error: 'Email and password are required.' };
-        }
+        console.log('📩 Attempting sign-in with:', { username: email, passwordLength: password.length });
 
-        // First, sign out any existing user
-        try {
-            await authSignOut();
-        } catch (signOutError) {
-            // Ignore signOut errors – usually means no user was signed in
-        }
+        const user = await authSignIn({
+            username: email.trim(),
+            password,
+        });
 
-        const username = email.trim().toLowerCase();
-        const response = await authSignIn({ username, password });
-
-        return { success: true, user: response };
+        console.log('✅ Login success:', user);
+        return { success: true, user };
     } catch (error) {
-        const message = error?.message || error?.name || 'Login failed';
-        return { success: false, error: message };
-    }
+    console.log('❌ Login error details:', error);
+    console.log('Error name:', error.name);
+    console.log('Error message:', error.message);
+    console.log('Error stack:', error.stack);
+    return { success: false, error: error.message || 'An unknown error occurred.' };
 }
+};
 
 export async function signOut() {
     try {

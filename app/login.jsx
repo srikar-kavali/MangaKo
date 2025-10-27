@@ -1,13 +1,12 @@
-import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import {Formik} from 'formik';
+import { Formik } from 'formik';
 import * as yup from 'yup';
-import { signIn, getCurrentUser} from "../auth/cognito";
-import dragonCircle from "../assets/dragonCircle.png"
-import { useEffect } from "react";
-import { router } from 'expo-router'
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { signIn, getCurrentUser, signOut } from "../auth/cognito";
+import dragonCircle from "../assets/dragonCircle.png";
+import { router } from 'expo-router';
+
 const loginValidationSchema = yup.object().shape({
     email: yup
         .string()
@@ -25,27 +24,20 @@ export default function Login() {
             try {
                 const user = await getCurrentUser();
                 if (!user) return;
-
-                // Ping Cognito to verify session
-                await fetchUserAttributes(); // optional
+                router.replace('/tabs');
             } catch (error) {
-                // If there's an error getting user data, force sign-out
                 await signOut();
-                return;
             }
-
-            router.replace('/tabs');
         };
-
         checkUser();
     }, []);
 
     return (
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={{flex: 1}}
-            >
-            <ScrollView contentContainerStyle={{flexGrow: 1}}>
+            style={{ flex: 1 }}
+        >
+            <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
                 <View style={styles.container}>
                     <Image source={dragonCircle} style={styles.logo} />
                     <Text style={styles.title}>Login</Text>
@@ -54,7 +46,7 @@ export default function Login() {
                         validationSchema={loginValidationSchema}
                         initialValues={{ email: '', password: '' }}
                         onSubmit={async (values, { setSubmitting }) => {
-                            const { success, error } = await signIn(values.email, values.password);
+                            const { success, error } = await signIn(values.email.trim(), values.password);
                             if (success) {
                                 router.replace('/tabs');
                             } else {
@@ -73,22 +65,26 @@ export default function Login() {
                               isValid,
                           }) => (
                             <>
+                                {/* Email */}
                                 <View style={styles.inputContainer}>
                                     <Ionicons name="mail-outline" size={25} style={styles.icon} />
                                     <TextInput
                                         style={styles.input}
                                         placeholder="Email"
                                         value={values.email}
-                                        onChangeText={handleChange('email')}
+                                        onChangeText={(text) => handleChange('email')(text.trim())}
                                         onBlur={handleBlur('email')}
                                         autoCapitalize="none"
                                         keyboardType="email-address"
+                                        textContentType="username"
+                                        autoComplete="email"
                                     />
                                 </View>
                                 {touched.email && errors.email && (
                                     <Text style={styles.errorText}>{errors.email}</Text>
                                 )}
 
+                                {/* Password */}
                                 <View style={styles.inputContainer}>
                                     <Ionicons name="lock-closed-outline" size={25} style={styles.icon} />
                                     <TextInput
@@ -98,6 +94,8 @@ export default function Login() {
                                         value={values.password}
                                         onChangeText={handleChange('password')}
                                         onBlur={handleBlur('password')}
+                                        textContentType="password"
+                                        autoComplete="password"
                                     />
                                 </View>
                                 {touched.password && errors.password && (
