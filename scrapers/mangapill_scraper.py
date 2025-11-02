@@ -1,4 +1,8 @@
 # scrapers/mangapill_scraper.py
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fastapi.middleware.cors import CORSMiddleware
 from __future__ import annotations
 from typing import List, Dict
 from urllib.parse import urljoin, urlencode, quote_plus
