@@ -1,9 +1,10 @@
-# scrapers/mangapill_scraper.py
+from __future__ import annotations
 import os
 import sys
+import re
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi.middleware.cors import CORSMiddleware
-from __future__ import annotations
+
 from typing import List, Dict
 from urllib.parse import urljoin, urlencode, quote_plus
 
@@ -93,6 +94,15 @@ class MangapillScraper:
         Accepts an absolute or site-relative URL to a manga page.
         Extracts title, description, tags, and the list of chapters.
         """
+        if re.match(r"^https://mangapill\.com/manga/[^/]+$", url):
+            # Try to find correct URL from search
+            slug = url.rstrip("/").split("/")[-1]
+            search_results = self.search(slug, limit=3)
+            for r in search_results:
+                if slug in r["url"]:
+                    url = r["url"]
+                    break
+
         soup = self._soup(url)
 
         # Title
@@ -142,6 +152,21 @@ class MangapillScraper:
         Returns a list of image URLs for a chapter page.
         Images may be in <img src> or <img data-src>.
         """
+        if "/chapter/" in url:
+            slug = url.rstrip("/").split("/")[-1]
+        # Try to find the correct chapter URL via search
+        # Find first manga that matches the slug base (everything before -chapter-)
+        base_name = slug.split("-chapter-")[0]
+        search_results = self.search(base_name, limit=3)
+        for r in search_results:
+            manga_data = self.get_manga(r["url"])
+            for ch in manga_data["chapters"]:
+                if slug in ch["url"]:
+                    url = ch["url"]
+                    break
+            if "/chapters/" in url:
+                break
+
         soup = self._soup(url)
 
         imgs: List[str] = []
