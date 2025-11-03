@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi import FastAPI, HTTPException, Query
 from typing import List
 from scrapers.mangapill_scraper import MangapillScraper
+import traceback
 
 app = FastAPI(title="Chapter Pages", root_path="/api/chapter_pages")
 
@@ -34,12 +35,11 @@ def options_handler():
     return response
 
 @app.get("/")
-def chapter_pages(url: str = Query(...)) -> JSONResponse:
-    """Return a list of chapter image URLs."""
+def chapter_pages(url: str = Query(...)):
     try:
-        pages = scraper.get_chapter_pages(url)
-        response = JSONResponse(content=pages)
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        return response
+        return scraper.get_chapter_pages(url)
     except Exception as e:
+        print("Error in /api/chapter_pages:", e)
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+

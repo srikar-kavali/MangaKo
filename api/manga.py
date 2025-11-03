@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from scrapers.mangapill_scraper import MangapillScraper
+import traceback
 
 app = FastAPI(title="Manga", root_path="/api/manga")
 app.add_middleware(
@@ -34,9 +35,8 @@ def options_handler():
 @app.get("/")
 def manga(url: str = Query(...)):
     try:
-        result = scraper.get_manga(url)
-        response = JSONResponse(content=result)
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        return response
+        return scraper.get_manga(url)
     except Exception as e:
+        print("Error in /api/manga:", e)
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

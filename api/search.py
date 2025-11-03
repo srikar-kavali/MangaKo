@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from typing import List, Dict
 from scrapers.mangapill_scraper import MangapillScraper
+import traceback
 
 app = FastAPI(title="Search", root_path="/api/search")
 
@@ -35,9 +36,8 @@ def options_handler():
 @app.get("/")
 def search(q: str = Query(..., min_length=1), limit: int = 20) -> List[Dict]:
     try:
-        results = scraper.search(q, limit)
-        response = JSONResponse(content=results)
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        return response
+        return scraper.search(q, limit)
     except Exception as e:
+        print("Error in /api/search:", e)
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
