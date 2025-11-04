@@ -8,11 +8,11 @@ const API_BASE = cleanBase(BASE);
 export function proxied(src) {
     if (!src) return "";
     if (src.startsWith(API_BASE)) return src;
-    return `${API_BASE}/api/mangapill/image_proxy?url=${encodeURIComponent(src)}`;
+    return `${API_BASE}/mangapill/image_proxy?url=${encodeURIComponent(src)}`;
 }
 
 export async function searchMangapill(title, limit = 10) {
-    const url = `${API_BASE}/api/mangapill/search?q=${encodeURIComponent(title)}&limit=${limit}`;
+    const url = `${API_BASE}/mangapill/search?q=${encodeURIComponent(title)}&limit=${limit}`;
     const r = await fetch(url);
     if (!r.ok) {
         const text = await r.text();
@@ -22,7 +22,7 @@ export async function searchMangapill(title, limit = 10) {
 }
 
 export async function getMangapillManga(mangaUrl) {
-    const url = `${API_BASE}/api/mangapill/manga?url=${encodeURIComponent(mangaUrl)}`;
+    const url = `${API_BASE}/mangapill/manga?url=${encodeURIComponent(mangaUrl)}`;
     const r = await fetch(url);
     if (!r.ok) {
         const text = await r.text();
@@ -32,7 +32,7 @@ export async function getMangapillManga(mangaUrl) {
 }
 
 export async function getChapterPagesMangapill(chapterUrl) {
-    const url = `${API_BASE}/api/mangapill/chapter_pages?url=${encodeURIComponent(chapterUrl)}`;
+    const url = `${API_BASE}/mangapill/chapter_pages?url=${encodeURIComponent(chapterUrl)}`;
     const r = await fetch(url);
     if (!r.ok) {
         const text = await r.text();
