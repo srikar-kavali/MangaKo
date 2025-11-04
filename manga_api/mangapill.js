@@ -7,12 +7,12 @@ const API_BASE = cleanBase(BASE);
 
 export function proxied(src) {
     if (!src) return "";
-    if (src.startsWith(API_BASE)) return src; // already proxied
-    return `${API_BASE}/api/image_proxy?url=${encodeURIComponent(src)}`;
+    if (src.startsWith(API_BASE)) return src;
+    return `${API_BASE}/api/mangapill/image_proxy?url=${encodeURIComponent(src)}`;
 }
 
 export async function searchMangapill(title, limit = 10) {
-    const url = `${API_BASE}/api/search?q=${encodeURIComponent(title)}&limit=${limit}`;
+    const url = `${API_BASE}/api/mangapill/search?q=${encodeURIComponent(title)}&limit=${limit}`;
     const r = await fetch(url);
     if (!r.ok) {
         const text = await r.text();
@@ -22,7 +22,7 @@ export async function searchMangapill(title, limit = 10) {
 }
 
 export async function getMangapillManga(mangaUrl) {
-    const url = `${API_BASE}/api/manga?url=${encodeURIComponent(mangaUrl)}`;
+    const url = `${API_BASE}/api/mangapill/manga?url=${encodeURIComponent(mangaUrl)}`;
     const r = await fetch(url);
     if (!r.ok) {
         const text = await r.text();
@@ -32,7 +32,7 @@ export async function getMangapillManga(mangaUrl) {
 }
 
 export async function getChapterPagesMangapill(chapterUrl) {
-    const url = `${API_BASE}/api/chapter_pages?url=${encodeURIComponent(chapterUrl)}`;
+    const url = `${API_BASE}/api/mangapill/chapter_pages?url=${encodeURIComponent(chapterUrl)}`;
     const r = await fetch(url);
     if (!r.ok) {
         const text = await r.text();
@@ -45,7 +45,7 @@ export function normalizeMangapill(data) {
     if (!data) return null;
 
     return {
-        id: data.url,                           // Use URL as unique ID
+        id: data.url,
         title: data.title || "From Mangapill",
         description: data.description || "No extra metadata available from Mangapill.",
         authors: ["From Mangapill"],
