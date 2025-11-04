@@ -1,18 +1,12 @@
 from fastapi import FastAPI, HTTPException, Query
-from typing import List, Dict, Any
 from scrapers.mangapill_scraper import MangapillScraper
 
-app = FastAPI(title="Search", root_path= '/api/search')
+app = FastAPI(title="Mangapill Search", root_path="/api/search")
 scraper = MangapillScraper()
 
-@app.get("/")
-def search_manga(q: str = Query(..., description="Search query")) -> List[Dict[str, Any]]:
-    """
-    Perform a live manga search by query string.
-    Returns a list of manga with titles, URLs, and cover images.
-    """
+@app.get("/search")
+def search(q: str = Query(...)):
     try:
-        results = scraper.search(q)
-        return results
+        return scraper.search(q)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
