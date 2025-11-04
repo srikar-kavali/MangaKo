@@ -47,46 +47,64 @@ class MangapillScraper:
 
     # ---- /search -------------------------------------------------------------
     def search(self, q: str, limit: int = 20) -> List[Dict]:
-        """
-        Scrapes Mangapill search results. Current site uses /search?q=...
-        Cards link to /manga/<id>/<slug> (id now appears first).
-        """
         url = f"{BASE}/search?{urlencode({'q': q})}"
+        print("🔎 Fetching:", url)
         soup = self._soup(url)
 
         results: List[Dict] = []
+        seen = set()
 
-        # Primary selector: result cards
-        # Typical structure:
-        #   <a href="/manga/3258/one-piece-digital-colored-comics" ...>
-        #     <div>...<h3>Title</h3>...<p>Author/desc</p>...</div>
-        #   </a>
         for a in soup.select('a[href^="/manga/"]'):
             href = a.get("href", "")
-            # Avoid nav links that aren't cards
-            if not href or "/chapter" in href:
+            if not href or "/chapter" in href or href in seen:
                 continue
+            seen.add(href)
 
-            title_el = a.select_one("h3, h2, .line-clamp-2, .text-base, .text-lg")
-            title = (title_el.get_text(strip=True) if title_el else a.get_text(strip=True)) or "Unknown"
-
+            # Try alt attribute first (Mangapill often puts title there)
             img_el = a.select_one("img")
+            title = None
             cover = None
+
             if img_el:
+                title_alt = img_el.get("alt")
                 cover = img_el.get("src") or img_el.get("data-src")
                 if cover:
                     cover = self._abs(cover)
+            else:
+                title_alt = None
+
+            # Fallback title from visible text
+            title_el = a.select_one("h3, h2, p, span")
+            title_text = title_el.get_text(strip=True) if title_el else None
+
+            # Choose whichever is longer and unique
+            if title_alt and title_text:
+                title = title_alt if len(title_alt) >= len(title_text) else title_text
+            else:
+                title = title_alt or title_text
+
+            if not title:
+                continue  # skip if no title found
+
+            # Clean up repeated text (e.g., "One Piece")
+            parts = title.split()
+            half = len(parts) // 2
+            if len(parts) % 2 == 0 and parts[:half] == parts[half:]:
+                title = " ".join(parts[:half])
 
             results.append({
-                "title": title,
+                "title": title.strip(),
                 "url": self._abs(href),
                 "cover": cover,
                 "source": "mangapill",
             })
+
             if len(results) >= max(1, limit):
                 break
 
+        print(f"✅ Found {len(results)} results with titles")
         return results
+
 
     # ---- /manga?url=... ------------------------------------------------------
     def get_manga(self, url: str) -> Dict:
@@ -150,44 +168,72 @@ class MangapillScraper:
     def get_chapter_pages(self, url: str) -> List[str]:
         """
         Returns a list of image URLs for a chapter page.
-        Images may be in <img src> or <img data-src>.
+        Handles both direct chapter URLs and partial ones.
+        Example input:
+          - https://mangapill.com/chapters/2-10003000/one-piece-chapter-3
+          - https://mangapill.com/manga/2/one-piece
         """
-        if "/chapter/" in url:
-            slug = url.rstrip("/").split("/")[-1]
-        # Try to find the correct chapter URL via search
-        # Find first manga that matches the slug base (everything before -chapter-)
-        base_name = slug.split("-chapter-")[0]
-        search_results = self.search(base_name, limit=3)
-        for r in search_results:
-            manga_data = self.get_manga(r["url"])
-            for ch in manga_data["chapters"]:
-                if slug in ch["url"]:
-                    url = ch["url"]
-                    break
-            if "/chapters/" in url:
-                break
+        try:
+            # --- Normalize URL ---
+            url = url.strip()
+            if not url.startswith("http"):
+                url = f"https://mangapill.com{url}"
+            url = url.rstrip("/")
 
-        soup = self._soup(url)
+            # --- Extract slug safely ---
+            parts = url.split("/")
+            slug = parts[-1] if parts else ""
+            base_name = ""
+            if "-chapter-" in slug:
+                base_name = slug.split("-chapter-")[0]
+            elif len(parts) >= 2:
+                base_name = parts[-2]
+            else:
+                base_name = slug or "chapter"
 
-        imgs: List[str] = []
-        for img in soup.select("img"):
-            src = img.get("src") or img.get("data-src") or img.get("data-original")
-            if not src:
-                continue
-            # Skip icons/sprites
-            if any(bad in src for bad in (".svg", "data:image")):
-                continue
-            imgs.append(self._abs(src))
+            # --- Resolve to full chapter URL if not a direct chapter link ---
+            if "/chapters/" not in url:
+                search_results = self.search(base_name, limit=3)
+                for r in search_results:
+                    manga_data = self.get_manga(r["url"])
+                    for ch in manga_data.get("chapters", []):
+                        if slug in ch["url"]:
+                            url = ch["url"]
+                            break
+                    if "/chapters/" in url:
+                        break
 
-        # Best-effort fallback: sometimes images are inside <picture><source srcset=...>
-        if not imgs:
-            for source in soup.select("picture source"):
-                srcset = source.get("srcset")
-                if not srcset:
+            # --- Fetch and parse chapter HTML ---
+            soup = self._soup(url)
+            imgs: List[str] = []
+
+            # Extract images (<img src> or lazy-loaded versions)
+            for img in soup.select("img"):
+                src = img.get("src") or img.get("data-src") or img.get("data-original")
+                if not src:
                     continue
-                # Pick the first URL in srcset
-                first = srcset.split(",")[0].strip().split(" ")[0]
-                if first:
-                    imgs.append(self._abs(first))
+                if any(bad in src for bad in (".svg", "data:image")):
+                    continue
+                imgs.append(self._abs(src))
 
-        return imgs
+            # Fallback: <picture><source srcset>
+            if not imgs:
+                for source in soup.select("picture source"):
+                    srcset = source.get("srcset")
+                    if not srcset:
+                        continue
+                    first = srcset.split(",")[0].strip().split(" ")[0]
+                    if first:
+                        imgs.append(self._abs(first))
+
+            if not imgs:
+                raise ValueError(f"No images found for chapter: {url}")
+
+            return imgs
+
+        except Exception as e:
+            print(f"[ERROR] get_chapter_pages failed for {url}: {e}")
+            raise
+
+
+
