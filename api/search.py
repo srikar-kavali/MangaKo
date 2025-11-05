@@ -23,10 +23,6 @@ scraper = MangapillScraper()
 @app.get("/search")
 def search(q: str = Query(...)):
     try:
-        result = scraper.search(q)
-        #return scraper.search(q)
-        response = JSONResponse(content=result)
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        return response
+        return scraper.search(q)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
