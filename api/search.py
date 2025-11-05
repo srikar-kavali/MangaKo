@@ -18,7 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/search")
+@app.get("/")
 def search(q: str = Query(...)):
     try:
         return scraper.search(q)
