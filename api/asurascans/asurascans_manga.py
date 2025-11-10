@@ -1,25 +1,26 @@
 from fastapi import FastAPI, HTTPException, Query
-from scrapers.mangapill_scraper import MangapillScraper
+from scrapers.asura_scraper import AsuraComic
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Mangapill Search", root_path="/api/search")
-scraper = MangapillScraper()
+app = FastAPI(title="Manga", root_path="/api/manga")
+scraper = AsuraComic()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-66ritxg8u-srikar-kavalis-projects.vercel.app",
+        "https://manga-cyiwtvl2x-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 @app.get("/")
-def search(q: str = Query(...)):
+def manga(url: str = Query(...)):
     try:
-        return scraper.search(q)
+        return scraper.get_manga(url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
