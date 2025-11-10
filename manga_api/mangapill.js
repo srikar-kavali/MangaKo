@@ -1,4 +1,4 @@
-const BASE = process.env.EXPO_PUBLIC_API;
+const BASE = process.env.EXPO_PUBLIC_MANGAPILL_API;
 
 function cleanBase(base) {
     return base.endsWith("/") ? base.slice(0, -1) : base;
