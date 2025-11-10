@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from scrapers.mangapill_scraper import MangapillScraper
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Mangapill Search", root_path="/api/mangapill/search")
+app = FastAPI(title="Mangapill Search", root_path="/api/search")
 scraper = MangapillScraper()
 
 app.add_middleware(
@@ -10,7 +10,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-aj70k9xep-srikar-kavalis-projects.vercel.app",
+        "https://manga-fszonint1-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
