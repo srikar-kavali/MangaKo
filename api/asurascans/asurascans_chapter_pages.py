@@ -3,7 +3,7 @@ from typing import List
 from scrapers.asura_scraper import AsuraComic
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Chapter Pages", root_path="/api/chapter_pages")
+app = FastAPI(title="Asura Chapter Pages", root_path="/api/asurascans/asurascans_chapter_pages")
 scraper = AsuraComic()
 
 app.add_middleware(
