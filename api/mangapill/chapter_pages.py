@@ -1,17 +1,17 @@
 from fastapi import FastAPI, HTTPException, Query
 from typing import List
-from scrapers.asura_scraper import AsuraComic
+from scrapers.mangapill_scraper import MangapillScraper
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Asura Chapter Pages", root_path="/api/asurascans/asurascans_chapter_pages")
-scraper = AsuraComic()
+app = FastAPI(title="Chapter Pages", root_path="/api/mangapill/chapter_pages")
+scraper = MangapillScraper()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-aj70k9xep-srikar-kavalis-projects.vercel.app",
+        "https://manga-fw0fx9veo-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

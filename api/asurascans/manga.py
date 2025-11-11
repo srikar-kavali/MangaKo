@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException, Query
-from scrapers.mangapill_scraper import MangapillScraper
+from scrapers.asura_scraper import AsuraComic
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Manga", root_path="/api/manga")
-scraper = MangapillScraper()
+app = FastAPI(title="Asura Manga", root_path="/api/asurascans/manga")
+scraper = AsuraComic()
 
 app.add_middleware(
     CORSMiddleware,

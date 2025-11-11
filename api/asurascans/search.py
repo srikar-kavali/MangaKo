@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException, Query
-from scrapers.mangapill_scraper import MangapillScraper
+from scrapers.asura_scraper import AsuraComic
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Mangapill Search", root_path="/api/search")
-scraper = MangapillScraper()
+app = FastAPI(title="Asura Comic Search", root_path="/api/asurascans/search")
+scraper = AsuraComic()
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,3 +23,4 @@ def search(q: str = Query(...)):
         return scraper.search(q)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
