@@ -10,17 +10,20 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-owosigxlf-srikar-kavalis-projects.vercel.app",
+        "https://manga-6o8goc2de-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
 @app.get("/")
-def manga(url: str = Query(...)):
+def manga_info(series_id: str = Query(..., description="Series ID from search results")):
+    """Get detailed manga information including chapters"""
     try:
-        return scraper.get_manga(url)
+        result = scraper.info(series_id)  # ← Changed from get_manga(url)
+        if result["status"] == "error":
+            raise HTTPException(status_code=500, detail=result["results"])
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

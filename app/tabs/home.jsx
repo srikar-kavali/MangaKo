@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { SafeAreaView, View, Text, StyleSheet, Image, Pressable, TextInput, FlatList, ActivityIndicator } from 'react-native';
+import { SafeAreaView, View, Text, StyleSheet, Image, Pressable, TextInput, FlatList, ActivityIndicator, ScrollView } from 'react-native';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
 import { getRecentSearches, saveRecentSearches } from '../searchStorage';
 import { searchMangapill, proxied } from '../../manga_api/mangapill';
+import FollowedUpdatesRow from '../FollowedUpdatesRow';
 
 const LIVE_DELAY_MS = 120;   // snappy live search
 
@@ -23,7 +24,7 @@ function deriveTitleFromUrl(url = '') {
 }
 
 const Home = () => {
-    const [searchActive, setSearchActive] = useState(false);
+    //const [searchActive, setSearchActive] = useState(false);
     const [query, setQuery] = useState('');
     const [recentSearches, setRecentSearches] = useState([]);
     const [searchResults, setSearchResults] = useState([]);
@@ -112,9 +113,10 @@ const Home = () => {
         await saveRecentSearches(updated);
     };
 
-    const openResult = (item) => {
+    const openResult = async (item) => {
         const mangapillUrl = item?.url || '';
-        setSearchActive(false);
+        await handleAddSearch(item?.displayTitle || query);
+        setQuery(''); // closes overlay
         router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(mangapillUrl)}`);
     };
 
@@ -122,18 +124,26 @@ const Home = () => {
         <SafeAreaView style={styles.screen}>
             <View style={styles.header}>
                 <View style={styles.logoLeft}>
-                    <Pressable style={styles.logo} onPress={() => router.replace('/tabs/home')}>
-                        <Image source={dragonLogo} style={styles.logoImage} />
-                    </Pressable>
+                    <Image source={dragonLogo} style={styles.logoImage} />
                     <Text style={styles.logoText}>Mangako</Text>
                 </View>
-                <Pressable onPress={() => { setSearchActive(true); setDropdownVisible(false); }}>
-                    <Ionicons name='search-circle-outline' style={styles.icon} size={40} />
-                </Pressable>
+
+                <View style={styles.searchInline}>
+                    <Ionicons name="search" size={18} color="#999" />
+                    <TextInput
+                        placeholder="Search manga..."
+                        placeholderTextColor="#999"
+                        style={styles.searchInput}
+                        value={query}
+                        onChangeText={setQuery}
+                    />
+                </View>
+
                 <Pressable onPress={() => setDropdownVisible(!dropdownVisible)}>
-                    <Ionicons name="person-circle-outline" size={40} style={styles.icon} />
+                    <Ionicons name="person-circle-outline" size={34} color="#333" />
                 </Pressable>
             </View>
+
 
             {dropdownVisible && (
                 <>
@@ -151,7 +161,15 @@ const Home = () => {
 
             <View style={styles.borderLine} />
 
-            {searchActive && (
+            <ScrollView>
+                {/* Followed manga updates row */}
+                <FollowedUpdatesRow />
+
+                {/* Step C: vertical list will go here */}
+            </ScrollView>
+
+
+            {query.trim().length > 0 && (
                 <View style={styles.searchOverlay}>
                     <SafeAreaView style={styles.searchContainer}>
                         <View style={styles.searchBar}>
@@ -173,26 +191,28 @@ const Home = () => {
                             {isSearching ? (
                                 <ActivityIndicator size="small" style={{ marginRight: 8 }} />
                             ) : null}
-                            <Pressable onPress={() => setSearchActive(false)}>
-                                <Text style={styles.cancel}>Cancel</Text>
-                            </Pressable>
                         </View>
 
-                        <FlatList
-                            data={recentSearches}
-                            keyExtractor={(item, idx) => `${item}-${idx}`}
-                            renderItem={({ item }) => (
-                                <View style={styles.historyRow}>
-                                    <View style={styles.historyLeft}>
-                                        <Ionicons name="time-outline" size={20} color="#aaa" />
+                        {query.length === 0 && recentSearches.length > 0 && (
+                            <FlatList
+                                data={recentSearches}
+                                keyExtractor={(item, idx) => `${item}-${idx}`}
+                                renderItem={({ item }) => (
+                                    <Pressable
+                                        style={styles.historyRow}
+                                        onPress={async () => {
+                                            setQuery(item);
+                                            await handleAddSearch(item);
+                                        }}
+
+                                    >
+                                        <Ionicons name="time-outline" size={18} color="#aaa" />
                                         <Text style={styles.historyText}>{item}</Text>
-                                    </View>
-                                    <Pressable onPress={() => removeSearch(item)}>
-                                        <Ionicons name="close-outline" size={18} color="#aaa" />
                                     </Pressable>
-                                </View>
-                            )}
-                        />
+                                )}
+                            />
+                        )}
+
 
                         {query.trim().length > 0 && searchResults.length === 0 && !isSearching ? (
                             <Text style={{ padding: 16, color: '#666' }}>No results.</Text>
@@ -226,6 +246,8 @@ const Home = () => {
                 </View>
             )}
         </SafeAreaView>
+
+
     );
 };
 
@@ -233,10 +255,36 @@ export default Home;
 
 const styles = StyleSheet.create({
     screen: { flex: 1, backgroundColor: '#fff' },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, zIndex: 1 },
-    logoLeft: { flexDirection: 'row', alignItems: 'center' },
-    logoImage: { width: 50, height: 50, resizeMode: 'contain', marginRight: 8 },
-    logoText: { fontSize: 20, fontWeight: 'bold', color: '#1E1E1E' },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        gap: 10,
+    },
+    logoImage: {
+        width: 36,
+        height: 36,
+    },
+    logoText: {
+        fontSize: 18,
+        fontWeight: '700',
+    },
+    searchInline: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f2f2f2',
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        height: 40,
+    },
+    searchInput: {
+        flex: 1,
+        marginLeft: 8,
+        color: '#000',
+    },
+
     icon: { color: '#333' },
     triangle: { position: 'absolute', top: 115, right: 28, width: 12, height: 12, backgroundColor: '#fff', transform: [{ rotate: '45deg' }], borderTopColor: '#ccc', borderLeftColor: '#ccc', borderTopWidth: 1, borderLeftWidth: 1, zIndex: 101 },
     dropdown: { position: 'absolute', top: 120, right: 16, backgroundColor: '#fff', borderColor: '#ccc', borderWidth: 1, borderRadius: 6, paddingVertical: 8, zIndex: 99, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 5 },
@@ -247,7 +295,6 @@ const styles = StyleSheet.create({
     searchBar: { flexDirection: 'row', alignItems: 'center', margin: 12, backgroundColor: '#f1f1f1', borderRadius: 10, paddingHorizontal: 12, height: 44 },
     searchIcon: { marginRight: 8 },
     input: { flex: 1, color: '#000' },
-    cancel: { color: '#007AFF', marginLeft: 10 },
     historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderBottomColor: '#eee', borderBottomWidth: 1 },
     historyLeft: { flexDirection: 'row', alignItems: 'center' },
     historyText: { color: '#333', fontSize: 16, marginLeft: 8 },

@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 import requests
 from typing import List, Dict
+import re
 
 class AsuraComic:
     def __init__(self):
@@ -22,58 +23,96 @@ class AsuraComic:
             content = []
             seen_urls = set()
 
-            # Find all links to /series/ pages
-            for link in soup.find_all('a', href=lambda x: x and '/series/' in x and not any(skip in x for skip in ['facebook', 'twitter', 'whatsapp', 'pinterest', 'http'])):
-                href = link.get('href')
+            # Find all links - both with and without leading slash
+            # Pattern: href contains "series/" but NOT "/series/" and not external links
+            for link in soup.find_all('a', href=True):
+                href = link.get('href', '')
 
-                # Skip duplicates and non-series links
-                if not href or href in seen_urls or '/chapter' in href:
+                # Skip if empty or already seen
+                if not href or href in seen_urls:
                     continue
 
-                # Extract title from the link text
-                title = link.get_text(strip=True)
+                # Match patterns like: "series/manga-name-123" or "/series/manga-name-123"
+                # But skip chapters, external links, and navigation
+                if ('series/' in href and
+                        'chapter' not in href.lower() and
+                        not any(skip in href for skip in ['facebook', 'twitter', 'whatsapp', 'pinterest', 'mailto:', 'tel:']) and
+                        not href.startswith('http://') and
+                        not href.startswith('https://') and
+                        href != '/series' and
+                        '?page=' not in href):
 
-                # Skip if no meaningful title
-                if not title or len(title) < 2:
-                    continue
-
-                # Clean up title (remove chapter info if present)
-                if 'Chapter' in title:
-                    # Format: "OngoingSolo Max-Level NewbieChapter2329.5"
-                    # Extract just the title part
-                    import re
-                    match = re.search(r'(Ongoing|Completed)?(.*?)Chapter', title)
-                    if match:
-                        title = match.group(2).strip()
+                    # Normalize URL
+                    if href.startswith('/'):
+                        full_url = f"{self.base_url}{href}"
+                    elif href.startswith('series/'):
+                        full_url = f"{self.base_url}/{href}"
                     else:
-                        # Fallback: take everything before "Chapter"
-                        title = title.split('Chapter')[0]
-                        title = title.replace('Ongoing', '').replace('Completed', '').strip()
+                        continue
 
-                # Try to find associated image
-                image = None
-                parent = link.parent
-                if parent:
-                    # Look for img in parent or nearby siblings
-                    img_tag = parent.find('img')
-                    if not img_tag and parent.parent:
-                        img_tag = parent.parent.find('img')
+                    if full_url in seen_urls:
+                        continue
+
+                    # Extract series ID from URL
+                    # Format: series/manga-name-id or /series/manga-name-id
+                    match = re.search(r'series/([^/?#]+)', href)
+                    if not match:
+                        continue
+
+                    series_id = match.group(1)
+
+                    # Get title - try link text first, then nearby elements
+                    title = link.get_text(strip=True)
+
+                    # If title is empty or very short, look at parent elements
+                    if not title or len(title) < 2:
+                        parent = link.parent
+                        if parent:
+                            title = parent.get_text(strip=True)
+
+                    # Clean up title
+                    if title and 'Chapter' in title:
+                        # Remove chapter info
+                        title = re.sub(r'(Ongoing|Completed|Hiatus)?.*?Chapter.*$', '', title, flags=re.IGNORECASE)
+                        title = title.strip()
+
+                    # Skip if still no good title
+                    if not title or len(title) < 2:
+                        continue
+
+                    # Try to find associated image
+                    image = None
+
+                    # Look for img in the link itself first (most common)
+                    img_tag = link.find('img')
+
+                    # If not found, check parent and grandparent
+                    if not img_tag:
+                        parent = link.parent
+                        if parent:
+                            img_tag = parent.find('img')
+                            if not img_tag and parent.parent:
+                                img_tag = parent.parent.find('img')
+
                     if img_tag:
-                        image = img_tag.get('src') or img_tag.get('data-src')
+                        image = img_tag.get('src') or img_tag.get('data-src') or img_tag.get('data-original')
+                        # Make image URL absolute if needed
+                        if image:
+                            if not image.startswith('http'):
+                                if image.startswith('/'):
+                                    image = f"{self.base_url}{image}"
+                                else:
+                                    image = f"{self.base_url}/{image}"
+                        else:
+                            image = None
 
-                # Extract ID from URL
-                series_id = href.split('/')[-1] if '/' in href else href
-
-                full_url = self.base_url + href if not href.startswith('http') else href
-
-                if full_url not in seen_urls and title:
                     seen_urls.add(full_url)
                     content.append({
                         "title": title,
                         "id": series_id,
                         "url": full_url,
                         "image": image,
-                        "latest_chapter": None  # Not easily available in new layout
+                        "latest_chapter": None
                     })
 
             self.results["results"] = content
@@ -92,19 +131,25 @@ class AsuraComic:
 
             content = {}
 
-            # Cover image - look for poster image
-            cover = soup.select_one("img[alt='poster']")
-            content["image"] = cover.get('src') or cover.get('data-src') if cover else None
+            # Cover image
+            cover = soup.select_one("img[alt='poster'], img[alt*='cover'], div[class*='poster'] img, div[class*='cover'] img")
+            if cover:
+                content["image"] = cover.get('src') or cover.get('data-src')
+                if content["image"] and not content["image"].startswith('http'):
+                    content["image"] = f"{self.base_url}/{content['image'].lstrip('/')}"
+            else:
+                content["image"] = None
 
-            # Title - look in h1 or h2
-            title_tag = soup.select_one("h1, h2")
-            content["title"] = title_tag.get_text(strip=True) if title_tag else series_id
+            # Title
+            title_tag = soup.select_one("h1, h2, h3[class*='title']")
+            content["title"] = title_tag.get_text(strip=True) if title_tag else series_id.replace('-', ' ').title()
 
-            # Description - multiple possible locations
+            # Description
             desc_selectors = [
-                "div.space-y-4 p",  # Common pattern
+                "div[class*='description'] p",
+                "div[class*='summary'] p",
+                "div.space-y-4 p",
                 "p.text-sm",
-                "div[class*='space-y'] p",
                 ".prose p"
             ]
             description = None
@@ -112,56 +157,69 @@ class AsuraComic:
                 desc_tag = soup.select_one(selector)
                 if desc_tag:
                     description = desc_tag.get_text(strip=True)
-                    if len(description) > 50:  # Make sure it's substantial
+                    if len(description) > 50:
                         break
             content["description"] = description or "No description available."
 
-            # Genres/Tags - look for genre links or badges
+            # Genres
             genres = []
-            for tag in soup.select("a[href*='genre'], span.badge, span.tag, .genre-tag"):
+            for tag in soup.select("a[href*='genre'], span.badge, span.tag, .genre-tag, a[href*='genres']"):
                 genre_text = tag.get_text(strip=True)
-                if genre_text and len(genre_text) < 30:  # Reasonable genre length
+                if genre_text and len(genre_text) < 30:
                     genres.append(genre_text)
-            content["genres"] = list(set(genres))  # Remove duplicates
+            content["genres"] = list(set(genres))
 
-            # Status, Type, etc. - look for detail items
-            for detail in soup.select("div[class*='space-y'] > div"):
+            # Additional info (status, type, etc.)
+            for detail in soup.select("div[class*='detail'] div, div[class*='info'] div"):
                 text = detail.get_text(strip=True)
                 if ':' in text:
                     label, value = text.split(':', 1)
                     content[label.strip().lower()] = value.strip()
 
-            # Chapters - look for chapter links
+            # Chapters - look for links with 'chapter' in href
             chapters = []
             seen_chapters = set()
 
-            for link in soup.find_all('a', href=lambda x: x and '/chapter/' in x):
+            for link in soup.find_all('a', href=True):
                 href = link.get('href')
-                if not href or href in seen_chapters:
+
+                # Match chapter links: series/{id}/chapter/{chapter_id} or chapter/{chapter_id}
+                if not href or 'chapter' not in href.lower():
                     continue
 
-                seen_chapters.add(href)
+                if href in seen_chapters:
+                    continue
+
+                # Extract chapter info
+                chapter_match = re.search(r'chapter[/-]([^/?#]+)', href, re.IGNORECASE)
+                if not chapter_match:
+                    continue
+
+                chapter_id = chapter_match.group(1)
                 chapter_title = link.get_text(strip=True)
 
-                # Extract chapter ID from URL
-                # Format: /series/{series_id}/chapter/{chapter_id}
-                parts = href.split('/')
-                chapter_id = parts[-1] if parts else None
+                # Make URL absolute
+                if href.startswith('/'):
+                    full_href = f"{self.base_url}{href}"
+                elif href.startswith('http'):
+                    full_href = href
+                else:
+                    full_href = f"{self.base_url}/{href}"
 
-                # Look for date in parent or sibling elements
+                seen_chapters.add(href)
+
+                # Look for date
                 date = None
                 parent = link.parent
                 if parent:
-                    date_elem = parent.find('span', class_=lambda x: x and 'date' in str(x).lower())
-                    if not date_elem:
-                        date_elem = parent.find('time')
+                    date_elem = parent.find('time') or parent.find('span', class_=lambda x: x and 'date' in str(x).lower())
                     if date_elem:
                         date = date_elem.get_text(strip=True)
 
                 chapters.append({
                     "title": chapter_title,
                     "id": chapter_id,
-                    "url": self.base_url + href if not href.startswith('http') else href,
+                    "url": full_href,
                     "date": date
                 })
 
@@ -180,22 +238,40 @@ class AsuraComic:
             self.results["status"] = response.status_code
             soup = BeautifulSoup(response.content, "html.parser")
 
-            # Look for reader images
-            imgs = soup.select("img.reader-image, img[class*='reader'], img[alt*='page'], div[class*='reader'] img")
-
             pages = []
-            for img in imgs:
-                src = img.get('src') or img.get('data-src') or img.get('data-original')
-                if src and not any(skip in src for skip in ['.svg', 'data:image', 'logo', 'icon']):
-                    pages.append(src)
 
-            # Fallback: get all images if specific selectors don't work
+            # Look for reader images with various selectors
+            img_selectors = [
+                "img.reader-image",
+                "img[class*='reader']",
+                "img[alt*='page']",
+                "div[class*='reader'] img",
+                "div[class*='chapter'] img",
+                "main img"
+            ]
+
+            for selector in img_selectors:
+                imgs = soup.select(selector)
+                for img in imgs:
+                    src = img.get('src') or img.get('data-src') or img.get('data-original')
+                    if src and not any(skip in src.lower() for skip in ['.svg', 'data:image', 'logo', 'icon', 'avatar']):
+                        # Make URL absolute
+                        if not src.startswith('http'):
+                            src = f"{self.base_url}/{src.lstrip('/')}"
+                        if src not in pages:
+                            pages.append(src)
+
+                if pages:  # If we found images with this selector, stop
+                    break
+
+            # Fallback: get all substantial images
             if not pages:
                 all_imgs = soup.find_all('img')
                 for img in all_imgs:
                     src = img.get('src') or img.get('data-src')
-                    if src and src.startswith('http') and not any(skip in src for skip in ['.svg', 'logo', 'icon', 'avatar']):
-                        pages.append(src)
+                    if src and src.startswith('http') and not any(skip in src.lower() for skip in ['.svg', 'logo', 'icon', 'avatar', 'banner']):
+                        if src not in pages:
+                            pages.append(src)
 
             self.results["results"] = pages
             return self.results
@@ -208,8 +284,9 @@ class AsuraComic:
         try:
             url = f"{self.proxy_url}{self.base_url}/series?page={page}&order=update"
             response = requests.get(url, timeout=15)
-            return self.search("", page)  # Reuse search logic
-
+            self.results["status"] = response.status_code
+            # Reuse search logic
+            return self.search("", page)
         except Exception as e:
             return {"status": "error", "results": str(e)}
 
@@ -219,10 +296,7 @@ class AsuraComic:
             url = f"{self.proxy_url}{self.base_url}/genres/{genre_slug}?page={page}"
             response = requests.get(url, timeout=15)
             self.results["status"] = response.status_code
-            soup = BeautifulSoup(response.content, "html.parser")
-
-            # Reuse search parsing logic
-            return self.search("", page)  # This will parse the grid layout
-
+            # Reuse search logic
+            return self.search("", page)
         except Exception as e:
             return {"status": "error", "results": str(e)}

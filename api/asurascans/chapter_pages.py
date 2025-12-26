@@ -11,7 +11,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-owosigxlf-srikar-kavalis-projects.vercel.app",
+        "https://manga-6o8goc2de-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -19,17 +19,17 @@ app.add_middleware(
 )
 
 @app.get("/")
-def chapter_pages(url: str = Query(..., description="Full Mangapill chapter URL")) -> List[str]:
+def chapter_pages(
+        series_id: str = Query(..., description="Series ID (e.g., 'nano-machine-9cd9b21f')"),
+        chapter_id: str = Query(..., description="Chapter ID (e.g., '1' or '232')")) -> dict:
     try:
-        pages = scraper.get_chapter_pages(url)
-        if not pages:
+        result = scraper.pages(series_id, chapter_id)
+        if result["status"] == "error":
+            raise HTTPException(status_code=500, detail=result["results"])
+        if not result["results"]:
             raise HTTPException(status_code=404, detail="No images found for the provided chapter.")
-        return pages
-
-    except ValueError as ve:
-        # Known logical error (no images, invalid URL, etc.)
-        raise HTTPException(status_code=400, detail=f"Invalid chapter or no images: {str(ve)}")
-
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
-        # Unexpected server-side error
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

@@ -10,7 +10,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-owosigxlf-srikar-kavalis-projects.vercel.app",
+        "https://manga-6o8goc2de-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -18,9 +18,11 @@ app.add_middleware(
 )
 
 @app.get("/")
-def search(q: str = Query(...)):
+def search(q: str = Query(...), page: int = Query(1)):  # ← Add page parameter
     try:
-        return scraper.search(q)
+        result = scraper.search(q, page)  # ← Pass page to scraper
+        if result["status"] == "error":  # ← Check for errors
+            raise HTTPException(status_code=500, detail=result["results"])
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

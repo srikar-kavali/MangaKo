@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const BASE = process.env.EXPO_PUBLIC_API;
 
-// remove trailing slash if present
+// Remove trailing slash if present
 function cleanBase(base) {
     return base?.endsWith("/") ? base.slice(0, -1) : base;
 }
@@ -16,12 +16,13 @@ export function proxied(src) {
 }
 
 // Search manga on AsuraScans
-export const searchManga = async (query) => {
+export const searchManga = async (query, page = 1) => {
     try {
-        const res = await axios.get(`${API_BASE}/asura/search`, {
-            params: { query },
+        const res = await axios.get(`${API_BASE}/api/asurascans/search`, {
+            params: { q: query, page },
         });
         console.log("Search response:", res.data);
+        // API returns {status, results} - extract results array
         return res.data.results || [];
     } catch (error) {
         console.error("Error fetching Asura search:", error.message);
@@ -30,10 +31,13 @@ export const searchManga = async (query) => {
 };
 
 // Get full manga info
-export const getMangaInfo = async (id) => {
+export const getMangaInfo = async (seriesId) => {
     try {
-        const res = await axios.get(`${API_BASE}/asura/info/${id}`);
+        const res = await axios.get(`${API_BASE}/api/asurascans/manga`, {
+            params: { series_id: seriesId }
+        });
         console.log("Info response:", res.data);
+        // API returns {status, results} - extract results object
         return res.data.results || {};
     } catch (error) {
         console.error("Error fetching Asura manga info:", error.message);
@@ -42,13 +46,45 @@ export const getMangaInfo = async (id) => {
 };
 
 // Get chapter pages
-export const getChapterPages = async (id, chapterId) => {
+export const getChapterPages = async (seriesId, chapterId) => {
     try {
-        const res = await axios.get(`${API_BASE}/asura/read/${id}/${chapterId}`);
+        const res = await axios.get(`${API_BASE}/api/asurascans/chapter_pages`, {
+            params: {
+                series_id: seriesId,
+                chapter_id: chapterId
+            }
+        });
         console.log("Pages response:", res.data);
+        // API returns {status, results} - extract results array
         return res.data.results || [];
     } catch (error) {
         console.error("Error fetching Asura chapter pages:", error.message);
+        return [];
+    }
+};
+
+// Get latest updates
+export const getLatestManga = async (page = 1) => {
+    try {
+        const res = await axios.get(`${API_BASE}/api/asurascans/latest`, {
+            params: { page }
+        });
+        return res.data.results || [];
+    } catch (error) {
+        console.error("Error fetching latest manga:", error.message);
+        return [];
+    }
+};
+
+// Get manga by genre
+export const getMangaByGenre = async (genreSlug, page = 1) => {
+    try {
+        const res = await axios.get(`${API_BASE}/api/asurascans/genres/${genreSlug}`, {
+            params: { page }
+        });
+        return res.data.results || [];
+    } catch (error) {
+        console.error("Error fetching manga by genre:", error.message);
         return [];
     }
 };
