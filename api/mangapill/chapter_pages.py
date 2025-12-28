@@ -3,7 +3,7 @@ from typing import List
 from scrapers.mangapill_scraper import MangapillScraper
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Chapter Pages", root_path="/api/mangapill/chapter_pages")
+app = FastAPI(title="Chapter Pages", root_path="/mangapill/chapter_pages")
 scraper = MangapillScraper()
 
 app.add_middleware(
@@ -11,7 +11,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-6o8goc2de-srikar-kavalis-projects.vercel.app",
+        "https://manga-5512oxexl-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

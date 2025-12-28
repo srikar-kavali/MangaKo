@@ -5,26 +5,12 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
 import { getRecentSearches, saveRecentSearches } from '../searchStorage';
-import { searchMangapill, proxied } from '../../manga_api/mangapill';
+import { searchManga, proxied } from '../../manga_api/asurascans';
 import FollowedUpdatesRow from '../FollowedUpdatesRow';
 
-const LIVE_DELAY_MS = 120;   // snappy live search
-
-// --- helper: derive human-readable title from url if API says "Unknown"
-function deriveTitleFromUrl(url = '') {
-    try {
-        const parts = String(url).split('/').filter(Boolean);
-        const last = parts[parts.length - 1] || '';
-        const decoded = decodeURIComponent(last);
-        const spaced = decoded.replace(/[-_]+/g, ' ').trim();
-        return spaced.replace(/\b\w+/g, w => w.charAt(0).toUpperCase() + w.slice(1)) || 'Unknown';
-    } catch {
-        return 'Unknown';
-    }
-}
+const LIVE_DELAY_MS = 120;
 
 const Home = () => {
-    //const [searchActive, setSearchActive] = useState(false);
     const [query, setQuery] = useState('');
     const [recentSearches, setRecentSearches] = useState([]);
     const [searchResults, setSearchResults] = useState([]);
@@ -32,9 +18,7 @@ const Home = () => {
     const [isSearching, setIsSearching] = useState(false);
 
     const router = useRouter();
-
-    // simple in-memory cache for live feel
-    const cacheRef = useRef(new Map()); // key: qLower, value: results[]
+    const cacheRef = useRef(new Map());
     const timerRef = useRef(null);
     const abortRef = useRef(null);
 
@@ -42,7 +26,6 @@ const Home = () => {
         (async () => setRecentSearches(await getRecentSearches()))();
     }, []);
 
-    // smart/live search
     useEffect(() => {
         const q = query.trim();
         const qLower = q.toLowerCase();
@@ -55,7 +38,6 @@ const Home = () => {
             return;
         }
 
-        // show cached results instantly
         if (cacheRef.current.has(qLower)) {
             setSearchResults(cacheRef.current.get(qLower));
         }
@@ -68,20 +50,18 @@ const Home = () => {
 
             setIsSearching(true);
             try {
-                const raw = await searchMangapill(q, 15);
+                const results = await searchManga(q);
                 const seen = new Set();
                 const unique = [];
-                for (const it of Array.isArray(raw) ? raw : []) {
-                    const key = it?.url || it?.title || '';
-                    if (!seen.has(key)) {
+
+                for (const item of Array.isArray(results) ? results : []) {
+                    const key = item?.id || item?.title || '';
+                    if (!seen.has(key) && item?.title) {
                         seen.add(key);
-                        const displayTitle =
-                            it?.title && it.title.toLowerCase() !== 'unknown'
-                                ? it.title
-                                : deriveTitleFromUrl(it?.url);
-                        unique.push({ ...it, displayTitle });
+                        unique.push(item);
                     }
                 }
+
                 if (!controller.signal.aborted) {
                     cacheRef.current.set(qLower, unique);
                     setSearchResults(unique);
@@ -107,17 +87,11 @@ const Home = () => {
         await saveRecentSearches(updated);
     };
 
-    const removeSearch = async (text) => {
-        const updated = recentSearches.filter((i) => i !== text);
-        setRecentSearches(updated);
-        await saveRecentSearches(updated);
-    };
-
     const openResult = async (item) => {
-        const mangapillUrl = item?.url || '';
-        await handleAddSearch(item?.displayTitle || query);
-        setQuery(''); // closes overlay
-        router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(mangapillUrl)}`);
+        const seriesId = item?.id || '';
+        await handleAddSearch(item?.title || query);
+        setQuery('');
+        router.push(`/MangaDetails?seriesId=${encodeURIComponent(seriesId)}`);
     };
 
     return (
@@ -144,7 +118,6 @@ const Home = () => {
                 </Pressable>
             </View>
 
-
             {dropdownVisible && (
                 <>
                     <View style={styles.triangle} />
@@ -162,12 +135,8 @@ const Home = () => {
             <View style={styles.borderLine} />
 
             <ScrollView>
-                {/* Followed manga updates row */}
                 <FollowedUpdatesRow />
-
-                {/* Step C: vertical list will go here */}
             </ScrollView>
-
 
             {query.trim().length > 0 && (
                 <View style={styles.searchOverlay}>
@@ -188,9 +157,7 @@ const Home = () => {
                                     await handleAddSearch(q);
                                 }}
                             />
-                            {isSearching ? (
-                                <ActivityIndicator size="small" style={{ marginRight: 8 }} />
-                            ) : null}
+                            {isSearching && <ActivityIndicator size="small" style={{ marginRight: 8 }} />}
                         </View>
 
                         {query.length === 0 && recentSearches.length > 0 && (
@@ -198,14 +165,7 @@ const Home = () => {
                                 data={recentSearches}
                                 keyExtractor={(item, idx) => `${item}-${idx}`}
                                 renderItem={({ item }) => (
-                                    <Pressable
-                                        style={styles.historyRow}
-                                        onPress={async () => {
-                                            setQuery(item);
-                                            await handleAddSearch(item);
-                                        }}
-
-                                    >
+                                    <Pressable style={styles.historyRow} onPress={() => setQuery(item)}>
                                         <Ionicons name="time-outline" size={18} color="#aaa" />
                                         <Text style={styles.historyText}>{item}</Text>
                                     </Pressable>
@@ -213,18 +173,17 @@ const Home = () => {
                             />
                         )}
 
-
-                        {query.trim().length > 0 && searchResults.length === 0 && !isSearching ? (
+                        {query.trim().length > 0 && searchResults.length === 0 && !isSearching && (
                             <Text style={{ padding: 16, color: '#666' }}>No results.</Text>
-                        ) : null}
+                        )}
 
                         {searchResults.length > 0 && (
                             <FlatList
                                 data={searchResults}
-                                keyExtractor={(item, idx) => item?.url ? `${item.url}::${idx}` : `${item?.displayTitle || 'item'}::${idx}`}
+                                keyExtractor={(item, idx) => `${item?.id || idx}`}
                                 renderItem={({ item }) => {
-                                    const title = item?.displayTitle || 'Unknown';
-                                    const cover = item?.cover ? proxied(item.cover) : null;
+                                    const title = item?.title || 'Unknown';
+                                    const cover = item?.image ? proxied(item.image) : null;
                                     return (
                                         <Pressable onPress={() => openResult(item)} style={rowStyles.itemRow}>
                                             {cover ? (
@@ -232,7 +191,7 @@ const Home = () => {
                                             ) : (
                                                 <View style={rowStyles.itemCoverFallback} />
                                             )}
-                                            <Text style={rowStyles.itemTitle} numberOfLines={1} ellipsizeMode="tail">
+                                            <Text style={rowStyles.itemTitle} numberOfLines={1}>
                                                 {title}
                                             </Text>
                                         </Pressable>
@@ -246,8 +205,6 @@ const Home = () => {
                 </View>
             )}
         </SafeAreaView>
-
-
     );
 };
 
@@ -255,53 +212,27 @@ export default Home;
 
 const styles = StyleSheet.create({
     screen: { flex: 1, backgroundColor: '#fff' },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        gap: 10,
-    },
-    logoImage: {
-        width: 36,
-        height: 36,
-    },
-    logoText: {
-        fontSize: 18,
-        fontWeight: '700',
-    },
-    searchInline: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f2f2f2',
-        borderRadius: 12,
-        paddingHorizontal: 10,
-        height: 40,
-    },
-    searchInput: {
-        flex: 1,
-        marginLeft: 8,
-        color: '#000',
-    },
-
-    icon: { color: '#333' },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, gap: 10 },
+    logoLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    logoImage: { width: 36, height: 36 },
+    logoText: { fontSize: 18, fontWeight: '700' },
+    searchInline: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f2f2f2', borderRadius: 12, paddingHorizontal: 10, height: 40 },
+    searchInput: { flex: 1, marginLeft: 8, color: '#000' },
     triangle: { position: 'absolute', top: 115, right: 28, width: 12, height: 12, backgroundColor: '#fff', transform: [{ rotate: '45deg' }], borderTopColor: '#ccc', borderLeftColor: '#ccc', borderTopWidth: 1, borderLeftWidth: 1, zIndex: 101 },
     dropdown: { position: 'absolute', top: 120, right: 16, backgroundColor: '#fff', borderColor: '#ccc', borderWidth: 1, borderRadius: 6, paddingVertical: 8, zIndex: 99, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 5 },
     dropdownItem: { paddingVertical: 10, paddingHorizontal: 16, fontSize: 16, color: '#333' },
     borderLine: { height: 1, backgroundColor: '#ccc', width: '100%' },
-    searchOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 999, elevation: 10 },
+    searchOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#fff', zIndex: 999 },
     searchContainer: { flex: 1 },
     searchBar: { flexDirection: 'row', alignItems: 'center', margin: 12, backgroundColor: '#f1f1f1', borderRadius: 10, paddingHorizontal: 12, height: 44 },
     searchIcon: { marginRight: 8 },
     input: { flex: 1, color: '#000' },
-    historyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderBottomColor: '#eee', borderBottomWidth: 1 },
-    historyLeft: { flexDirection: 'row', alignItems: 'center' },
-    historyText: { color: '#333', fontSize: 16, marginLeft: 8 },
+    historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderBottomColor: '#eee', borderBottomWidth: 1, gap: 8 },
+    historyText: { color: '#333', fontSize: 16 },
 });
 
 const rowStyles = StyleSheet.create({
-    itemRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff' },
+    itemRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
     itemCover: { width: 42, height: 60, borderRadius: 4, marginRight: 12, backgroundColor: '#eee' },
     itemCoverFallback: { width: 42, height: 60, borderRadius: 4, marginRight: 12, backgroundColor: '#eee' },
     itemTitle: { flex: 1, fontSize: 16, color: '#000' },

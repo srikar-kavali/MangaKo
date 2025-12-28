@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-const BASE = process.env.EXPO_PUBLIC_API;
+const BASE = process.env.EXPO_PUBLIC_MANGAPILL_API;
 
-// Remove trailing slash if present
 function cleanBase(base) {
     return base?.endsWith("/") ? base.slice(0, -1) : base;
 }
@@ -17,15 +16,17 @@ export function proxied(src) {
 
 // Search manga on AsuraScans
 export const searchManga = async (query, page = 1) => {
+    console.log("API_BASE:", API_BASE); // ← ADD THIS
+    console.log("Full URL:", `${API_BASE}/api/asurascans/search?q=${query}`); // ← ADD THIS
     try {
         const res = await axios.get(`${API_BASE}/api/asurascans/search`, {
             params: { q: query, page },
         });
         console.log("Search response:", res.data);
-        // API returns {status, results} - extract results array
         return res.data.results || [];
     } catch (error) {
         console.error("Error fetching Asura search:", error.message);
+        console.error("Full error:", error); // ← ADD THIS
         return [];
     }
 };
