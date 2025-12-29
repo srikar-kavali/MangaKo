@@ -3,7 +3,7 @@ from typing import List
 from scrapers.asura_scraper import AsuraComic
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Asura Chapter Pages", root_path="/asurascans/chapter_pages")
+app = FastAPI(title="Asura Chapter Pages", root_path="/api/asurascans/chapter_pages")
 scraper = AsuraComic()
 
 app.add_middleware(
@@ -11,7 +11,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-5512oxexl-srikar-kavalis-projects.vercel.app",
+        "https://manga-58deqchm7-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from scrapers.asura_scraper import AsuraComic
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Asura Manga", root_path="/asurascans/manga")
+app = FastAPI(title="Asura Manga", root_path="/api/asurascans/manga")
 scraper = AsuraComic()
 
 app.add_middleware(
@@ -10,7 +10,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-5512oxexl-srikar-kavalis-projects.vercel.app",
+        "https://manga-58deqchm7-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
