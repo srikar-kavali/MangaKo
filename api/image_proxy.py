@@ -31,24 +31,30 @@ client = httpx.Client(timeout=TIMEOUT, headers=HEADERS, follow_redirects=True)
 
 @app.get("/")
 def proxy(url: str = Query(..., description="Absolute image URL")):
-    # Basic allow-list
     if not url.startswith("https://"):
         raise HTTPException(400, "Only https URLs allowed.")
 
+    # Set appropriate referer based on URL
+    headers = HEADERS.copy()
+    if "asuracomic" in url or "asura" in url or "gg.asuracomic" in url:
+        headers["Referer"] = "https://asuracomic.net/"
+    else:
+        headers["Referer"] = "https://mangapill.com/"
+
     try:
-        r = client.get(url)
-        r.raise_for_status()
+        # Create a new client with appropriate headers for this request
+        with httpx.Client(timeout=TIMEOUT, headers=headers, follow_redirects=True) as client:
+            r = client.get(url)
+            r.raise_for_status()
     except httpx.HTTPError as e:
         raise HTTPException(502, f"Upstream fetch failed: {e}")
 
     ctype = r.headers.get("content-type", "").split(";")[0].strip()
 
-    # If it's webp, transcode to PNG (or JPEG)
     if ctype == "image/webp" or url.lower().endswith(".webp"):
         try:
             img = Image.open(BytesIO(r.content)).convert("RGB")
             buf = BytesIO()
-            # PNG is safest; switch to JPEG if you prefer smaller
             img.save(buf, format="PNG", optimize=True)
             buf.seek(0)
             return StreamingResponse(
@@ -57,14 +63,12 @@ def proxy(url: str = Query(..., description="Absolute image URL")):
                 headers={"Cache-Control": "public, max-age=86400"},
             )
         except Exception as e:
-            # If transcode fails, fall back to original bytes
             return Response(
                 content=r.content,
                 media_type="image/webp",
                 headers={"Cache-Control": "public, max-age=3600"},
             )
 
-    # Non-webp → stream through
     return Response(
         content=r.content,
         media_type=ctype or mimetypes.guess_type(url)[0] or "application/octet-stream",

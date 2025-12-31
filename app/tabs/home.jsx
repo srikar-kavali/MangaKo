@@ -10,6 +10,7 @@ import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/ma
 import FollowedUpdatesRow from '../FollowedUpdatesRow';
 
 const LIVE_DELAY_MS = 120;
+const CACHE_VERSION = 'v2'; // Increment this to invalidate old cache
 
 const Home = () => {
     const [query, setQuery] = useState('');
@@ -68,15 +69,42 @@ const Home = () => {
                 const formattedMangapill = (mangapillResults || []).map(item => ({
                     ...item,
                     source: 'mangapill',
-                    id: item.url, // MangaPill uses URL as identifier
+                    id: item.url,
                 }));
 
-                // Combine: AsuraScans first, then MangaPill
-                const combined = [...formattedAsura, ...formattedMangapill];
+                // Simple relevance scoring - prioritize title matches
+                const scoreResult = (item) => {
+                    const title = (item.title || '').toLowerCase();
+                    const query = qLower;
+
+                    // Exact match gets highest score
+                    if (title === query) return 1000;
+
+                    // Starts with query gets high score
+                    if (title.startsWith(query)) return 500;
+
+                    // Contains query as whole word
+                    if (title.includes(` ${query} `) || title.includes(` ${query}`) || title.includes(`${query} `)) return 300;
+
+                    // Contains query anywhere
+                    if (title.includes(query)) return 100;
+
+                    // No match
+                    return 0;
+                };
+
+                // Score and combine all results
+                const allResults = [...formattedAsura, ...formattedMangapill].map(item => ({
+                    ...item,
+                    score: scoreResult(item)
+                }));
+
+                // Sort by score (highest first)
+                allResults.sort((a, b) => b.score - a.score);
 
                 if (!controller.signal.aborted) {
-                    cacheRef.current.set(qLower, combined);
-                    setSearchResults(combined);
+                    cacheRef.current.set(cacheKey, allResults);
+                    setSearchResults(allResults);
                 }
             } catch (e) {
                 if (e?.name !== 'AbortError') console.log('Search error', e);

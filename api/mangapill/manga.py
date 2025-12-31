@@ -10,7 +10,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8081",  # Expo web dev
         "http://localhost:3000",  # React web dev
-        "https://manga-3l7zt6rch-srikar-kavalis-projects.vercel.app",
+        "https://manga-b6c7357ns-srikar-kavalis-projects.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

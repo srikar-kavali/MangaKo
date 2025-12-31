@@ -38,7 +38,6 @@ export const getMangaInfo = async (seriesId) => {
             params: { series_id: seriesId }
         });
         console.log("Info response:", res.data);
-        // API returns {status, results} - extract results object
         return res.data.results || {};
     } catch (error) {
         console.error("Error fetching Asura manga info:", error.message);
