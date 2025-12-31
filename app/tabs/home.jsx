@@ -5,7 +5,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
 import { getRecentSearches, saveRecentSearches } from '../searchStorage';
-import { searchManga, proxied } from '../../manga_api/asurascans';
+import { searchManga as searchAsura, proxied as proxiedAsura } from '../../manga_api/asurascans';
+import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import FollowedUpdatesRow from '../FollowedUpdatesRow';
 
 const LIVE_DELAY_MS = 120;
@@ -50,24 +51,35 @@ const Home = () => {
 
             setIsSearching(true);
             try {
-                const results = await searchManga(q);
-                const seen = new Set();
-                const unique = [];
+                // Search BOTH sources in parallel
+                const [asuraResults, mangapillResults] = await Promise.all([
+                    searchAsura(q).catch(() => []),
+                    searchMangapill(q, 15).catch(() => [])
+                ]);
 
-                for (const item of Array.isArray(results) ? results : []) {
-                    const key = item?.id || item?.title || '';
-                    if (!seen.has(key) && item?.title) {
-                        seen.add(key);
-                        unique.push(item);
-                    }
-                }
+                // Format AsuraScans results
+                const formattedAsura = (asuraResults || []).map(item => ({
+                    ...item,
+                    source: 'asura',
+                    cover: item.image,
+                }));
+
+                // Format MangaPill results
+                const formattedMangapill = (mangapillResults || []).map(item => ({
+                    ...item,
+                    source: 'mangapill',
+                    id: item.url, // MangaPill uses URL as identifier
+                }));
+
+                // Combine: AsuraScans first, then MangaPill
+                const combined = [...formattedAsura, ...formattedMangapill];
 
                 if (!controller.signal.aborted) {
-                    cacheRef.current.set(qLower, unique);
-                    setSearchResults(unique);
+                    cacheRef.current.set(qLower, combined);
+                    setSearchResults(combined);
                 }
             } catch (e) {
-                if (e?.name !== 'AbortError') console.log('Live search error', e);
+                if (e?.name !== 'AbortError') console.log('Search error', e);
                 if (!controller.signal.aborted) setSearchResults([]);
             } finally {
                 if (!controller.signal.aborted) setIsSearching(false);
@@ -88,10 +100,24 @@ const Home = () => {
     };
 
     const openResult = async (item) => {
-        const seriesId = item?.id || '';
         await handleAddSearch(item?.title || query);
         setQuery('');
-        router.push(`/MangaDetails?seriesId=${encodeURIComponent(seriesId)}`);
+
+        if (item.source === 'asura') {
+            // Navigate to AsuraScans manga
+            router.push(`/MangaDetails?seriesId=${encodeURIComponent(item.id)}&source=asura`);
+        } else {
+            // Navigate to MangaPill manga
+            router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(item.id)}&source=mangapill`);
+        }
+    };
+
+    const getProxiedImage = (item) => {
+        if (item.source === 'asura') {
+            return item.cover ? proxiedAsura(item.cover) : null;
+        } else {
+            return item.cover ? proxiedMangapill(item.cover) : null;
+        }
     };
 
     return (
@@ -180,10 +206,12 @@ const Home = () => {
                         {searchResults.length > 0 && (
                             <FlatList
                                 data={searchResults}
-                                keyExtractor={(item, idx) => `${item?.id || idx}`}
+                                keyExtractor={(item, idx) => `${item?.id || idx}-${item.source}`}
                                 renderItem={({ item }) => {
                                     const title = item?.title || 'Unknown';
-                                    const cover = item?.image ? proxied(item.image) : null;
+                                    const cover = getProxiedImage(item);
+                                    const sourceLabel = item.source === 'asura' ? 'AS' : 'MP';
+
                                     return (
                                         <Pressable onPress={() => openResult(item)} style={rowStyles.itemRow}>
                                             {cover ? (
@@ -191,9 +219,12 @@ const Home = () => {
                                             ) : (
                                                 <View style={rowStyles.itemCoverFallback} />
                                             )}
-                                            <Text style={rowStyles.itemTitle} numberOfLines={1}>
-                                                {title}
-                                            </Text>
+                                            <View style={rowStyles.itemInfo}>
+                                                <Text style={rowStyles.itemTitle} numberOfLines={1}>
+                                                    {title}
+                                                </Text>
+                                                <Text style={rowStyles.sourceTag}>{sourceLabel}</Text>
+                                            </View>
                                         </Pressable>
                                     );
                                 }}
@@ -235,6 +266,8 @@ const rowStyles = StyleSheet.create({
     itemRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10 },
     itemCover: { width: 42, height: 60, borderRadius: 4, marginRight: 12, backgroundColor: '#eee' },
     itemCoverFallback: { width: 42, height: 60, borderRadius: 4, marginRight: 12, backgroundColor: '#eee' },
-    itemTitle: { flex: 1, fontSize: 16, color: '#000' },
+    itemInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    itemTitle: { flex: 1, fontSize: 16, color: '#000', marginRight: 8 },
+    sourceTag: { fontSize: 10, fontWeight: '600', color: '#666', backgroundColor: '#f0f0f0', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
     separator: { height: 1, backgroundColor: '#eee', marginLeft: 12 },
 });

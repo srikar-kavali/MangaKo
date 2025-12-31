@@ -2,32 +2,28 @@ import { useState, useEffect, useRef } from "react";
 import { View, SafeAreaView, ScrollView, Image, StyleSheet, Pressable, Text, ActivityIndicator, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
-import { getMangapillManga, getChapterPagesMangapill, proxied } from "../manga_api/mangapill";
+import { getMangaInfo, getChapterPages, proxied as proxiedAsura } from "../manga_api/asurascans";
+import { getMangapillManga, getChapterPagesMangapill, proxied as proxiedMangapill } from "../manga_api/mangapill";
 import { updateLastRead } from "./searchStorage";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 const ReadChapter = () => {
     const params = useLocalSearchParams();
-    const rawChapterUrl = Array.isArray(params.chapterUrl) ? params.chapterUrl[0] : params.chapterUrl || "";
-    const mangapillUrl = Array.isArray(params.mangapillUrl) ? params.mangapillUrl[0] : params.mangapillUrl || "";
+    const { seriesId, chapterId, chapterUrl, mangapillUrl, source } = params;
     const router = useRouter();
     const scrollRef = useRef(null);
 
-    const [selectedChapterUrl, setSelectedChapterUrl] = useState(rawChapterUrl || null);
-    const [pages, setPages] = useState([]); // Store {url, width, height, aspectRatio}
-    const [pickerItems, setPickerItems] = useState([]);
+    const isAsura = source === 'asura' || seriesId;
+    const isMangapill = source === 'mangapill' || mangapillUrl;
+
+    const [selectedChapterId, setSelectedChapterId] = useState(chapterId || chapterUrl || null);
+    const [pages, setPages] = useState([]);
+    const [allChapters, setAllChapters] = useState([]);
     const [loadingPages, setLoadingPages] = useState(false);
     const [loadingChapters, setLoadingChapters] = useState(false);
 
-    useEffect(() => {
-        if (mangapillUrl && selectedChapterUrl) {
-            updateLastRead(mangapillUrl, selectedChapterUrl)
-                .catch(e => console.error("Bookmark save failed:", e));
-        }
-    }, [mangapillUrl, selectedChapterUrl]);
-
-    // Helper function to get image dimensions
+    // Helper to get image dimensions
     const getImageDimensions = (url) => {
         return new Promise((resolve) => {
             Image.getSize(
@@ -37,42 +33,55 @@ const ReadChapter = () => {
                     resolve({ url, width, height, aspectRatio });
                 },
                 (error) => {
-                    console.warn("Failed to get image dimensions for:", url, error);
-                    // Fallback to default aspect ratio
+                    console.warn("Failed to get image dimensions:", url, error);
                     resolve({ url, width: SCREEN_WIDTH, height: SCREEN_WIDTH / 0.7, aspectRatio: 0.7 });
                 }
             );
         });
     };
 
+    // Update last read when chapter changes
+    useEffect(() => {
+        if (selectedChapterId) {
+            const storageKey = seriesId || mangapillUrl;
+            if (storageKey) {
+                updateLastRead(storageKey, selectedChapterId)
+                    .catch(e => console.error("Bookmark save failed:", e));
+            }
+        }
+    }, [selectedChapterId, seriesId, mangapillUrl]);
+
     // Fetch pages for selected chapter
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                if (!selectedChapterUrl) {
+                if (!selectedChapterId) {
                     setPages([]);
                     return;
                 }
-                setLoadingPages(true);
 
-                // Scroll to top immediately when chapter changes
+                setLoadingPages(true);
                 scrollRef.current?.scrollTo({ y: 0, animated: false });
 
-                const urls = await getChapterPagesMangapill(selectedChapterUrl);
-                console.log("chapter_pages ->", selectedChapterUrl, Array.isArray(urls) ? urls.length : urls);
+                let urls = [];
 
-                // Map through proxy and get dimensions
-                const proxiedUrls = (Array.isArray(urls) ? urls : []).map(u => proxied(u));
+                if (isAsura && seriesId) {
+                    // AsuraScans
+                    urls = await getChapterPages(seriesId, selectedChapterId);
+                    urls = urls.map(u => proxiedAsura(u));
+                } else if (isMangapill) {
+                    // MangaPill
+                    urls = await getChapterPagesMangapill(selectedChapterId);
+                    urls = (Array.isArray(urls) ? urls : []).map(u => proxiedMangapill(u));
+                }
 
-                // Get dimensions for all images
                 const pagesWithDimensions = await Promise.all(
-                    proxiedUrls.map(url => getImageDimensions(url))
+                    urls.map(url => getImageDimensions(url))
                 );
 
                 if (!cancelled) {
                     setPages(pagesWithDimensions);
-                    // Ensure we stay at top after content loads
                     setTimeout(() => {
                         scrollRef.current?.scrollTo({ y: 0, animated: false });
                     }, 100);
@@ -85,43 +94,55 @@ const ReadChapter = () => {
             }
         })();
         return () => { cancelled = true; };
-    }, [selectedChapterUrl]);
+    }, [selectedChapterId, seriesId, mangapillUrl, source]);
 
-    // Fetch chapters list (for Prev/Next)
+    // Fetch chapters list
     useEffect(() => {
         let cancelled = false;
         (async () => {
             try {
-                if (!mangapillUrl) return;
-                setLoadingChapters(true);
-                const mp = await getMangapillManga(mangapillUrl);
-                const items = (mp?.chapters || []).map(ch => ({
-                    key: ch.url,
-                    value: ch.url,
-                    number: (() => {
-                        const slug = String(ch.url).split("/").filter(Boolean).pop() || "";
-                        const m = slug.match(/(\d+(\.\d+)?)/);
-                        return m ? parseFloat(m[1]) : 0;
-                    })(),
-                    label: (() => {
-                        const slug = String(ch.url).split("/").filter(Boolean).pop() || "";
-                        const m = slug.match(/(\d+(\.\d+)?)/);
-                        const n = m ? m[1] : "–";
-                        return `Ch. ${n}`;
-                    })(),
-                }));
+                if (!seriesId && !mangapillUrl) return;
 
-                // Sort chapters by number in ascending order (1, 2, 3, ... latest)
-                const sortedItems = items.sort((a, b) => a.number - b.number);
+                setLoadingChapters(true);
+
+                let chapters = [];
+
+                if (isAsura && seriesId) {
+                    // AsuraScans
+                    const data = await getMangaInfo(seriesId);
+                    chapters = (data.chapters || []).map(ch => ({
+                        id: ch.id,
+                        title: ch.title,
+                        number: parseFloat(ch.id.match(/(\d+(\.\d+)?)/)?.[1] || 0)
+                    }));
+                } else if (isMangapill && mangapillUrl) {
+                    // MangaPill
+                    const data = await getMangapillManga(mangapillUrl);
+                    chapters = (data.chapters || []).map(chaw => ({
+                        id: ch.url,
+                        title: (() => {
+                            const slug = String(ch.url).split("/").filter(Boolean).pop() || "";
+                            const m = slug.match(/(\d+(\.\d+)?)/);
+                            const n = m ? m[1] : "–";
+                            return `Ch. ${n}`;
+                        })(),
+                        number: (() => {
+                            const slug = String(ch.url).split("/").filter(Boolean).pop() || "";
+                            const m = slug.match(/(\d+(\.\d+)?)/);
+                            return m ? parseFloat(m[1]) : 0;
+                        })()
+                    }));
+                }
+
+                // Sort chapters ascending
+                chapters.sort((a, b) => a.number - b.number);
 
                 if (!cancelled) {
-                    setPickerItems(sortedItems);
-                    if (!rawChapterUrl && sortedItems.length) {
-                        // Default to the latest chapter (last in sorted array)
-                        setSelectedChapterUrl(sortedItems[sortedItems.length - 1].value);
+                    setAllChapters(chapters);
+                    if (!selectedChapterId && chapters.length) {
+                        setSelectedChapterId(chapters[chapters.length - 1].id);
                     }
                 }
-                console.log("chapters count ->", sortedItems.length, "latest:", sortedItems[sortedItems.length - 1]?.label);
             } catch (e) {
                 console.error("Failed to fetch chapters list:", e);
             } finally {
@@ -129,54 +150,45 @@ const ReadChapter = () => {
             }
         })();
         return () => { cancelled = true; };
-    }, [mangapillUrl, rawChapterUrl]);
+    }, [seriesId, mangapillUrl, source]);
 
-    // Enhanced image styling for manhwa support
+    // Enhanced image styling
     const getImageStyle = (page) => {
         if (!page.width || !page.height) {
-            // Fallback for images without dimensions
             return {
                 width: SCREEN_WIDTH,
                 height: SCREEN_WIDTH / 0.7,
-                marginBottom: 2, // Reduced gap for manhwa
+                marginBottom: 2,
                 backgroundColor: '#000'
             };
         }
 
-        const { width, height, aspectRatio } = page;
-
-        // Manhwa detection - typically very tall images (height much greater than width)
-        const isManhwa = aspectRatio < 0.8; // Width/height ratio less than 0.8 suggests manhwa
+        const { aspectRatio } = page;
+        const isManhwa = aspectRatio < 0.8;
 
         if (isManhwa) {
-            // For manhwa (Korean webtoons) - use full width, preserve aspect ratio
             const calculatedHeight = SCREEN_WIDTH / aspectRatio;
-
-            // Don't limit height for manhwa as they're meant to be scrolled vertically
             return {
                 width: SCREEN_WIDTH,
                 height: calculatedHeight,
-                marginBottom: 2, // Very small gap between pages for smooth reading
+                marginBottom: 2,
                 backgroundColor: '#000'
             };
         }
 
-        // For double spreads (very wide images)
         if (aspectRatio > 1.2) {
             return {
                 width: SCREEN_WIDTH,
                 height: SCREEN_WIDTH / aspectRatio,
-                marginBottom: 8, // Normal gap for manga
+                marginBottom: 8,
                 backgroundColor: '#000'
             };
         }
 
-        // For normal manga pages
         const calculatedHeight = SCREEN_WIDTH / aspectRatio;
-        const maxHeight = SCREEN_HEIGHT * 0.8; // Limit to 80% of screen height for manga
+        const maxHeight = SCREEN_HEIGHT * 0.8;
 
         if (calculatedHeight > maxHeight) {
-            // If calculated height is too tall for manga, scale down
             const scaledWidth = maxHeight * aspectRatio;
             return {
                 width: scaledWidth,
@@ -190,15 +202,15 @@ const ReadChapter = () => {
         return {
             width: SCREEN_WIDTH,
             height: calculatedHeight,
-            marginBottom: 8, // Normal gap for manga
+            marginBottom: 8,
             backgroundColor: '#000'
         };
     };
 
-    const idx = pickerItems.findIndex(i => i.value === selectedChapterUrl);
+    const idx = allChapters.findIndex(ch => ch.id === selectedChapterId);
     const hasPrev = idx > 0;
-    const hasNext = idx >= 0 && idx < pickerItems.length - 1;
-    const titleLabel = idx >= 0 ? pickerItems[idx].label : "Ch –";
+    const hasNext = idx >= 0 && idx < allChapters.length - 1;
+    const titleLabel = idx >= 0 ? allChapters[idx].title : "Chapter";
 
     return (
         <SafeAreaView style={styles.container}>
@@ -212,7 +224,7 @@ const ReadChapter = () => {
             <ScrollView
                 ref={scrollRef}
                 contentContainerStyle={styles.scroll}
-                showsVerticalScrollIndicator={false} // Hide scrollbar for cleaner manhwa reading
+                showsVerticalScrollIndicator={false}
             >
                 {loadingPages && (
                     <ActivityIndicator size="large" color="#ccc" style={{ marginVertical: 16 }} />
@@ -225,7 +237,6 @@ const ReadChapter = () => {
                         style={getImageStyle(page)}
                         resizeMode="contain"
                         onError={(e) => console.warn("Image error:", page.url, e.nativeEvent?.error)}
-                        onLoad={() => console.log("Image loaded:", page.url)}
                     />
                 ))}
 
@@ -238,8 +249,7 @@ const ReadChapter = () => {
                         disabled={!hasPrev}
                         onPress={() => {
                             if (hasPrev) {
-                                setSelectedChapterUrl(pickerItems[idx - 1].value);
-                                // Scroll will happen automatically in useEffect
+                                setSelectedChapterId(allChapters[idx - 1].id);
                             }
                         }}
                         style={[styles.pagerBtn, !hasPrev && styles.pagerBtnDisabled]}
@@ -248,14 +258,13 @@ const ReadChapter = () => {
                     </Pressable>
 
                     <Text style={styles.pageNum}>
-                        {idx >= 0 ? `${idx + 1} / ${pickerItems.length}` : ''}
+                        {idx >= 0 ? `${idx + 1} / ${allChapters.length}` : ''}
                     </Text>
 
                     {hasNext ? (
                         <Pressable
                             onPress={() => {
-                                setSelectedChapterUrl(pickerItems[idx + 1].value);
-                                // Scroll will happen automatically in useEffect
+                                setSelectedChapterId(allChapters[idx + 1].id);
                             }}
                             style={styles.pagerBtn}
                         >
@@ -290,26 +299,24 @@ const styles = StyleSheet.create({
     },
     logoImage: { width: 36, height: 36, resizeMode: 'contain' },
     headerText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-
     scroll: {
         alignItems: 'stretch',
         paddingBottom: 24,
-        backgroundColor: '#000' // Ensure black background for reading
+        backgroundColor: '#000'
     },
-
     pagerRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 12,
-        marginVertical: 16, // Increased margin for better separation
+        marginVertical: 16,
         paddingHorizontal: 12,
         width: '100%',
     },
     pagerBtn: {
         flex: 1,
         backgroundColor: '#1e1e1e',
-        paddingVertical: 12, // Slightly larger buttons
+        paddingVertical: 12,
         borderRadius: 6,
         alignItems: 'center',
         borderWidth: 1,

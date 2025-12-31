@@ -10,11 +10,7 @@ app = FastAPI(title="Image Proxy", root_path="/api/image_proxy")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8081",  # Expo web dev
-        "http://localhost:3000",  # React web dev
-        "https://manga-58deqchm7-srikar-kavalis-projects.vercel.app",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

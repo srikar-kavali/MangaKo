@@ -2,47 +2,46 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, ScrollView, Pressable, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
-import { getMangaDexDetails, normalizeMangaDex, searchMangaDex } from '../manga_api/mangadex';
-import { searchMangapill, getMangapillManga, proxied } from '../manga_api/mangapill';
+import { getMangaInfo, proxied as proxiedAsura } from '../manga_api/asurascans';
+import { getMangapillManga, proxied as proxiedMangapill } from '../manga_api/mangapill';
 import { Ionicons } from '@expo/vector-icons';
-import {addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, markCompleted, unmarkCompleted, getCompleted} from "./searchStorage";
+import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, markCompleted, unmarkCompleted, getCompleted } from "./searchStorage";
+
 const PAGE_SIZE = 50;
 
 function extractChapterNumber(ch) {
-    const s = ch?.number ?? ch?.name ?? ch?.url ?? '';
+    const s = ch?.id ?? ch?.title ?? ch?.url ?? '';
     const m = String(s).match(/(\d+(\.\d+)?)/);
     return m ? parseFloat(m[1]) : NaN;
 }
+
 function displayChapterTitle(ch) {
-    if (ch?.name) return ch.name;
-    const slug = (ch?.url || '').split('/').filter(Boolean).pop() || '';
-    const pretty = slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    return pretty || 'Chapter';
+    return ch?.title || ch?.name || 'Chapter';
 }
 
 const MangaDetails = () => {
-    const { mangadexId, mangapillUrl: mpUrlParam } = useLocalSearchParams();
+    const { seriesId, mangapillUrl, source } = useLocalSearchParams();
     const router = useRouter();
     const scrollRef = useRef(null);
 
     const [loading, setLoading] = useState(true);
     const [ascending, setAscending] = useState(false);
     const [page, setPage] = useState(1);
-
     const [isFavorite, setIsFavorite] = useState(false);
-
-    const [md, setMd] = useState(null);
-    const [mpMeta, setMpMeta] = useState(null);
-    const [mangapillUrl, setMangapillUrl] = useState(mpUrlParam || null);
-    const [mpChapters, setMpChapters] = useState([]);
-
-    const [lastReadChapter, setLastReadChapter] = useState(null);
     const [isCompleted, setIsCompleted] = useState(false);
 
-    // Create storage key - prefer mangapillUrl, fall back to mangadexId
+    const [mangaData, setMangaData] = useState(null);
+    const [chapters, setChapters] = useState([]);
+    const [lastReadChapter, setLastReadChapter] = useState(null);
+
+    // Determine which source we're using
+    const isAsura = source === 'asura' || seriesId;
+    const isMangapill = source === 'mangapill' || mangapillUrl;
+
+    // Storage key for favorites/progress
     const storageKey = useMemo(() => {
-        return mangapillUrl || mangadexId;
-    }, [mangapillUrl, mangadexId]);
+        return seriesId || mangapillUrl;
+    }, [seriesId, mangapillUrl]);
 
     // Load last read chapter
     useEffect(() => {
@@ -58,6 +57,7 @@ const MangaDetails = () => {
         loadBookmark();
     }, [storageKey]);
 
+    // Load completed status
     useEffect(() => {
         (async () => {
             const completedList = await getCompleted();
@@ -65,100 +65,41 @@ const MangaDetails = () => {
         })();
     }, [storageKey]);
 
-    // ---- FETCH DETAILS ----
+    // Fetch manga details
     useEffect(() => {
         let cancelled = false;
         (async () => {
             setLoading(true);
             try {
-                let mdNorm = null;
-                let mpUrl = mpUrlParam || null;
-                let mpFull = null;
-
-                if (mangadexId) {
-                    try {
-                        const mdRaw = await getMangaDexDetails(mangadexId);
-                        mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
-                    } catch (e) {
-                        console.log('MangaDex fetch failed:', e);
+                if (isAsura && seriesId) {
+                    // Fetch from AsuraScans
+                    const data = await getMangaInfo(seriesId);
+                    if (!cancelled) {
+                        setMangaData(data);
+                        setChapters(data.chapters || []);
                     }
-
-                    if (!mpUrl && mdNorm?.title) {
-                        try {
-                            const hits = await searchMangapill(mdNorm.title, 20);
-                            if (Array.isArray(hits) && hits.length) mpUrl = hits[0].url;
-                        } catch (e) {
-                            console.log('Mangapill search by MD title failed:', e);
-                        }
+                } else if (isMangapill && mangapillUrl) {
+                    // Fetch from MangaPill
+                    const data = await getMangapillManga(mangapillUrl);
+                    if (!cancelled) {
+                        setMangaData(data);
+                        setChapters(data.chapters || []);
                     }
-
-                    if (mpUrl) {
-                        try {
-                            mpFull = await getMangapillManga(mpUrl);
-                        } catch (e) {
-                            console.log('Mangapill manga fetch failed:', e);
-                        }
-                    }
-                } else {
-                    if (mpUrl) {
-                        try {
-                            mpFull = await getMangapillManga(mpUrl);
-                        } catch (e) {
-                            console.log('Mangapill manga fetch failed:', e);
-                        }
-                    }
-
-                    const guessTitle = mpFull?.title;
-                    if (guessTitle) {
-                        try {
-                            const hits = await searchMangaDex(guessTitle);
-                            const mdId = Array.isArray(hits) && hits[0]?.id ? hits[0].id : null;
-                            if (mdId) {
-                                const mdRaw = await getMangaDexDetails(mdId);
-                                mdNorm = mdRaw ? normalizeMangaDex(mdRaw) : null;
-                            }
-                        } catch (e) {
-                            // best-effort only
-                        }
-                    }
-                }
-
-                if (!cancelled) {
-                    setMd(mdNorm);
-                    setMangapillUrl(mpUrl || null);
-                    setMpChapters(Array.isArray(mpFull?.chapters) ? mpFull.chapters : []);
-                    setMpMeta(mpFull ? {
-                        title: mpFull.title || null,
-                        description: mpFull.description || null,
-                        cover: mpFull.cover ? proxied(mpFull.cover) : null
-                    } : null);
                 }
             } catch (err) {
-                console.error('Failed to fetch details:', err);
-                if (!cancelled) { setMd(null); setMpChapters([]); setMpMeta(null); }
+                console.error('Failed to fetch manga details:', err);
+                if (!cancelled) {
+                    setMangaData(null);
+                    setChapters([]);
+                }
             } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
         return () => { cancelled = true; };
-    }, [mangadexId, mpUrlParam]);
+    }, [seriesId, mangapillUrl, source]);
 
-    // ---- FAVORITES ----
-    const isMangapillOnly = !md && !!mangapillUrl;
-
-    const title = md?.title
-        || mpMeta?.title
-        || (isMangapillOnly ? "From Mangapill" : "No title");
-
-    const description = md?.description
-        || mpMeta?.description
-        || (isMangapillOnly ? "No extra metadata available from Mangapill." : "No description");
-
-    const coverUrl = md?.coverUrl
-        || mpMeta?.cover
-        || null;
-
-
+    // Load favorites
     useEffect(() => {
         (async () => {
             try {
@@ -175,9 +116,9 @@ const MangaDetails = () => {
         try {
             const favData = {
                 url: storageKey,
-                title: title || "From Mangapill",
-                description: description || "No metadata available from Mangapill.",
-                coverUrl: coverUrl || null,
+                title: mangaData?.title || "Manga",
+                description: mangaData?.description || "No description available.",
+                coverUrl: getCoverUrl(),
             };
 
             if (isFavorite) {
@@ -192,31 +133,42 @@ const MangaDetails = () => {
         }
     };
 
-    // Handle chapter press with progress saving
     const handleChapterPress = async (chapter) => {
         try {
-            // Save reading progress
+            const chapterId = isAsura ? chapter.id : chapter.url;
+
             if (storageKey) {
-                await saveLastReadChapter(storageKey, chapter.url);
-                setLastReadChapter(chapter.url);
+                await saveLastReadChapter(storageKey, chapterId);
+                setLastReadChapter(chapterId);
             }
 
-            // Navigate to chapter
-            router.push(
-                `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}&mangadexId=${encodeURIComponent(mangadexId || "")}`
-            );
+            // Navigate with appropriate params based on source
+            if (isAsura) {
+                router.push(
+                    `/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(chapter.id)}&source=asura`
+                );
+            } else {
+                router.push(
+                    `/ReadChapter?chapterUrl=${encodeURIComponent(chapter.url)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`
+                );
+            }
         } catch (error) {
             console.error('Failed to save reading progress:', error);
-            // Still navigate even if save fails
-            router.push(
-                `/ReadChapter?chapterUrl=${encodeURIComponent(lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}&mangadexId=${encodeURIComponent(mangadexId || "")}`
-            );
         }
     };
 
-    // ---- CHAPTER SORTING ----
+    const getCoverUrl = () => {
+        if (!mangaData) return null;
+        if (isAsura) {
+            return mangaData.image ? proxiedAsura(mangaData.image) : null;
+        } else {
+            return mangaData.cover ? proxiedMangapill(mangaData.cover) : null;
+        }
+    };
+
+    // Chapter sorting
     const sortedChapters = useMemo(() => {
-        const arr = Array.isArray(mpChapters) ? [...mpChapters] : [];
+        const arr = [...chapters];
         arr.sort((a, b) => {
             const na = extractChapterNumber(a);
             const nb = extractChapterNumber(b);
@@ -226,12 +178,7 @@ const MangaDetails = () => {
             return ascending ? na - nb : nb - na;
         });
         return arr;
-    }, [mpChapters, ascending]);
-
-    useEffect(() => {
-        const totalPages = Math.max(1, Math.ceil(sortedChapters.length / PAGE_SIZE));
-        setPage(p => Math.min(Math.max(1, p), totalPages));
-    }, [sortedChapters]);
+    }, [chapters, ascending]);
 
     const total = sortedChapters.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -245,6 +192,7 @@ const MangaDetails = () => {
             scrollRef.current?.scrollTo({ y: 0, animated: true });
         }
     };
+
     const goNextPage = () => {
         if (page < totalPages) {
             setPage(p => p + 1);
@@ -256,9 +204,10 @@ const MangaDetails = () => {
         return <View style={styles.centered}><ActivityIndicator size="large" /></View>;
     }
 
-    const author = md?.authors?.[0] || 'Unknown';
-    const artist = md?.artists?.[0] || 'Unknown';
-    const tags = md?.tags || [];
+    const title = mangaData?.title || 'No title';
+    const description = mangaData?.description || 'No description';
+    const coverUrl = getCoverUrl();
+    const sourceLabel = isAsura ? 'AsuraScans' : 'MangaPill';
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -275,12 +224,11 @@ const MangaDetails = () => {
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.title}>{title}</Text>
-                                {!md && mangapillUrl ? (
-                                    <View style={styles.sourceBadge}>
-                                        <Text style={styles.sourceBadgeText}>from Mangapill</Text>
-                                    </View>
-                                ) : null}
+                                <View style={styles.sourceBadge}>
+                                    <Text style={styles.sourceBadgeText}>from {sourceLabel}</Text>
+                                </View>
                             </View>
+
                             <Pressable onPress={toggleFavorite}>
                                 <Ionicons
                                     name={isFavorite ? "star" : "star-outline"}
@@ -307,19 +255,21 @@ const MangaDetails = () => {
                                     color="#4CAF50"
                                 />
                             </Pressable>
-
                         </View>
-
-                        <Text style={styles.author}>Author: {author}</Text>
-                        <Text style={styles.artist}>Artist: {artist}</Text>
 
                         {lastReadChapter && (
                             <Pressable
                                 style={styles.continueBtn}
                                 onPress={() => {
-                                    router.push(
-                                        `/ReadChapter?chapterUrl=${encodeURIComponent(lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl || "")}`
-                                    );
+                                    if (isAsura) {
+                                        router.push(
+                                            `/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(lastReadChapter)}&source=asura`
+                                        );
+                                    } else {
+                                        router.push(
+                                            `/ReadChapter?chapterUrl=${encodeURIComponent(lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`
+                                        );
+                                    }
                                 }}
                             >
                                 <Ionicons name="play-circle" size={16} color="#fff" style={{ marginRight: 4 }} />
@@ -334,13 +284,13 @@ const MangaDetails = () => {
                     <Text style={styles.description}>{description}</Text>
                 </ScrollView>
 
-                {!!tags.length && (
+                {mangaData?.genres && mangaData.genres.length > 0 && (
                     <>
-                        <Text style={styles.sectionTitle}>Tags</Text>
+                        <Text style={styles.sectionTitle}>Genres</Text>
                         <View style={styles.tagContainer}>
-                            {tags.map((t, idx) => (
-                                <View key={`${t}-${idx}`} style={styles.tag}>
-                                    <Text style={styles.tagText}>{t}</Text>
+                            {mangaData.genres.map((genre, idx) => (
+                                <View key={`${genre}-${idx}`} style={styles.tag}>
+                                    <Text style={styles.tagText}>{genre}</Text>
                                 </View>
                             ))}
                         </View>
@@ -348,7 +298,7 @@ const MangaDetails = () => {
                 )}
 
                 <View style={styles.chapterHeader}>
-                    <Text style={styles.sectionTitle}>Chapters (Mangapill)</Text>
+                    <Text style={styles.sectionTitle}>Chapters ({sourceLabel})</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                         <Text style={styles.rangeText}>
                             {total ? `${startIdx + 1}–${endIdx} of ${total}` : '0 of 0'}
@@ -373,14 +323,13 @@ const MangaDetails = () => {
 
                 {!!pagedChapters.length ? (
                     pagedChapters.map((chapter) => {
-                        const n = extractChapterNumber(chapter);
-                        const left = isNaN(n) ? 'Ch.' : `Ch. ${n}`;
-                        const right = displayChapterTitle(chapter);
-                        const isLastRead = lastReadChapter === chapter.url;
+                        const chapterId = isAsura ? chapter.id : chapter.url;
+                        const isLastRead = lastReadChapter === chapterId;
+                        const chapterTitle = displayChapterTitle(chapter);
 
                         return (
                             <Pressable
-                                key={chapter.url}
+                                key={chapterId}
                                 onPress={() => handleChapterPress(chapter)}
                                 style={[
                                     styles.chapterRow,
@@ -392,7 +341,7 @@ const MangaDetails = () => {
                                         styles.chapterTitle,
                                         isLastRead && styles.chapterTitleLastRead
                                     ]}>
-                                        {left}{right && !String(right).toLowerCase().startsWith('ch') ? ` - ${right}` : ''}
+                                        {chapterTitle}
                                     </Text>
                                     {isLastRead && (
                                         <View style={styles.lastReadBadge}>
@@ -405,9 +354,7 @@ const MangaDetails = () => {
                         );
                     })
                 ) : (
-                    <Text style={{ color: '#666' }}>
-                        {mangapillUrl ? 'No chapters found on Mangapill.' : 'Could not find this on Mangapill.'}
-                    </Text>
+                    <Text style={{ color: '#666' }}>No chapters found.</Text>
                 )}
 
                 <View style={[styles.pagerRow, { marginTop: 8, marginBottom: 24 }]}>
@@ -438,10 +385,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     logoImage: { width: 40, height: 40 },
-
     container: { padding: 16, paddingBottom: 60 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
     headerSection: { flexDirection: 'row', marginBottom: 16 },
     cover: {
         width: 110, height: 160, resizeMode: 'cover',
@@ -449,33 +394,26 @@ const styles = StyleSheet.create({
     },
     metaInfo: { flex: 1, justifyContent: 'center' },
     title: { fontSize: 22, fontWeight: 'bold', marginBottom: 8, color: '#1E1E1E' },
-    author: { fontSize: 14, color: '#555', marginBottom: 4 },
-    artist: { fontSize: 14, color: '#555', marginBottom: 8 },
-
-    sourceBadge: { marginLeft: 8, backgroundColor: '#eee', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
+    sourceBadge: { backgroundColor: '#eee', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'flex-start' },
     sourceBadgeText: { fontSize: 12, color: '#555' },
-
     sectionTitle: { fontSize: 18, fontWeight: '600', marginTop: 20, marginBottom: 8, color: '#1E1E1E' },
     descriptionBox: {
         maxHeight: 200, borderWidth: 1, borderColor: '#eee',
         borderRadius: 6, padding: 10, backgroundColor: '#fdfdfd',
     },
     description: { fontSize: 15, lineHeight: 22, color: '#444' },
-
     tagContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     tag: {
         backgroundColor: '#e0e0e0', paddingHorizontal: 10, paddingVertical: 5,
         borderRadius: 16, marginRight: 8, marginBottom: 8,
     },
     tagText: { fontSize: 13, color: '#333' },
-
     chapterHeader: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         marginTop: 20, marginBottom: 8,
     },
     toggleOrder: { color: '#007AFF', fontSize: 14 },
     rangeText: { color: '#666', fontSize: 12 },
-
     chapterRow: {
         paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1,
         borderBottomColor: '#eee', backgroundColor: '#f9f9f9',
@@ -489,7 +427,6 @@ const styles = StyleSheet.create({
     chapterInfo: { flexDirection: 'column' },
     chapterTitle: { fontSize: 16, color: '#000', fontWeight: '500' },
     chapterTitleLastRead: { color: '#2E7D32' },
-
     lastReadBadge: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -501,7 +438,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 4,
     },
-
     pagerRow: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         gap: 12, marginVertical: 8,
@@ -513,10 +449,8 @@ const styles = StyleSheet.create({
     pagerBtnDisabled: { opacity: 0.4 },
     pagerText: { color: '#111', fontWeight: '600' },
     pageNum: { minWidth: 90, textAlign: 'center', color: '#444' },
-
     continueBtn: {
         marginTop: 8,
-        marginBottom: 8,
         paddingVertical: 10,
         paddingHorizontal: 16,
         backgroundColor: '#4CAF50',
@@ -535,30 +469,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
     },
-    followedScroll: {
-        paddingVertical: 10,
-    },
-    followedItem: {
-        marginRight: 12,
-        alignItems: 'center',
-        width: 90,
-    },
-    followedCover: {
-        width: 90,
-        height: 120,
-        borderRadius: 8,
-    },
-    followedTitle: {
-        fontSize: 12,
-        marginTop: 4,
-        textAlign: 'center',
-    },
-    followedChapter: {
-        fontSize: 11,
-        color: '#4CAF50',
-    },
     completedBtn: {
         marginLeft: 12,
     },
-
 });
