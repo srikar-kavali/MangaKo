@@ -28,9 +28,12 @@ const Home = () => {
         (async () => setRecentSearches(await getRecentSearches()))();
     }, []);
 
+    // In home.jsx - Replace the entire useEffect for search
+
     useEffect(() => {
         const q = query.trim();
         const qLower = q.toLowerCase();
+        const cacheKey = `${CACHE_VERSION}:${qLower}`;
 
         if (!q) {
             setSearchResults([]);
@@ -40,8 +43,9 @@ const Home = () => {
             return;
         }
 
-        if (cacheRef.current.has(qLower)) {
-            setSearchResults(cacheRef.current.get(qLower));
+        // show cached results instantly
+        if (cacheRef.current.has(cacheKey)) {
+            setSearchResults(cacheRef.current.get(cacheKey));
         }
 
         if (timerRef.current) clearTimeout(timerRef.current);
@@ -72,34 +76,24 @@ const Home = () => {
                     id: item.url,
                 }));
 
-                // Simple relevance scoring - prioritize title matches
+                // Simple relevance scoring
                 const scoreResult = (item) => {
                     const title = (item.title || '').toLowerCase();
-                    const query = qLower;
+                    const searchQuery = qLower;
 
-                    // Exact match gets highest score
-                    if (title === query) return 1000;
-
-                    // Starts with query gets high score
-                    if (title.startsWith(query)) return 500;
-
-                    // Contains query as whole word
-                    if (title.includes(` ${query} `) || title.includes(` ${query}`) || title.includes(`${query} `)) return 300;
-
-                    // Contains query anywhere
-                    if (title.includes(query)) return 100;
-
-                    // No match
+                    if (title === searchQuery) return 1000;
+                    if (title.startsWith(searchQuery)) return 500;
+                    if (title.includes(` ${searchQuery} `) || title.includes(` ${searchQuery}`) || title.includes(`${searchQuery} `)) return 300;
+                    if (title.includes(searchQuery)) return 100;
                     return 0;
                 };
 
-                // Score and combine all results
+                // Score and combine
                 const allResults = [...formattedAsura, ...formattedMangapill].map(item => ({
                     ...item,
                     score: scoreResult(item)
                 }));
 
-                // Sort by score (highest first)
                 allResults.sort((a, b) => b.score - a.score);
 
                 if (!controller.signal.aborted) {

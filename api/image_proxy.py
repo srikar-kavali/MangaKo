@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse, Response
 import httpx
 from io import BytesIO
-from PIL import Image  # pillow
+from PIL import Image
 import mimetypes
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,40 +17,42 @@ app.add_middleware(
 )
 
 TIMEOUT = 30.0
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-    "Referer": "https://mangapill.com/",
-}
-
-client = httpx.Client(timeout=TIMEOUT, headers=HEADERS, follow_redirects=True)
 
 @app.get("/")
 def proxy(url: str = Query(..., description="Absolute image URL")):
     if not url.startswith("https://"):
         raise HTTPException(400, "Only https URLs allowed.")
 
-    # Set appropriate referer based on URL
-    headers = HEADERS.copy()
-    if "asuracomic" in url or "asura" in url or "gg.asuracomic" in url:
-        headers["Referer"] = "https://asuracomic.net/"
+    # Determine referer based on URL
+    if "asuracomic" in url or "gg.asuracomic" in url:
+        referer = "https://asuracomic.net/"
     else:
-        headers["Referer"] = "https://mangapill.com/"
+        referer = "https://mangapill.com/"
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Referer": referer,
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+    }
 
     try:
-        # Create a new client with appropriate headers for this request
         with httpx.Client(timeout=TIMEOUT, headers=headers, follow_redirects=True) as client:
             r = client.get(url)
             r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(e.response.status_code, f"Upstream returned {e.response.status_code}: {str(e)}")
     except httpx.HTTPError as e:
-        raise HTTPException(502, f"Upstream fetch failed: {e}")
+        raise HTTPException(502, f"Upstream fetch failed: {str(e)}")
 
     ctype = r.headers.get("content-type", "").split(";")[0].strip()
 
+    # If it's webp, transcode to PNG
     if ctype == "image/webp" or url.lower().endswith(".webp"):
         try:
             img = Image.open(BytesIO(r.content)).convert("RGB")
