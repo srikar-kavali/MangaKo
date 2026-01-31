@@ -28,7 +28,6 @@ const Home = () => {
         (async () => setRecentSearches(await getRecentSearches()))();
     }, []);
 
-    // In home.jsx - Replace the entire useEffect for search
 
     useEffect(() => {
         const q = query.trim();

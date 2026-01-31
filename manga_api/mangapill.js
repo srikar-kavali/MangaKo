@@ -8,7 +8,7 @@ const API_BASE = cleanBase(BASE);
 export function proxied(src) {
     if (!src) return "";
     if (src.startsWith(API_BASE)) return src;
-    return `${API_BASE}/image_proxy?url=${encodeURIComponent(src)}`;
+    return `${API_BASE}/api/image_proxy?url=${encodeURIComponent(src)}`;
 }
 
 export async function searchMangapill(title, limit = 10) {

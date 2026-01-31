@@ -105,12 +105,11 @@ class MangapillScraper:
         print(f"✅ Found {len(results)} results with titles")
         return results
 
-
     # ---- /manga?url=... ------------------------------------------------------
     def get_manga(self, url: str) -> Dict:
         """
         Accepts an absolute or site-relative URL to a manga page.
-        Extracts title, description, tags, and the list of chapters.
+        Extracts title, description, tags, cover image, and the list of chapters.
         """
         if re.match(r"^https://mangapill\.com/manga/[^/]+$", url):
             # Try to find correct URL from search
@@ -126,6 +125,20 @@ class MangapillScraper:
         # Title
         title_el = soup.select_one("h1, h2.text-2xl, h1.text-3xl")
         title = title_el.get_text(strip=True) if title_el else "Unknown"
+
+        # Cover Image
+        cover = None
+        cover_img = (
+                soup.select_one("img.lazy") or
+                soup.select_one("img[alt*='cover']") or
+                soup.select_one(".manga-cover img") or
+                soup.select_one("img.rounded") or
+                soup.select_one("div.container img")  # First image in container
+        )
+        if cover_img:
+            cover = cover_img.get("data-src") or cover_img.get("src")
+            if cover:
+                cover = self._abs(cover)
 
         # Description
         desc_el = soup.select_one("div.prose, .prose p, #description, article p")
@@ -153,11 +166,12 @@ class MangapillScraper:
             if ch["url"] in seen:
                 continue
             seen.add(ch["url"])
-            uniq.append(ch)  # Fixed: removed invalid walrus operator syntax
+            uniq.append(ch)
 
         return {
             "title": title,
             "description": description,
+            "cover": cover,
             "tags": tags,
             "chapters": uniq or chapters,
             "source": "mangapill",
@@ -234,6 +248,3 @@ class MangapillScraper:
         except Exception as e:
             print(f"[ERROR] get_chapter_pages failed for {url}: {e}")
             raise
-
-
-
