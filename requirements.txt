@@ -1,6 +1,8 @@
 fastapi
 uvicorn[standard]
-requests
-beautifulsoup4
 httpx
+beautifulsoup4
+requests
 pillow
+lxml
+python-multipart
