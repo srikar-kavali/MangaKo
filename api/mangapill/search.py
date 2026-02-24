@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..'))
+
 from fastapi import FastAPI, HTTPException, Query
 from scrapers.mangapill_scraper import MangapillScraper
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,19 +11,16 @@ scraper = MangapillScraper()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8081",  # Expo web dev
-        "http://localhost:3000",  # React web dev
-        "https://manga-1gb0wexkb-srikar-kavalis-projects.vercel.app",
-    ],
+    allow_origins=["*"],  # Allow all for now
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-w
+
 @app.get("/")
-def search(q: str = Query(...)):
+def search(q: str = Query(...), limit: int = Query(20)):
     try:
-        return scraper.search(q)
+        results = scraper.search(q, limit)
+        return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

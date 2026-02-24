@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..'))
+
 from fastapi import FastAPI, HTTPException, Query
 from typing import List
 from scrapers.asura_scraper import AsuraComic
@@ -8,11 +12,7 @@ scraper = AsuraComic()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8081",  # Expo web dev
-        "http://localhost:3000",  # React web dev
-        "https://manga-1gb0wexkb-srikar-kavalis-projects.vercel.app",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,12 +21,13 @@ app.add_middleware(
 @app.get("/")
 def chapter_pages(
         series_id: str = Query(..., description="Series ID (e.g., 'nano-machine-9cd9b21f')"),
-        chapter_id: str = Query(..., description="Chapter ID (e.g., '1' or '232')")) -> dict:
+        chapter_id: str = Query(..., description="Chapter ID (e.g., '1' or '232')")
+) -> dict:
     try:
         result = scraper.pages(series_id, chapter_id)
-        if result["status"] == "error":
-            raise HTTPException(status_code=500, detail=result["results"])
-        if not result["results"]:
+        if result.get("status") == "error":
+            raise HTTPException(status_code=500, detail=result.get("results", "Failed to get pages"))
+        if not result.get("results"):
             raise HTTPException(status_code=404, detail="No images found for the provided chapter.")
         return result
     except HTTPException:

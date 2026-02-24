@@ -10,7 +10,7 @@ import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/ma
 import FollowedUpdatesRow from '../FollowedUpdatesRow';
 
 const LIVE_DELAY_MS = 120;
-const CACHE_VERSION = 'v2'; // Increment this to invalidate old cache
+const CACHE_VERSION = 'v2';
 
 const Home = () => {
     const [query, setQuery] = useState('');
@@ -18,6 +18,7 @@ const Home = () => {
     const [searchResults, setSearchResults] = useState([]);
     const [dropdownVisible, setDropdownVisible] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
+    const [searchMode, setSearchMode] = useState('both'); // 'both', 'mangapill-only'
 
     const router = useRouter();
     const cacheRef = useRef(new Map());
@@ -27,7 +28,6 @@ const Home = () => {
     useEffect(() => {
         (async () => setRecentSearches(await getRecentSearches()))();
     }, []);
-
 
     useEffect(() => {
         const q = query.trim();
@@ -42,7 +42,7 @@ const Home = () => {
             return;
         }
 
-        // show cached results instantly
+        // Show cached results instantly
         if (cacheRef.current.has(cacheKey)) {
             setSearchResults(cacheRef.current.get(cacheKey));
         }
@@ -55,11 +55,39 @@ const Home = () => {
 
             setIsSearching(true);
             try {
-                // Search BOTH sources in parallel
-                const [asuraResults, mangapillResults] = await Promise.all([
-                    searchAsura(q).catch(() => []),
-                    searchMangapill(q, 15).catch(() => [])
-                ]);
+                let asuraResults = [];
+                let mangapillResults = [];
+                let asuraFailed = false;
+
+                // Try to search both sources in parallel
+                try {
+                    [asuraResults, mangapillResults] = await Promise.all([
+                        searchAsura(q).catch((err) => {
+                            console.log('AsuraScans search failed:', err.message);
+                            asuraFailed = true;
+                            return [];
+                        }),
+                        searchMangapill(q, 15).catch((err) => {
+                            console.log('MangaPill search failed:', err.message);
+                            return [];
+                        })
+                    ]);
+                } catch (err) {
+                    console.log('Search error:', err);
+                }
+
+                // If AsuraScans failed and we got no results from either source,
+                // switch to MangaPill-only mode and try again
+                if (asuraFailed && asuraResults.length === 0 && mangapillResults.length === 0) {
+                    console.log('Falling back to MangaPill-only search');
+                    setSearchMode('mangapill-only');
+                    try {
+                        mangapillResults = await searchMangapill(q, 20);
+                    } catch (err) {
+                        console.log('MangaPill fallback search failed:', err);
+                        mangapillResults = [];
+                    }
+                }
 
                 // Format AsuraScans results
                 const formattedAsura = (asuraResults || []).map(item => ({
@@ -100,10 +128,16 @@ const Home = () => {
                     setSearchResults(allResults);
                 }
             } catch (e) {
-                if (e?.name !== 'AbortError') console.log('Search error', e);
-                if (!controller.signal.aborted) setSearchResults([]);
+                if (e?.name !== 'AbortError') {
+                    console.log('Search error', e);
+                }
+                if (!controller.signal.aborted) {
+                    setSearchResults([]);
+                }
             } finally {
-                if (!controller.signal.aborted) setIsSearching(false);
+                if (!controller.signal.aborted) {
+                    setIsSearching(false);
+                }
             }
         }, LIVE_DELAY_MS);
 
@@ -125,10 +159,8 @@ const Home = () => {
         setQuery('');
 
         if (item.source === 'asura') {
-            // Navigate to AsuraScans manga
             router.push(`/MangaDetails?seriesId=${encodeURIComponent(item.id)}&source=asura`);
         } else {
-            // Navigate to MangaPill manga
             router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(item.id)}&source=mangapill`);
         }
     };
@@ -207,6 +239,13 @@ const Home = () => {
                             {isSearching && <ActivityIndicator size="small" style={{ marginRight: 8 }} />}
                         </View>
 
+                        {searchMode === 'mangapill-only' && (
+                            <View style={styles.fallbackBanner}>
+                                <Ionicons name="information-circle-outline" size={16} color="#666" />
+                                <Text style={styles.fallbackText}>Searching MangaPill only</Text>
+                            </View>
+                        )}
+
                         {query.length === 0 && recentSearches.length > 0 && (
                             <FlatList
                                 data={recentSearches}
@@ -221,7 +260,7 @@ const Home = () => {
                         )}
 
                         {query.trim().length > 0 && searchResults.length === 0 && !isSearching && (
-                            <Text style={{ padding: 16, color: '#666' }}>No results.</Text>
+                            <Text style={{ padding: 16, color: '#666' }}>No results found.</Text>
                         )}
 
                         {searchResults.length > 0 && (
@@ -279,6 +318,21 @@ const styles = StyleSheet.create({
     searchBar: { flexDirection: 'row', alignItems: 'center', margin: 12, backgroundColor: '#f1f1f1', borderRadius: 10, paddingHorizontal: 12, height: 44 },
     searchIcon: { marginRight: 8 },
     input: { flex: 1, color: '#000' },
+    fallbackBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f9f9f9',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        gap: 6,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee'
+    },
+    fallbackText: {
+        fontSize: 12,
+        color: '#666',
+        fontStyle: 'italic'
+    },
     historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderBottomColor: '#eee', borderBottomWidth: 1, gap: 8 },
     historyText: { color: '#333', fontSize: 16 },
 });
