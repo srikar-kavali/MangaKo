@@ -23,23 +23,6 @@ const ReadChapter = () => {
     const [loadingPages, setLoadingPages] = useState(false);
     const [loadingChapters, setLoadingChapters] = useState(false);
 
-    // Helper to get image dimensions
-    const getImageDimensions = (url) => {
-        return new Promise((resolve) => {
-            Image.getSize(
-                url,
-                (width, height) => {
-                    const aspectRatio = width / height;
-                    resolve({ url, width, height, aspectRatio });
-                },
-                (error) => {
-                    console.warn("Failed to get image dimensions:", url, error);
-                    resolve({ url, width: SCREEN_WIDTH, height: SCREEN_WIDTH / 0.7, aspectRatio: 0.7 });
-                }
-            );
-        });
-    };
-
     // Update last read when chapter changes
     useEffect(() => {
         if (selectedChapterId) {
@@ -76,12 +59,8 @@ const ReadChapter = () => {
                     urls = (Array.isArray(urls) ? urls : []).map(u => proxiedMangapill(u));
                 }
 
-                const pagesWithDimensions = await Promise.all(
-                    urls.map(url => getImageDimensions(url))
-                );
-
                 if (!cancelled) {
-                    setPages(pagesWithDimensions);
+                    setPages(urls);
                     setTimeout(() => {
                         scrollRef.current?.scrollTo({ y: 0, animated: false });
                     }, 100);
@@ -116,9 +95,9 @@ const ReadChapter = () => {
                         number: parseFloat(ch.id.match(/(\d+(\.\d+)?)/)?.[1] || 0)
                     }));
                 } else if (isMangapill && mangapillUrl) {
-                    // MangaPill
+                    // MangaPill - FIXED TYPO
                     const data = await getMangapillManga(mangapillUrl);
-                    chapters = (data.chapters || []).map(chaw => ({
+                    chapters = (data.chapters || []).map(ch => ({
                         id: ch.url,
                         title: (() => {
                             const slug = String(ch.url).split("/").filter(Boolean).pop() || "";
@@ -152,61 +131,6 @@ const ReadChapter = () => {
         return () => { cancelled = true; };
     }, [seriesId, mangapillUrl, source]);
 
-    // Enhanced image styling
-    const getImageStyle = (page) => {
-        if (!page.width || !page.height) {
-            return {
-                width: SCREEN_WIDTH,
-                height: SCREEN_WIDTH / 0.7,
-                marginBottom: 2,
-                backgroundColor: '#000'
-            };
-        }
-
-        const { aspectRatio } = page;
-        const isManhwa = aspectRatio < 0.8;
-
-        if (isManhwa) {
-            const calculatedHeight = SCREEN_WIDTH / aspectRatio;
-            return {
-                width: SCREEN_WIDTH,
-                height: calculatedHeight,
-                marginBottom: 2,
-                backgroundColor: '#000'
-            };
-        }
-
-        if (aspectRatio > 1.2) {
-            return {
-                width: SCREEN_WIDTH,
-                height: SCREEN_WIDTH / aspectRatio,
-                marginBottom: 8,
-                backgroundColor: '#000'
-            };
-        }
-
-        const calculatedHeight = SCREEN_WIDTH / aspectRatio;
-        const maxHeight = SCREEN_HEIGHT * 0.8;
-
-        if (calculatedHeight > maxHeight) {
-            const scaledWidth = maxHeight * aspectRatio;
-            return {
-                width: scaledWidth,
-                height: maxHeight,
-                alignSelf: 'center',
-                marginBottom: 8,
-                backgroundColor: '#000'
-            };
-        }
-
-        return {
-            width: SCREEN_WIDTH,
-            height: calculatedHeight,
-            marginBottom: 8,
-            backgroundColor: '#000'
-        };
-    };
-
     const idx = allChapters.findIndex(ch => ch.id === selectedChapterId);
     const hasPrev = idx > 0;
     const hasNext = idx >= 0 && idx < allChapters.length - 1;
@@ -230,13 +154,13 @@ const ReadChapter = () => {
                     <ActivityIndicator size="large" color="#ccc" style={{ marginVertical: 16 }} />
                 )}
 
-                {pages.map((page, i) => (
+                {pages.map((url, i) => (
                     <Image
-                        key={page.url || i}
-                        source={{ uri: page.url }}
-                        style={getImageStyle(page)}
+                        key={url || i}
+                        source={{ uri: url }}
+                        style={styles.pageImage}
                         resizeMode="contain"
-                        onError={(e) => console.warn("Image error:", page.url, e.nativeEvent?.error)}
+                        onError={(e) => console.warn("Image error:", url, e.nativeEvent?.error)}
                     />
                 ))}
 
@@ -303,6 +227,13 @@ const styles = StyleSheet.create({
         alignItems: 'stretch',
         paddingBottom: 24,
         backgroundColor: '#000'
+    },
+    pageImage: {
+        width: SCREEN_WIDTH,
+        height: undefined,
+        aspectRatio: 0.7, // Standard manga page ratio
+        marginBottom: 2,
+        backgroundColor: '#000',
     },
     pagerRow: {
         flexDirection: 'row',
