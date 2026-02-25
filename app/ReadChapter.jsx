@@ -229,7 +229,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#000'
     },
     pageImage: {
-        width: SCREEN_WIDTH,
+        width: SCREEN_WIDTH * 0.75,
+        alignSelf: 'center',
         height: undefined,
         aspectRatio: 0.7, // Standard manga page ratio
         marginBottom: 2,
