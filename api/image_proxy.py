@@ -19,7 +19,7 @@ def proxy(url: str = Query(...)):
     if not url.startswith("http"):
         raise HTTPException(400, "Invalid URL")
 
-    # Specific headers for MangaPill's CDN
+    # Determine referer
     if "readdetectiveconan.com" in url or "mangapill" in url:
         referer = "https://mangapill.com/"
         headers = {
@@ -48,25 +48,52 @@ def proxy(url: str = Query(...)):
         }
 
     try:
-        with httpx.Client(timeout=8.0, follow_redirects=True) as client:
+        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
             r = client.get(url, headers=headers)
             r.raise_for_status()
 
+            # Get content type, default to jpeg
+            content_type = r.headers.get("content-type", "image/jpeg")
+            if not content_type.startswith("image/"):
+                content_type = "image/jpeg"
+
+            # Critical headers for React Native
+            response_headers = {
+                "Content-Type": content_type,
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Content-Length": str(len(r.content)),
+            }
+
             return Response(
                 content=r.content,
-                media_type=r.headers.get("content-type", "image/jpeg"),
-                headers={
-                    "Cache-Control": "public, max-age=31536000",
-                    "Access-Control-Allow-Origin": "*",
-                    "Content-Length": str(len(r.content)),
-                }
+                media_type=content_type,
+                headers=response_headers,
+                status_code=200
             )
+
     except httpx.TimeoutException:
-        raise HTTPException(504, "Timeout")
+        raise HTTPException(504, "Timeout fetching image")
     except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Error {e.response.status_code}")
+        raise HTTPException(e.response.status_code, f"Upstream error: {e.response.status_code}")
     except Exception as e:
-        raise HTTPException(502, str(e))
+        raise HTTPException(502, f"Failed: {str(e)}")
+
+@app.options("/")
+@app.options("/api/image_proxy")
+def proxy_options():
+    """Handle CORS preflight requests"""
+    return Response(
+        content="",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
 
 @app.get("/health")
 def health():
