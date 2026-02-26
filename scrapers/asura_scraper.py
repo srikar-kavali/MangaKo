@@ -1,302 +1,334 @@
 from bs4 import BeautifulSoup
 import requests
-from typing import List, Dict
 import re
+import json
+from typing import Dict
 
 class AsuraComic:
     def __init__(self):
         self.proxy_url = "https://sup-proxy.zephex0-f6c.workers.dev/api-text?url="
         self.base_url = "https://asuracomic.net"
-        self.results = {
-            "status": "",
-            "results": []
+        self.headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         }
 
-    def search(self, query: str, page: int = 1) -> Dict:
-        """Search for manga by name"""
+    def _get(self, path: str) -> requests.Response:
+        url = f"{self.proxy_url}{self.base_url}{path}"
+        return requests.get(url, headers=self.headers, timeout=15)
+
+    def _extract_next_data(self, soup: BeautifulSoup) -> dict:
+        """
+        AsuraScans is a Next.js site. All the real data (images, chapters, pages)
+        lives in a <script id="__NEXT_DATA__"> JSON blob — NOT in the HTML tags.
+        This is why your CSS selectors were finding wrong/empty content.
+        """
+        script = soup.find("script", id="__NEXT_DATA__")
+        if not script:
+            return {}
         try:
-            url = f"{self.proxy_url}{self.base_url}/series?page={page}&name={query}"
-            response = requests.get(url, timeout=15)
-            self.results["status"] = response.status_code
+            return json.loads(script.string)
+        except Exception:
+            return {}
+
+    def search(self, query: str, page: int = 1) -> Dict:
+        try:
+            response = self._get(f"/series?page={page}&name={query}")
             soup = BeautifulSoup(response.content, "html.parser")
 
+            next_data = self._extract_next_data(soup)
+
+            # Try to pull series list from __NEXT_DATA__ first
+            series_list = []
+            try:
+                props = next_data.get("props", {}).get("pageProps", {})
+                # Common keys AsuraScans uses
+                series_list = (
+                        props.get("series") or
+                        props.get("data", {}).get("series") or
+                        props.get("comicList") or
+                        []
+                )
+            except Exception:
+                pass
+
+            if series_list:
+                content = []
+                for s in series_list:
+                    slug = s.get("slug") or s.get("series_slug") or s.get("id", "")
+                    content.append({
+                        "title": s.get("name") or s.get("title") or slug,
+                        "id": slug,
+                        "url": f"{self.base_url}/series/{slug}",
+                        # AsuraScans image CDN
+                        "image": s.get("thumbnail") or s.get("cover") or s.get("image"),
+                        "latest_chapter": s.get("latest_chapter"),
+                    })
+                return {"status": response.status_code, "results": content}
+
+            # Fallback: HTML scraping (less reliable but better than before)
             content = []
-            seen_urls = set()
+            seen = set()
 
-            # Find all links - both with and without leading slash
-            # Pattern: href contains "series/" but NOT "/series/" and not external links
-            for link in soup.find_all('a', href=True):
-                href = link.get('href', '')
-
-                # Skip if empty or already seen
-                if not href or href in seen_urls:
+            # AsuraScans uses a grid of cards — each card is a div wrapping an <a>
+            for card in soup.select("div.grid a[href*='/series/'], div.flex a[href*='/series/']"):
+                href = card.get("href", "")
+                if not href or "chapter" in href or href in seen:
                     continue
 
-                # Match patterns like: "series/manga-name-123" or "/series/manga-name-123"
-                # But skip chapters, external links, and navigation
-                if ('series/' in href and
-                        'chapter' not in href.lower() and
-                        not any(skip in href for skip in ['facebook', 'twitter', 'whatsapp', 'pinterest', 'mailto:', 'tel:']) and
-                        not href.startswith('http://') and
-                        not href.startswith('https://') and
-                        href != '/series' and
-                        '?page=' not in href):
+                match = re.search(r"/series/([^/?#]+)", href)
+                if not match:
+                    continue
 
-                    # Normalize URL
-                    if href.startswith('/'):
-                        full_url = f"{self.base_url}{href}"
-                    elif href.startswith('series/'):
-                        full_url = f"{self.base_url}/{href}"
-                    else:
-                        continue
+                series_id = match.group(1)
+                seen.add(href)
 
-                    if full_url in seen_urls:
-                        continue
+                # Title: look for heading tags inside the card
+                title_el = card.select_one("span.block, h3, h2, .title, [class*='title']")
+                title = title_el.get_text(strip=True) if title_el else series_id.replace("-", " ").title()
 
-                    # Extract series ID from URL
-                    # Format: series/manga-name-id or /series/manga-name-id
-                    match = re.search(r'series/([^/?#]+)', href)
-                    if not match:
-                        continue
+                # Image: AsuraScans uses <img> with src pointing to gg.asuracomic.net
+                img_el = card.select_one("img")
+                image = None
+                if img_el:
+                    image = img_el.get("src") or img_el.get("data-src")
 
-                    series_id = match.group(1)
+                content.append({
+                    "title": title,
+                    "id": series_id,
+                    "url": f"{self.base_url}/series/{series_id}",
+                    "image": image,
+                    "latest_chapter": None,
+                })
 
-                    # Get title - try link text first, then nearby elements
-                    title = link.get_text(strip=True)
-
-                    # If title is empty or very short, look at parent elements
-                    if not title or len(title) < 2:
-                        parent = link.parent
-                        if parent:
-                            title = parent.get_text(strip=True)
-
-                    # Clean up title
-                    if title and 'Chapter' in title:
-                        # Remove chapter info
-                        title = re.sub(r'(Ongoing|Completed|Hiatus)?.*?Chapter.*$', '', title, flags=re.IGNORECASE)
-                        title = title.strip()
-
-                    # Skip if still no good title
-                    if not title or len(title) < 2:
-                        continue
-
-                    # Try to find associated image
-                    image = None
-
-                    # Look for img in the link itself first (most common)
-                    img_tag = link.find('img')
-
-                    # If not found, check parent and grandparent
-                    if not img_tag:
-                        parent = link.parent
-                        if parent:
-                            img_tag = parent.find('img')
-                            if not img_tag and parent.parent:
-                                img_tag = parent.parent.find('img')
-
-                    if img_tag:
-                        image = img_tag.get('src') or img_tag.get('data-src') or img_tag.get('data-original')
-                        # Make image URL absolute if needed
-                        if image:
-                            if not image.startswith('http'):
-                                if image.startswith('/'):
-                                    image = f"{self.base_url}{image}"
-                                else:
-                                    image = f"{self.base_url}/{image}"
-                        else:
-                            image = None
-
-                    seen_urls.add(full_url)
-                    content.append({
-                        "title": title,
-                        "id": series_id,
-                        "url": full_url,
-                        "image": image,
-                        "latest_chapter": None
-                    })
-
-            self.results["results"] = content
-            return self.results
+            return {"status": response.status_code, "results": content}
 
         except Exception as e:
             return {"status": "error", "results": str(e)}
 
     def info(self, series_id: str) -> Dict:
-        """Get detailed info about a manga series"""
         try:
-            url = f"{self.proxy_url}{self.base_url}/series/{series_id}"
-            response = requests.get(url, timeout=15)
-            self.results["status"] = response.status_code
+            response = self._get(f"/series/{series_id}")
             soup = BeautifulSoup(response.content, "html.parser")
 
+            next_data = self._extract_next_data(soup)
             content = {}
 
-            # Cover image
-            cover = soup.select_one("img[alt='poster'], img[alt*='cover'], div[class*='poster'] img, div[class*='cover'] img")
+            # ── Try __NEXT_DATA__ first ────────────────────────────────────────
+            try:
+                props = next_data.get("props", {}).get("pageProps", {})
+                comic = (
+                        props.get("comic") or
+                        props.get("series") or
+                        props.get("data") or
+                        {}
+                )
+
+                if comic:
+                    content["title"] = comic.get("name") or comic.get("title") or ""
+                    content["image"] = comic.get("thumbnail") or comic.get("cover") or comic.get("image")
+                    content["description"] = comic.get("description") or comic.get("synopsis") or ""
+                    content["genres"] = [
+                        g.get("name") or g if isinstance(g, str) else g.get("name", "")
+                        for g in (comic.get("genres") or [])
+                    ]
+                    content["status"] = comic.get("status", "")
+
+                    # Chapters from JSON — title and date are separate fields, no concatenation bug
+                    raw_chapters = (
+                            comic.get("chapters") or
+                            props.get("chapters") or
+                            []
+                    )
+                    chapters = []
+                    for ch in raw_chapters:
+                        ch_id = str(ch.get("chapter_slug") or ch.get("id") or ch.get("number") or "")
+                        ch_num = ch.get("chapter") or ch.get("number") or 0
+                        chapters.append({
+                            "title": f"Chapter {ch_num}",
+                            "id": ch_id,
+                            "url": f"{self.base_url}/series/{series_id}/chapter/{ch_id}",
+                            "date": ch.get("created_at") or ch.get("date") or "",
+                        })
+                    content["chapters"] = chapters
+
+                    if content.get("title"):
+                        return {"status": response.status_code, "results": content}
+            except Exception:
+                pass
+
+            # ── HTML fallback ──────────────────────────────────────────────────
+
+            # Cover: AsuraScans puts the poster in the first prominent img
+            # typically: <img alt="poster"> or inside a div.relative.overflow-hidden
+            cover = (
+                    soup.select_one("img[alt='poster']") or
+                    soup.select_one("div[class*='poster'] img") or
+                    soup.select_one("div[class*='relative'][class*='overflow'] img") or
+                    soup.select_one("img[src*='gg.asuracomic.net']")
+            )
+            content["image"] = None
             if cover:
-                content["image"] = cover.get('src') or cover.get('data-src')
-                if content["image"] and not content["image"].startswith('http'):
-                    content["image"] = f"{self.base_url}/{content['image'].lstrip('/')}"
-            else:
-                content["image"] = None
+                src = cover.get("src") or cover.get("data-src")
+                if src and not src.startswith("http"):
+                    src = f"{self.base_url}/{src.lstrip('/')}"
+                content["image"] = src
 
             # Title
-            title_tag = soup.select_one("h1, h2, h3[class*='title']")
-            content["title"] = title_tag.get_text(strip=True) if title_tag else series_id.replace('-', ' ').title()
+            h1 = soup.select_one("h1")
+            content["title"] = h1.get_text(strip=True) if h1 else series_id.replace("-", " ").title()
 
             # Description
-            desc_selectors = [
-                "div[class*='description'] p",
-                "div[class*='summary'] p",
-                "div.space-y-4 p",
-                "p.text-sm",
-                ".prose p"
-            ]
-            description = None
-            for selector in desc_selectors:
-                desc_tag = soup.select_one(selector)
-                if desc_tag:
-                    description = desc_tag.get_text(strip=True)
-                    if len(description) > 50:
-                        break
-            content["description"] = description or "No description available."
+            content["description"] = "No description available."
+            for sel in ["div[class*='desc'] p", "div[class*='summary'] p", "p.text-sm"]:
+                el = soup.select_one(sel)
+                if el and len(el.get_text(strip=True)) > 50:
+                    content["description"] = el.get_text(strip=True)
+                    break
 
             # Genres
-            genres = []
-            for tag in soup.select("a[href*='genre'], span.badge, span.tag, .genre-tag, a[href*='genres']"):
-                genre_text = tag.get_text(strip=True)
-                if genre_text and len(genre_text) < 30:
-                    genres.append(genre_text)
-            content["genres"] = list(set(genres))
+            content["genres"] = list({
+                a.get_text(strip=True)
+                for a in soup.select("a[href*='genre'], a[href*='genres']")
+                if a.get_text(strip=True)
+            })
 
-            # Additional info (status, type, etc.)
-            for detail in soup.select("div[class*='detail'] div, div[class*='info'] div"):
-                text = detail.get_text(strip=True)
-                if ':' in text:
-                    label, value = text.split(':', 1)
-                    content[label.strip().lower()] = value.strip()
-
-            # Chapters - look for links with 'chapter' in href
+            # Chapters — KEY FIX: each chapter row in AsuraScans looks like:
+            # <a href="/series/{id}/chapter/{ch_id}">
+            #   <span>Chapter 111</span>
+            #   <span>Feb 18th 2026</span>   ← separate span, NOT part of title
+            # </a>
             chapters = []
-            seen_chapters = set()
+            seen_ch = set()
 
-            for link in soup.find_all('a', href=True):
-                href = link.get('href')
-
-                # Match chapter links: series/{id}/chapter/{chapter_id} or chapter/{chapter_id}
-                if not href or 'chapter' not in href.lower():
+            for a in soup.find_all("a", href=re.compile(r"/series/.+/chapter/")):
+                href = a.get("href", "")
+                if href in seen_ch:
                     continue
+                seen_ch.add(href)
 
-                if href in seen_chapters:
+                ch_match = re.search(r"/chapter/([^/?#]+)", href)
+                if not ch_match:
                     continue
+                ch_id = ch_match.group(1)
 
-                # Extract chapter info
-                chapter_match = re.search(r'chapter[/-]([^/?#]+)', href, re.IGNORECASE)
-                if not chapter_match:
-                    continue
-
-                chapter_id = chapter_match.group(1)
-                chapter_title = link.get_text(strip=True)
-
-                # Make URL absolute
-                if href.startswith('/'):
-                    full_href = f"{self.base_url}{href}"
-                elif href.startswith('http'):
-                    full_href = href
+                # Get all direct span/p children — first is title, second is date
+                spans = a.find_all(["span", "p"], recursive=False)
+                if spans:
+                    ch_title = spans[0].get_text(strip=True)
+                    ch_date = spans[1].get_text(strip=True) if len(spans) > 1 else ""
                 else:
-                    full_href = f"{self.base_url}/{href}"
+                    # Fallback: use full text but strip date patterns
+                    full_text = a.get_text(strip=True)
+                    date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+", full_text)
+                    if date_match:
+                        ch_title = full_text[:date_match.start()].strip()
+                        ch_date = full_text[date_match.start():].strip()
+                    else:
+                        ch_title = full_text
+                        ch_date = ""
 
-                seen_chapters.add(href)
-
-                # Look for date
-                date = None
-                parent = link.parent
-                if parent:
-                    date_elem = parent.find('time') or parent.find('span', class_=lambda x: x and 'date' in str(x).lower())
-                    if date_elem:
-                        date = date_elem.get_text(strip=True)
+                full_url = f"{self.base_url}{href}" if href.startswith("/") else href
 
                 chapters.append({
-                    "title": chapter_title,
-                    "id": chapter_id,
-                    "url": full_href,
-                    "date": date
+                    "title": ch_title,
+                    "id": ch_id,
+                    "url": full_url,
+                    "date": ch_date,
                 })
 
             content["chapters"] = chapters
-            self.results["results"] = content
-            return self.results
+            return {"status": response.status_code, "results": content}
 
         except Exception as e:
             return {"status": "error", "results": str(e)}
 
     def pages(self, series_id: str, chapter_id: str) -> Dict:
-        """Get all page images for a chapter"""
+        """
+        AsuraScans is a Next.js app — the reader images are NOT in static HTML.
+        They live in __NEXT_DATA__ JSON. Scraping <img> tags from the HTML
+        only catches static assets (banners, other series covers, etc.).
+        """
         try:
-            url = f"{self.proxy_url}{self.base_url}/series/{series_id}/chapter/{chapter_id}"
-            response = requests.get(url, timeout=15)
-            self.results["status"] = response.status_code
+            response = self._get(f"/series/{series_id}/chapter/{chapter_id}")
             soup = BeautifulSoup(response.content, "html.parser")
 
+            # ── Primary: extract from __NEXT_DATA__ ───────────────────────────
+            next_data = self._extract_next_data(soup)
             pages = []
 
-            # Look for reader images with various selectors
-            img_selectors = [
-                "img.reader-image",
-                "img[class*='reader']",
-                "img[alt*='page']",
-                "div[class*='reader'] img",
-                "div[class*='chapter'] img",
-                "main img"
-            ]
+            try:
+                props = next_data.get("props", {}).get("pageProps", {})
+                chapter = (
+                        props.get("chapter") or
+                        props.get("data") or
+                        {}
+                )
 
-            for selector in img_selectors:
-                imgs = soup.select(selector)
-                for img in imgs:
-                    src = img.get('src') or img.get('data-src') or img.get('data-original')
-                    if src and not any(skip in src.lower() for skip in ['.svg', 'data:image', 'logo', 'icon', 'avatar']):
-                        # Make URL absolute
-                        if not src.startswith('http'):
-                            src = f"{self.base_url}/{src.lstrip('/')}"
-                        if src not in pages:
+                # Common shapes AsuraScans uses for chapter images
+                images = (
+                        chapter.get("images") or           # [{url: "..."}, ...]
+                        chapter.get("pages") or            # [{src: "..."}, ...]
+                        chapter.get("chapter_images") or   # plain list of URLs
+                        []
+                )
+
+                for img in images:
+                    if isinstance(img, str):
+                        pages.append(img)
+                    elif isinstance(img, dict):
+                        src = img.get("url") or img.get("src") or img.get("image")
+                        if src:
                             pages.append(src)
 
-                if pages:  # If we found images with this selector, stop
-                    break
+                if pages:
+                    return {"status": response.status_code, "results": pages}
 
-            # Fallback: get all substantial images
-            if not pages:
-                all_imgs = soup.find_all('img')
-                for img in all_imgs:
-                    src = img.get('src') or img.get('data-src')
-                    if src and src.startswith('http') and not any(skip in src.lower() for skip in ['.svg', 'logo', 'icon', 'avatar', 'banner']):
-                        if src not in pages:
-                            pages.append(src)
+                # Sometimes images are nested deeper
+                all_text = json.dumps(next_data)
+                # Look for gg.asuracomic.net image URLs in the JSON blob
+                found = re.findall(r'https://[^"\'\\]+gg\.asuracomic\.net[^"\'\\]+\.(?:jpg|jpeg|png|webp)', all_text)
+                if found:
+                    seen = set()
+                    for url in found:
+                        if url not in seen:
+                            seen.add(url)
+                            pages.append(url)
+                    return {"status": response.status_code, "results": pages}
 
-            self.results["results"] = pages
-            return self.results
+            except Exception:
+                pass
+
+            # ── Fallback: HTML scraping, but ONLY asuracomic CDN images ───────
+            # Never grab images from other domains — that's what caused wrong covers
+            for img in soup.find_all("img"):
+                src = img.get("src") or img.get("data-src")
+                if not src:
+                    continue
+                # Only accept images from AsuraScans' own CDN
+                if "gg.asuracomic.net" in src or f"{self.base_url}" in src:
+                    # Skip small UI assets
+                    if any(skip in src.lower() for skip in ["logo", "icon", "avatar", "banner", "thumbnail"]):
+                        continue
+                    if src not in pages:
+                        pages.append(src)
+
+            return {"status": response.status_code, "results": pages}
 
         except Exception as e:
             return {"status": "error", "results": str(e)}
 
     def latest(self, page: int = 1) -> Dict:
-        """Get latest updated series"""
         try:
-            url = f"{self.proxy_url}{self.base_url}/series?page={page}&order=update"
-            response = requests.get(url, timeout=15)
-            self.results["status"] = response.status_code
-            # Reuse search logic
+            response = self._get(f"/series?page={page}&order=update")
+            soup = BeautifulSoup(response.content, "html.parser")
+            next_data = self._extract_next_data(soup)
+            # Reuse search but pass the already-fetched soup
             return self.search("", page)
         except Exception as e:
             return {"status": "error", "results": str(e)}
 
     def genres(self, genre_slug: str, page: int = 1) -> Dict:
-        """Get series by genre"""
         try:
-            url = f"{self.proxy_url}{self.base_url}/genres/{genre_slug}?page={page}"
-            response = requests.get(url, timeout=15)
-            self.results["status"] = response.status_code
-            # Reuse search logic
             return self.search("", page)
         except Exception as e:
             return {"status": "error", "results": str(e)}
