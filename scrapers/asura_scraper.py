@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-import requests
+import httpx
 import re
 import json
 from typing import Dict
@@ -15,17 +15,13 @@ class AsuraComic:
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "en-US,en;q=0.9",
         }
+        self.client = httpx.Client(timeout=15.0, follow_redirects=True)
 
-    def _get(self, path: str) -> requests.Response:
+    def _get(self, path: str) -> httpx.Response:
         url = f"{self.proxy_url}{self.base_url}{path}"
-        return requests.get(url, headers=self.headers, timeout=15)
+        return self.client.get(url, headers=self.headers)
 
     def _extract_next_data(self, soup: BeautifulSoup) -> dict:
-        """
-        AsuraScans is a Next.js site. All the real data (images, chapters, pages)
-        lives in a <script id="__NEXT_DATA__"> JSON blob — NOT in the HTML tags.
-        This is why your CSS selectors were finding wrong/empty content.
-        """
         script = soup.find("script", id="__NEXT_DATA__")
         if not script:
             return {}
@@ -35,19 +31,12 @@ class AsuraComic:
             return {}
 
     def search(self, query: str, page: int = 1) -> Dict:
-        """
-        AsuraScans has a JSON search API at /api/series/search?name=...
-        We must call it DIRECTLY (not through the HTML proxy) since the proxy
-        is designed for HTML pages and returns empty content for JSON endpoints.
-        """
         try:
-            encoded_query = requests.utils.quote(query)
-            # Call the JSON API directly — no proxy wrapper
-            api_url = f"{self.base_url}/api/series/search?name={encoded_query}"
-            response = requests.get(api_url, headers=self.headers, timeout=15)
+            # Use httpx instead of requests
+            api_url = f"{self.base_url}/api/series/search?name={query}"
+            response = self.client.get(api_url, headers=self.headers)
             data = response.json()
 
-            # Response may be a list directly or wrapped in a key
             if isinstance(data, list):
                 series_list = data
             elif isinstance(data, dict):
@@ -92,7 +81,6 @@ class AsuraComic:
             next_data = self._extract_next_data(soup)
             content = {}
 
-            # ── Try __NEXT_DATA__ first ────────────────────────────────────────
             try:
                 props = next_data.get("props", {}).get("pageProps", {})
                 comic = (
@@ -112,7 +100,6 @@ class AsuraComic:
                     ]
                     content["status"] = comic.get("status", "")
 
-                    # Chapters from JSON — title and date are separate fields, no concatenation bug
                     raw_chapters = (
                             comic.get("chapters") or
                             props.get("chapters") or
@@ -135,10 +122,7 @@ class AsuraComic:
             except Exception:
                 pass
 
-            # ── HTML fallback ──────────────────────────────────────────────────
-
-            # Cover: AsuraScans puts the poster in the first prominent img
-            # typically: <img alt="poster"> or inside a div.relative.overflow-hidden
+            # HTML fallback (same as before)
             cover = (
                     soup.select_one("img[alt='poster']") or
                     soup.select_one("div[class*='poster'] img") or
@@ -152,11 +136,9 @@ class AsuraComic:
                     src = f"{self.base_url}/{src.lstrip('/')}"
                 content["image"] = src
 
-            # Title
             h1 = soup.select_one("h1")
             content["title"] = h1.get_text(strip=True) if h1 else series_id.replace("-", " ").title()
 
-            # Description
             content["description"] = "No description available."
             for sel in ["div[class*='desc'] p", "div[class*='summary'] p", "p.text-sm"]:
                 el = soup.select_one(sel)
@@ -164,18 +146,12 @@ class AsuraComic:
                     content["description"] = el.get_text(strip=True)
                     break
 
-            # Genres
             content["genres"] = list({
                 a.get_text(strip=True)
                 for a in soup.select("a[href*='genre'], a[href*='genres']")
                 if a.get_text(strip=True)
             })
 
-            # Chapters — KEY FIX: each chapter row in AsuraScans looks like:
-            # <a href="/series/{id}/chapter/{ch_id}">
-            #   <span>Chapter 111</span>
-            #   <span>Feb 18th 2026</span>   ← separate span, NOT part of title
-            # </a>
             chapters = []
             seen_ch = set()
 
@@ -190,13 +166,11 @@ class AsuraComic:
                     continue
                 ch_id = ch_match.group(1)
 
-                # Get all direct span/p children — first is title, second is date
                 spans = a.find_all(["span", "p"], recursive=False)
                 if spans:
                     ch_title = spans[0].get_text(strip=True)
                     ch_date = spans[1].get_text(strip=True) if len(spans) > 1 else ""
                 else:
-                    # Fallback: use full text but strip date patterns
                     full_text = a.get_text(strip=True)
                     date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+", full_text)
                     if date_match:
@@ -222,16 +196,10 @@ class AsuraComic:
             return {"status": "error", "results": str(e)}
 
     def pages(self, series_id: str, chapter_id: str) -> Dict:
-        """
-        AsuraScans is a Next.js app — the reader images are NOT in static HTML.
-        They live in __NEXT_DATA__ JSON. Scraping <img> tags from the HTML
-        only catches static assets (banners, other series covers, etc.).
-        """
         try:
             response = self._get(f"/series/{series_id}/chapter/{chapter_id}")
             soup = BeautifulSoup(response.content, "html.parser")
 
-            # ── Primary: extract from __NEXT_DATA__ ───────────────────────────
             next_data = self._extract_next_data(soup)
             pages = []
 
@@ -243,11 +211,10 @@ class AsuraComic:
                         {}
                 )
 
-                # Common shapes AsuraScans uses for chapter images
                 images = (
-                        chapter.get("images") or           # [{url: "..."}, ...]
-                        chapter.get("pages") or            # [{src: "..."}, ...]
-                        chapter.get("chapter_images") or   # plain list of URLs
+                        chapter.get("images") or
+                        chapter.get("pages") or
+                        chapter.get("chapter_images") or
                         []
                 )
 
@@ -262,9 +229,7 @@ class AsuraComic:
                 if pages:
                     return {"status": response.status_code, "results": pages}
 
-                # Sometimes images are nested deeper
                 all_text = json.dumps(next_data)
-                # Look for gg.asuracomic.net image URLs in the JSON blob
                 found = re.findall(r'https://[^"\'\\]+gg\.asuracomic\.net[^"\'\\]+\.(?:jpg|jpeg|png|webp)', all_text)
                 if found:
                     seen = set()
@@ -277,15 +242,11 @@ class AsuraComic:
             except Exception:
                 pass
 
-            # ── Fallback: HTML scraping, but ONLY asuracomic CDN images ───────
-            # Never grab images from other domains — that's what caused wrong covers
             for img in soup.find_all("img"):
                 src = img.get("src") or img.get("data-src")
                 if not src:
                     continue
-                # Only accept images from AsuraScans' own CDN
                 if "gg.asuracomic.net" in src or f"{self.base_url}" in src:
-                    # Skip small UI assets
                     if any(skip in src.lower() for skip in ["logo", "icon", "avatar", "banner", "thumbnail"]):
                         continue
                     if src not in pages:
@@ -301,7 +262,6 @@ class AsuraComic:
             response = self._get(f"/series?page={page}&order=update")
             soup = BeautifulSoup(response.content, "html.parser")
             next_data = self._extract_next_data(soup)
-            # Reuse search but pass the already-fetched soup
             return self.search("", page)
         except Exception as e:
             return {"status": "error", "results": str(e)}
