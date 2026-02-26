@@ -31,73 +31,46 @@ class AsuraComic:
             return {}
 
     def search(self, query: str, page: int = 1) -> Dict:
+        """
+        Use AsuraScans' dedicated JSON search API instead of scraping the HTML
+        series page (which just returns the weekly popular list, not search results).
+        """
         try:
-            response = self._get(f"/series?page={page}&name={query}")
-            soup = BeautifulSoup(response.content, "html.parser")
+            encoded_query = requests.utils.quote(query)
+            api_url = f"{self.proxy_url}{self.base_url}/api/series/search?name={encoded_query}"
+            response = requests.get(api_url, headers=self.headers, timeout=15)
+            data = response.json()
 
-            next_data = self._extract_next_data(soup)
-
-            # Try to pull series list from __NEXT_DATA__ first
-            series_list = []
-            try:
-                props = next_data.get("props", {}).get("pageProps", {})
-                # Common keys AsuraScans uses
+            # Response may be a list directly or wrapped in a key
+            if isinstance(data, list):
+                series_list = data
+            elif isinstance(data, dict):
                 series_list = (
-                        props.get("series") or
-                        props.get("data", {}).get("series") or
-                        props.get("comicList") or
+                        data.get("data") or
+                        data.get("results") or
+                        data.get("series") or
                         []
                 )
-            except Exception:
-                pass
+            else:
+                series_list = []
 
-            if series_list:
-                content = []
-                for s in series_list:
-                    slug = s.get("slug") or s.get("series_slug") or s.get("id", "")
-                    content.append({
-                        "title": s.get("name") or s.get("title") or slug,
-                        "id": slug,
-                        "url": f"{self.base_url}/series/{slug}",
-                        # AsuraScans image CDN
-                        "image": s.get("thumbnail") or s.get("cover") or s.get("image"),
-                        "latest_chapter": s.get("latest_chapter"),
-                    })
-                return {"status": response.status_code, "results": content}
-
-            # Fallback: HTML scraping (less reliable but better than before)
             content = []
-            seen = set()
-
-            # AsuraScans uses a grid of cards — each card is a div wrapping an <a>
-            for card in soup.select("div.grid a[href*='/series/'], div.flex a[href*='/series/']"):
-                href = card.get("href", "")
-                if not href or "chapter" in href or href in seen:
-                    continue
-
-                match = re.search(r"/series/([^/?#]+)", href)
-                if not match:
-                    continue
-
-                series_id = match.group(1)
-                seen.add(href)
-
-                # Title: look for heading tags inside the card
-                title_el = card.select_one("span.block, h3, h2, .title, [class*='title']")
-                title = title_el.get_text(strip=True) if title_el else series_id.replace("-", " ").title()
-
-                # Image: AsuraScans uses <img> with src pointing to gg.asuracomic.net
-                img_el = card.select_one("img")
-                image = None
-                if img_el:
-                    image = img_el.get("src") or img_el.get("data-src")
-
+            for s in series_list:
+                slug = s.get("series_slug") or s.get("slug") or s.get("id", "")
+                title = s.get("title") or s.get("name") or slug.replace("-", " ").title()
+                image = (
+                        s.get("thumbnail") or
+                        s.get("cover") or
+                        s.get("image") or
+                        s.get("thumb")
+                )
+                latest = s.get("latestChapter") or s.get("latest_chapter")
                 content.append({
                     "title": title,
-                    "id": series_id,
-                    "url": f"{self.base_url}/series/{series_id}",
+                    "id": slug,
+                    "url": f"{self.base_url}/series/{slug}",
                     "image": image,
-                    "latest_chapter": None,
+                    "latest_chapter": latest,
                 })
 
             return {"status": response.status_code, "results": content}
