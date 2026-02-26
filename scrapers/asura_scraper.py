@@ -10,6 +10,10 @@ class AsuraComic:
         self.base_url = "https://asuracomic.net"
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://asuracomic.net/",
+            "Origin": "https://asuracomic.net",
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
         }
 
     def _get(self, path: str) -> requests.Response:
@@ -32,12 +36,14 @@ class AsuraComic:
 
     def search(self, query: str, page: int = 1) -> Dict:
         """
-        Use AsuraScans' dedicated JSON search API instead of scraping the HTML
-        series page (which just returns the weekly popular list, not search results).
+        AsuraScans has a JSON search API at /api/series/search?name=...
+        We must call it DIRECTLY (not through the HTML proxy) since the proxy
+        is designed for HTML pages and returns empty content for JSON endpoints.
         """
         try:
             encoded_query = requests.utils.quote(query)
-            api_url = f"{self.proxy_url}{self.base_url}/api/series/search?name={encoded_query}"
+            # Call the JSON API directly — no proxy wrapper
+            api_url = f"{self.base_url}/api/series/search?name={encoded_query}"
             response = requests.get(api_url, headers=self.headers, timeout=15)
             data = response.json()
 
