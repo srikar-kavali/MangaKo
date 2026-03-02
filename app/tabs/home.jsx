@@ -7,7 +7,9 @@ import { signOut } from '../../auth/cognito';
 import { getRecentSearches, saveRecentSearches } from '../searchStorage';
 import { searchManga as searchAsura, proxied as proxiedAsura } from '../../manga_api/asurascans';
 import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/mangapill';
+import { manhwas } from '../../manga_api/manhwas'
 import FollowedUpdatesRow from '../FollowedUpdatesRow';
+
 
 const LIVE_DELAY_MS = 120;
 const CACHE_VERSION = 'v2';
@@ -62,11 +64,8 @@ const Home = () => {
                 // Try to search both sources in parallel
                 try {
                     [asuraResults, mangapillResults] = await Promise.all([
-                        searchAsura(q).catch((err) => {
-                            console.log('AsuraScans search failed:', err.message);
-                            asuraFailed = true;
-                            return [];
-                        }),
+                        // Use hardcoded manhwa instead of API
+                        Promise.resolve(searchHardcodedManhwa(q)),
                         searchMangapill(q, 15).catch((err) => {
                             console.log('MangaPill search failed:', err.message);
                             return [];

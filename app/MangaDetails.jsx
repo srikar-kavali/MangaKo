@@ -72,14 +72,36 @@ const MangaDetails = () => {
             setLoading(true);
             try {
                 if (isAsura && seriesId) {
-                    // Fetch from AsuraScans
-                    const data = await getMangaInfo(seriesId);
-                    if (!cancelled) {
-                        setMangaData(data);
-                        setChapters(data.chapters || []);
+                    // First, load hardcoded data immediately
+                    const hardcoded = getManhwaById(seriesId);
+
+                    if (hardcoded && !cancelled) {
+                        // Set hardcoded data right away
+                        setMangaData({
+                            title: hardcoded.title,
+                            description: hardcoded.description || 'No description available.',
+                            image: hardcoded.cover,
+                            genres: hardcoded.genres || [],
+                            status: hardcoded.status || 'Unknown',
+                        });
                     }
+
+                    // Try to fetch chapters from API (may fail)
+                    try {
+                        const data = await getMangaInfo(seriesId);
+                        if (data && data.chapters && !cancelled) {
+                            setChapters(data.chapters || []);
+                        }
+                    } catch (err) {
+                        console.log('AsuraScans API failed, showing without chapters:', err.message);
+                        // Chapters remain empty, but we still have hardcoded metadata
+                        if (!cancelled) {
+                            setChapters([]);
+                        }
+                    }
+
                 } else if (isMangapill && mangapillUrl) {
-                    // Fetch from MangaPill
+                    // Fetch from MangaPill (same as before)
                     const data = await getMangapillManga(mangapillUrl);
                     if (!cancelled) {
                         setMangaData(data);
@@ -311,6 +333,15 @@ const MangaDetails = () => {
                     </View>
                 </View>
 
+                {isAsura && !chapters.length && !loading && (
+                    <View style={styles.noChaptersBox}>
+                        <Ionicons name="alert-circle-outline" size={20} color="#856404" />
+                        <Text style={styles.noChaptersText}>
+                            Chapters unavailable. AsuraScans API is currently not accessible.
+                        </Text>
+                    </View>
+                )}
+
                 <View style={styles.pagerRow}>
                     <Pressable onPress={goPrevPage} disabled={page <= 1} style={[styles.pagerBtn, page <= 1 && styles.pagerBtnDisabled]}>
                         <Text style={styles.pagerText}>Prev {PAGE_SIZE}</Text>
@@ -471,5 +502,20 @@ const styles = StyleSheet.create({
     },
     completedBtn: {
         marginLeft: 12,
+    },
+    noChaptersBox: {
+        padding: 12,
+        backgroundColor: '#fff3cd',
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginVertical: 8,
+    },
+    noChaptersText: {
+        flex: 1,
+        fontSize: 13,
+        color: '#856404',
+        lineHeight: 18,
     },
 });
