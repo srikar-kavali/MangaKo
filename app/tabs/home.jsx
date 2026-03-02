@@ -65,7 +65,7 @@ const Home = () => {
                 try {
                     [asuraResults, mangapillResults] = await Promise.all([
                         // Use hardcoded manhwa instead of API
-                        Promise.resolve(searchHardcodedManhwa(q)),
+                        Promise.resolve(manhwas(q)),
                         searchMangapill(q, 15).catch((err) => {
                             console.log('MangaPill search failed:', err.message);
                             return [];
