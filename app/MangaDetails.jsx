@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { getMangaInfo, proxied as proxiedAsura } from '../manga_api/asurascans';
 import { getMangapillManga, proxied as proxiedMangapill } from '../manga_api/mangapill';
-import {manhwas} from '../manga_api/manhwas';
+import {searchHardcodedManhwa, getManhwaById} from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, markCompleted, unmarkCompleted, getCompleted } from "./searchStorage";
 
@@ -74,7 +74,7 @@ const MangaDetails = () => {
             try {
                 if (isAsura && seriesId) {
                     // First, load hardcoded data immediately
-                    const hardcoded = manhwas(seriesId);
+                    const hardcoded = getManhwaById(seriesId);
 
                     if (hardcoded && !cancelled) {
                         // Set hardcoded data right away

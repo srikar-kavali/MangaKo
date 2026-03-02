@@ -7,7 +7,7 @@ import { signOut } from '../../auth/cognito';
 import { getRecentSearches, saveRecentSearches } from '../searchStorage';
 import { searchManga as searchAsura, proxied as proxiedAsura } from '../../manga_api/asurascans';
 import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/mangapill';
-import { manhwas } from '../../manga_api/manhwas'
+import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas'
 import FollowedUpdatesRow from '../FollowedUpdatesRow';
 
 
@@ -65,7 +65,7 @@ const Home = () => {
                 try {
                     [asuraResults, mangapillResults] = await Promise.all([
                         // Use hardcoded manhwa instead of API
-                        Promise.resolve(manhwas(q)),
+                        Promise.resolve(searchHardcodedManhwa(q)),
                         searchMangapill(q, 15).catch((err) => {
                             console.log('MangaPill search failed:', err.message);
                             return [];
