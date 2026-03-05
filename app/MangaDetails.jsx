@@ -142,6 +142,8 @@ const MangaDetails = () => {
                 title: mangaData?.title || "Manga",
                 description: mangaData?.description || "No description available.",
                 coverUrl: getCoverUrl(),
+                source: isAsura ? 'asura' : 'mangapill',  // ← ADD THIS LINE
+                cover: getCoverUrl(),  // ← ADD THIS LINE (for home page)
             };
 
             if (isFavorite) {

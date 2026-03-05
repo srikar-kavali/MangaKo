@@ -4,8 +4,8 @@ import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
-import { getRecentSearches, saveRecentSearches, getFavorites } from '../searchStorage';
-import { searchHardcodedManhwa, popularManhwa } from '../../manga_api/hardcodedManhwa';
+import { getRecentSearches, saveRecentSearches, getFavorites, getLastReadChapter } from '../searchStorage';
+import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
 
@@ -32,38 +32,39 @@ const Home = () => {
         (async () => {
             setRecentSearches(await getRecentSearches());
 
-            // Load followed manga
+            // Load followed manga with last read chapter info
             const favs = await getFavorites();
-            // Add mock "new chapter" data - in real app, you'd check for updates
-            const followedWithUpdates = favs.map(fav => ({
-                ...fav,
-                hasNewChapter: Math.random() > 0.5, // Mock: randomly mark as having new chapters
-                latestChapter: Math.floor(Math.random() * 200) + 1, // Mock chapter number
-            }));
+            const followedWithProgress = await Promise.all(
+                favs.map(async (fav) => {
+                    const lastReadChapter = await getLastReadChapter(fav.url);
+                    return {
+                        ...fav,
+                        lastReadChapter: lastReadChapter || null,
+                    };
+                })
+            );
 
-            // Sort: new chapters first
-            followedWithUpdates.sort((a, b) => {
-                if (a.hasNewChapter && !b.hasNewChapter) return -1;
-                if (!a.hasNewChapter && b.hasNewChapter) return 1;
-                return 0;
-            });
+            // Filter: only show if user has started reading (has lastReadChapter)
+            const inProgress = followedWithProgress.filter(f => f.lastReadChapter);
 
-            setFollowedManga(followedWithUpdates);
+            setFollowedManga(inProgress);
         })();
     }, []);
 
-    // Load browse content (all manga from hardcoded + search)
+    // Load browse content (all manga from hardcoded + MangaPill)
     useEffect(() => {
         (async () => {
             setLoadingBrowse(true);
             try {
-                // Combine hardcoded manhwa + some MangaPill results
+                // Get hardcoded manhwa and MangaPill results
                 const [mangapillResults] = await Promise.all([
-                    searchMangapill('', 20).catch(() => []), // Get popular manga
+                    searchMangapill('', 20).catch(() => []),
                 ]);
 
-                // Format results
-                const formattedManhwa = popularManhwa.map(item => ({
+                // Get all hardcoded manhwa
+                const allManhwa = searchHardcodedManhwa(''); // Empty query returns all
+
+                const formattedManhwa = allManhwa.map(item => ({
                     ...item,
                     title: item.title,
                     source: 'asura',
@@ -259,9 +260,13 @@ const Home = () => {
                                         source={{ uri: getProxiedImage(manga) }}
                                         style={styles.followedCover}
                                     />
-                                    {manga.hasNewChapter && (
-                                        <View style={styles.newChapterBadge}>
-                                            <Text style={styles.newChapterText}>Ch. {manga.latestChapter}</Text>
+                                    {/* Show last read chapter bar */}
+                                    {manga.lastReadChapter && (
+                                        <View style={styles.progressBar}>
+                                            <Ionicons name="bookmark" size={12} color="#fff" style={{ marginRight: 4 }} />
+                                            <Text style={styles.progressText}>
+                                                {manga.lastReadChapter}
+                                            </Text>
                                         </View>
                                     )}
                                     <Text style={styles.followedTitle} numberOfLines={2}>
@@ -456,21 +461,22 @@ const styles = StyleSheet.create({
         height: 170,
         borderRadius: 8,
         backgroundColor: '#f0f0f0',
-        marginBottom: 8,
+        marginBottom: 4,
     },
-    newChapterBadge: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        backgroundColor: '#4CAF50',
+    progressBar: {
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
         paddingHorizontal: 8,
-        paddingVertical: 4,
+        paddingVertical: 6,
         borderRadius: 4,
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        marginBottom: 6,
     },
-    newChapterText: {
+    progressText: {
         color: '#fff',
         fontSize: 11,
-        fontWeight: '700'
+        fontWeight: '600'
     },
     followedTitle: {
         fontSize: 13,

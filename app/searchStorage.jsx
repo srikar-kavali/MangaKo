@@ -170,6 +170,25 @@ export async function saveFavorites(favs) {
     }
 }
 
+export const saveLatestChapter = async (mangaUrl, chapterNumber) => {
+    try {
+        const key = `latest_chapter_${mangaUrl}`;
+        await AsyncStorage.setItem(key, String(chapterNumber));
+    } catch (error) {
+        console.error('Failed to save latest chapter:', error);
+    }
+};
+
+export const getLatestChapter = async (mangaUrl) => {
+    try {
+        const key = `latest_chapter_${mangaUrl}`;
+        const value = await AsyncStorage.getItem(key);
+        return value ? parseInt(value) : null;
+    } catch (error) {
+        return null;
+    }
+};
+
 // Legacy wrappers
 export const setLastReadChapter = saveLastReadChapter;
 export const updateLastRead = saveLastReadChapter;
