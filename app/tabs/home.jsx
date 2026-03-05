@@ -14,68 +14,51 @@ const CACHE_VERSION = 'v2';
 
 const Home = () => {
     const [query, setQuery] = useState('');
+    const [searchActive, setSearchActive] = useState(false);
     const [recentSearches, setRecentSearches] = useState([]);
     const [searchResults, setSearchResults] = useState([]);
-    const [dropdownVisible, setDropdownVisible] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
     const [followedManga, setFollowedManga] = useState([]);
     const [browseManga, setBrowseManga] = useState([]);
     const [loadingBrowse, setLoadingBrowse] = useState(false);
+    const [dropdownVisible, setDropdownVisible] = useState(false);
 
     const router = useRouter();
     const cacheRef = useRef(new Map());
     const timerRef = useRef(null);
     const abortRef = useRef(null);
+    const searchInputRef = useRef(null);
 
     // Load favorites on mount
     useEffect(() => {
         (async () => {
             setRecentSearches(await getRecentSearches());
 
-            // Load followed manga with last read chapter info
             const favs = await getFavorites();
             const followedWithProgress = await Promise.all(
                 favs.map(async (fav) => {
                     const lastReadChapter = await getLastReadChapter(fav.url);
-                    return {
-                        ...fav,
-                        lastReadChapter: lastReadChapter || null,
-                    };
+                    return { ...fav, lastReadChapter: lastReadChapter || null };
                 })
             );
-
-            // Filter: only show if user has started reading (has lastReadChapter)
             const inProgress = followedWithProgress.filter(f => f.lastReadChapter);
-
             setFollowedManga(inProgress);
         })();
     }, []);
 
-    // Load browse content (all manga from hardcoded + MangaPill)
+    // Load browse content
     useEffect(() => {
         (async () => {
             setLoadingBrowse(true);
             try {
-                // Get hardcoded manhwa and MangaPill results
                 const [mangapillResults] = await Promise.all([
                     searchMangapill('', 20).catch(() => []),
                 ]);
-
-                // Get all hardcoded manhwa
-                const allManhwa = searchHardcodedManhwa(''); // Empty query returns all
-
-                const formattedManhwa = allManhwa.map(item => ({
-                    ...item,
-                    title: item.title,
-                    source: 'asura',
-                }));
-
+                const allManhwa = searchHardcodedManhwa('');
+                const formattedManhwa = allManhwa.map(item => ({ ...item, source: 'asura' }));
                 const formattedMangapill = (mangapillResults || []).map(item => ({
-                    ...item,
-                    source: 'mangapill',
-                    id: item.url,
+                    ...item, source: 'mangapill', id: item.url,
                 }));
-
                 setBrowseManga([...formattedManhwa, ...formattedMangapill]);
             } catch (err) {
                 console.log('Failed to load browse content:', err);
@@ -85,7 +68,7 @@ const Home = () => {
         })();
     }, []);
 
-    // Search functionality (same as before)
+    // Search logic
     useEffect(() => {
         const q = query.trim();
         const qLower = q.toLowerCase();
@@ -116,17 +99,8 @@ const Home = () => {
                     searchMangapill(q, 15).catch(() => [])
                 ]);
 
-                const formattedAsura = (asuraResults || []).map(item => ({
-                    ...item,
-                    source: 'asura',
-                    cover: item.cover,
-                }));
-
-                const formattedMangapill = (mangapillResults || []).map(item => ({
-                    ...item,
-                    source: 'mangapill',
-                    id: item.url,
-                }));
+                const formattedAsura = (asuraResults || []).map(item => ({ ...item, source: 'asura', cover: item.cover }));
+                const formattedMangapill = (mangapillResults || []).map(item => ({ ...item, source: 'mangapill', id: item.url }));
 
                 const scoreResult = (item) => {
                     const title = (item.title || '').toLowerCase();
@@ -136,34 +110,23 @@ const Home = () => {
                     return 0;
                 };
 
-                const allResults = [...formattedAsura, ...formattedMangapill].map(item => ({
-                    ...item,
-                    score: scoreResult(item)
-                }));
-
-                allResults.sort((a, b) => b.score - a.score);
+                const allResults = [...formattedAsura, ...formattedMangapill]
+                    .map(item => ({ ...item, score: scoreResult(item) }))
+                    .sort((a, b) => b.score - a.score);
 
                 if (!controller.signal.aborted) {
                     cacheRef.current.set(cacheKey, allResults);
                     setSearchResults(allResults);
                 }
             } catch (e) {
-                if (e?.name !== 'AbortError') {
-                    console.log('Search error', e);
-                }
-                if (!controller.signal.aborted) {
-                    setSearchResults([]);
-                }
+                if (e?.name !== 'AbortError') console.log('Search error', e);
+                if (!controller.signal.aborted) setSearchResults([]);
             } finally {
-                if (!controller.signal.aborted) {
-                    setIsSearching(false);
-                }
+                if (!controller.signal.aborted) setIsSearching(false);
             }
         }, LIVE_DELAY_MS);
 
-        return () => {
-            if (timerRef.current) clearTimeout(timerRef.current);
-        };
+        return () => { if (timerRef.current) clearTimeout(timerRef.current); };
     }, [query]);
 
     const handleAddSearch = async (text) => {
@@ -185,15 +148,25 @@ const Home = () => {
     const openResult = async (item) => {
         await handleAddSearch(item?.title || query);
         setQuery('');
+        setSearchActive(false);
         openManga(item);
     };
 
+    const openSearch = () => {
+        setSearchActive(true);
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+    };
+
+    const closeSearch = () => {
+        setQuery('');
+        setSearchResults([]);
+        setSearchActive(false);
+    };
+
     const getProxiedImage = (item) => {
-        if (item.source === 'asura') {
-            return item.cover || item.coverUrl ? proxiedAsura(item.cover || item.coverUrl) : null;
-        } else {
-            return item.cover || item.coverUrl ? proxiedMangapill(item.cover || item.coverUrl) : null;
-        }
+        const url = item.cover || item.coverUrl;
+        if (!url) return null;
+        return item.source === 'asura' ? proxiedAsura(url) : proxiedMangapill(url);
     };
 
     return (
@@ -205,21 +178,18 @@ const Home = () => {
                     <Text style={styles.logoText}>Mangako</Text>
                 </View>
 
-                <Pressable
-                    style={styles.searchButton}
-                    onPress={() => setQuery(' ')} // Trigger search overlay
-                >
-                    <Ionicons name="search" size={20} color="#666" />
+                <Pressable style={styles.headerIcon} onPress={openSearch}>
+                    <Ionicons name="search" size={22} color="#333" />
                 </Pressable>
 
-                <Pressable onPress={() => setDropdownVisible(!dropdownVisible)}>
-                    <Ionicons name="person-circle-outline" size={32} color="#333" />
+                <Pressable style={styles.headerIcon} onPress={() => setDropdownVisible(!dropdownVisible)}>
+                    <Ionicons name="person-circle-outline" size={28} color="#333" />
                 </Pressable>
             </View>
 
             {dropdownVisible && (
                 <>
-                    <View style={styles.triangle} />
+                    <Pressable style={styles.dropdownOverlay} onPress={() => setDropdownVisible(false)} />
                     <View style={styles.dropdown}>
                         <Pressable onPress={() => { setDropdownVisible(false); router.push('/settings'); }}>
                             <Text style={styles.dropdownItem}>Settings</Text>
@@ -233,43 +203,41 @@ const Home = () => {
 
             <View style={styles.borderLine} />
 
-            {/* Main Content */}
-            <ScrollView style={styles.mainScroll}>
-                {/* Followed Manga Section */}
+            {/* Main Scroll */}
+            <ScrollView style={styles.mainScroll} showsVerticalScrollIndicator={false}>
+
+                {/* Continue Reading */}
                 {followedManga.length > 0 && (
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
                             <Text style={styles.sectionTitle}>Continue Reading</Text>
                             <Pressable onPress={() => router.push('/tabs/library')}>
-                                <Text style={styles.seeAll}>See All →</Text>
+                                <Text style={styles.seeAll}>See All</Text>
                             </Pressable>
                         </View>
-
                         <ScrollView
                             horizontal
                             showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.horizontalScroll}
+                            contentContainerStyle={styles.horizontalList}
                         >
                             {followedManga.map((manga, idx) => (
                                 <Pressable
                                     key={`${manga.url}-${idx}`}
-                                    style={styles.followedCard}
+                                    style={styles.continueCard}
                                     onPress={() => openManga(manga)}
                                 >
                                     <Image
                                         source={{ uri: getProxiedImage(manga) }}
-                                        style={styles.followedCover}
+                                        style={styles.continueCover}
                                     />
-                                    {/* Show last read chapter bar */}
                                     {manga.lastReadChapter && (
-                                        <View style={styles.progressBar}>
-                                            <Ionicons name="bookmark" size={12} color="#fff" style={{ marginRight: 4 }} />
-                                            <Text style={styles.progressText}>
+                                        <View style={styles.chapterBadge}>
+                                            <Text style={styles.chapterBadgeText} numberOfLines={1}>
                                                 {manga.lastReadChapter}
                                             </Text>
                                         </View>
                                     )}
-                                    <Text style={styles.followedTitle} numberOfLines={2}>
+                                    <Text style={styles.continueTitle} numberOfLines={2}>
                                         {manga.title}
                                     </Text>
                                 </Pressable>
@@ -278,34 +246,34 @@ const Home = () => {
                     </View>
                 )}
 
-                {/* Browse All Section */}
+                {/* Browse / Updates Grid */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Browse All</Text>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Updates</Text>
+                    </View>
 
                     {loadingBrowse ? (
-                        <ActivityIndicator size="large" style={{ marginTop: 20 }} />
+                        <ActivityIndicator size="large" style={{ marginTop: 30 }} />
                     ) : (
-                        <View style={styles.browseGrid}>
+                        <View style={styles.grid}>
                             {browseManga.map((manga, idx) => (
                                 <Pressable
                                     key={`${manga.id}-${idx}`}
-                                    style={styles.browseCard}
+                                    style={styles.gridCard}
                                     onPress={() => openManga(manga)}
                                 >
                                     <Image
                                         source={{ uri: getProxiedImage(manga) }}
-                                        style={styles.browseCover}
+                                        style={styles.gridCover}
                                     />
-                                    <View style={styles.browseInfo}>
-                                        <Text style={styles.browseTitle} numberOfLines={2}>
-                                            {manga.title}
+                                    <View style={styles.sourceTag}>
+                                        <Text style={styles.sourceTagText}>
+                                            {manga.source === 'asura' ? 'AS' : 'MP'}
                                         </Text>
-                                        <View style={styles.sourceTagSmall}>
-                                            <Text style={styles.sourceTagTextSmall}>
-                                                {manga.source === 'asura' ? 'AS' : 'MP'}
-                                            </Text>
-                                        </View>
                                     </View>
+                                    <Text style={styles.gridTitle} numberOfLines={2}>
+                                        {manga.title}
+                                    </Text>
                                 </Pressable>
                             ))}
                         </View>
@@ -314,55 +282,86 @@ const Home = () => {
             </ScrollView>
 
             {/* Search Overlay */}
-            {query.trim().length > 0 && (
+            {searchActive && (
                 <View style={styles.searchOverlay}>
-                    <SafeAreaView style={styles.searchContainer}>
+                    <SafeAreaView style={{ flex: 1 }}>
+                        {/* Search Bar */}
                         <View style={styles.searchBar}>
-                            <Ionicons name="search" size={20} color="#aaa" style={styles.searchIcon} />
+                            <Ionicons name="search" size={18} color="#aaa" style={{ marginRight: 8 }} />
                             <TextInput
+                                ref={searchInputRef}
                                 placeholder="Search manga..."
                                 placeholderTextColor="#aaa"
-                                style={styles.input}
+                                style={styles.searchInput}
                                 value={query}
                                 onChangeText={setQuery}
                                 autoFocus
                                 returnKeyType="search"
                             />
                             {isSearching && <ActivityIndicator size="small" style={{ marginRight: 8 }} />}
-                            <Pressable onPress={() => setQuery('')}>
-                                <Ionicons name="close-circle" size={20} color="#999" />
+                            <Pressable onPress={closeSearch} style={styles.cancelBtn}>
+                                <Text style={styles.cancelText}>Cancel</Text>
                             </Pressable>
                         </View>
 
-                        {searchResults.length > 0 ? (
-                            <FlatList
-                                data={searchResults}
-                                keyExtractor={(item, idx) => `${item?.id || idx}-${item.source}`}
-                                renderItem={({ item }) => {
-                                    const cover = getProxiedImage(item);
-                                    const sourceLabel = item.source === 'asura' ? 'AS' : 'MP';
+                        <View style={styles.borderLine} />
 
-                                    return (
-                                        <Pressable onPress={() => openResult(item)} style={searchStyles.itemRow}>
-                                            {cover ? (
-                                                <Image source={{ uri: cover }} style={searchStyles.itemCover} />
-                                            ) : (
-                                                <View style={searchStyles.itemCoverFallback} />
-                                            )}
-                                            <View style={searchStyles.itemInfo}>
-                                                <Text style={searchStyles.itemTitle} numberOfLines={1}>
-                                                    {item.title}
-                                                </Text>
-                                                <Text style={searchStyles.sourceTag}>{sourceLabel}</Text>
-                                            </View>
-                                        </Pressable>
-                                    );
-                                }}
-                                ItemSeparatorComponent={() => <View style={searchStyles.separator} />}
-                                keyboardShouldPersistTaps="handled"
-                            />
+                        {/* Results */}
+                        {query.trim().length > 0 ? (
+                            searchResults.length > 0 ? (
+                                <FlatList
+                                    data={searchResults}
+                                    keyExtractor={(item, idx) => `${item?.id || idx}-${item.source}`}
+                                    renderItem={({ item }) => {
+                                        const cover = getProxiedImage(item);
+                                        const sourceLabel = item.source === 'asura' ? 'AS' : 'MP';
+                                        return (
+                                            <Pressable onPress={() => openResult(item)} style={styles.resultRow}>
+                                                {cover ? (
+                                                    <Image source={{ uri: cover }} style={styles.resultCover} />
+                                                ) : (
+                                                    <View style={[styles.resultCover, { backgroundColor: '#eee' }]} />
+                                                )}
+                                                <View style={styles.resultInfo}>
+                                                    <Text style={styles.resultTitle} numberOfLines={2}>
+                                                        {item.title}
+                                                    </Text>
+                                                    <View style={styles.resultSourceBadge}>
+                                                        <Text style={styles.resultSourceText}>{sourceLabel}</Text>
+                                                    </View>
+                                                </View>
+                                                <Ionicons name="chevron-forward" size={16} color="#ccc" />
+                                            </Pressable>
+                                        );
+                                    }}
+                                    ItemSeparatorComponent={() => <View style={styles.separator} />}
+                                    keyboardShouldPersistTaps="handled"
+                                />
+                            ) : (
+                                !isSearching && (
+                                    <View style={styles.emptyState}>
+                                        <Ionicons name="search-outline" size={48} color="#ddd" />
+                                        <Text style={styles.emptyText}>No results for "{query}"</Text>
+                                    </View>
+                                )
+                            )
                         ) : (
-                            !isSearching && <Text style={styles.noResults}>No results found</Text>
+                            /* Recent Searches */
+                            recentSearches.length > 0 && (
+                                <View>
+                                    <Text style={styles.recentLabel}>Recent</Text>
+                                    {recentSearches.map((term, i) => (
+                                        <Pressable
+                                            key={i}
+                                            style={styles.recentRow}
+                                            onPress={() => setQuery(term)}
+                                        >
+                                            <Ionicons name="time-outline" size={16} color="#999" style={{ marginRight: 10 }} />
+                                            <Text style={styles.recentText}>{term}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            )
                         )}
                     </SafeAreaView>
                 </View>
@@ -375,231 +374,140 @@ export default Home;
 
 const styles = StyleSheet.create({
     screen: { flex: 1, backgroundColor: '#fff' },
+
+    // Header
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
-        paddingVertical: 12,
-        gap: 12,
+        paddingVertical: 10,
         backgroundColor: '#fff',
+        gap: 8,
     },
     logoLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-    logoImage: { width: 36, height: 36 },
+    logoImage: { width: 32, height: 32 },
     logoText: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-    searchButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#f5f5f5',
+    headerIcon: {
+        width: 38,
+        height: 38,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    triangle: {
-        position: 'absolute',
-        top: 60,
-        right: 28,
-        width: 12,
-        height: 12,
-        backgroundColor: '#fff',
-        transform: [{ rotate: '45deg' }],
-        borderTopColor: '#ddd',
-        borderLeftColor: '#ddd',
-        borderTopWidth: 1,
-        borderLeftWidth: 1,
-        zIndex: 101
-    },
-    dropdown: {
-        position: 'absolute',
-        top: 65,
-        right: 16,
-        backgroundColor: '#fff',
-        borderColor: '#ddd',
-        borderWidth: 1,
-        borderRadius: 8,
-        paddingVertical: 8,
-        zIndex: 100,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 5,
-    },
-    dropdownItem: {
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        fontSize: 15,
-        color: '#333'
-    },
     borderLine: { height: 1, backgroundColor: '#e5e5e5' },
 
-    // Main Content
+    // Dropdown
+    dropdownOverlay: {
+        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99,
+    },
+    dropdown: {
+        position: 'absolute', top: 60, right: 16,
+        backgroundColor: '#fff', borderColor: '#ddd', borderWidth: 1,
+        borderRadius: 8, paddingVertical: 6, zIndex: 100,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
+    },
+    dropdownItem: { paddingVertical: 12, paddingHorizontal: 20, fontSize: 15, color: '#333' },
+
+    // Scroll
     mainScroll: { flex: 1 },
-    section: { paddingVertical: 20 },
+    section: { paddingTop: 20, paddingBottom: 8 },
     sectionHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        marginBottom: 12,
+        flexDirection: 'row', justifyContent: 'space-between',
+        alignItems: 'center', paddingHorizontal: 16, marginBottom: 12,
     },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#1a1a1a',
-        paddingHorizontal: 16,
-    },
-    seeAll: { fontSize: 14, color: '#007AFF', fontWeight: '600' },
+    sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
+    seeAll: { fontSize: 13, color: '#007AFF', fontWeight: '600' },
 
-    // Followed Manga (Horizontal)
-    horizontalScroll: { paddingHorizontal: 12, gap: 12 },
-    followedCard: {
-        width: 120,
-        marginHorizontal: 4,
+    // Continue Reading (horizontal)
+    horizontalList: { paddingHorizontal: 12, gap: 10 },
+    continueCard: { width: 110, marginHorizontal: 4 },
+    continueCover: {
+        width: 110, height: 155, borderRadius: 6,
+        backgroundColor: '#f0f0f0', marginBottom: 4,
     },
-    followedCover: {
-        width: 120,
-        height: 170,
-        borderRadius: 8,
-        backgroundColor: '#f0f0f0',
-        marginBottom: 4,
+    chapterBadge: {
+        backgroundColor: 'rgba(0,0,0,0.72)',
+        paddingHorizontal: 6, paddingVertical: 3,
+        borderRadius: 4, alignSelf: 'flex-start', marginBottom: 4,
     },
-    progressBar: {
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
-        paddingHorizontal: 8,
-        paddingVertical: 6,
-        borderRadius: 4,
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        marginBottom: 6,
-    },
-    progressText: {
-        color: '#fff',
-        fontSize: 11,
-        fontWeight: '600'
-    },
-    followedTitle: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#333',
-        lineHeight: 16,
-    },
+    chapterBadgeText: { color: '#fff', fontSize: 10, fontWeight: '600' },
+    continueTitle: { fontSize: 12, fontWeight: '600', color: '#333', lineHeight: 16 },
 
-    // Browse Grid (Vertical)
-    browseGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        paddingHorizontal: 12,
-        gap: 12,
+    // Updates Grid (ComicK style - 2 columns, tall cards)
+    grid: {
+        flexDirection: 'row', flexWrap: 'wrap',
+        paddingHorizontal: 8, gap: 3,
     },
-    browseCard: {
-        width: '47%',
+    gridCard: {
+        width: '49.3%',
         marginBottom: 16,
     },
-    browseCover: {
+    gridCover: {
         width: '100%',
-        height: 240,
-        borderRadius: 8,
+        height: 260,
+        borderRadius: 6,
         backgroundColor: '#f0f0f0',
-        marginBottom: 8,
+        marginBottom: 6,
     },
-    browseInfo: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-    },
-    browseTitle: {
-        flex: 1,
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#333',
-        lineHeight: 18,
-        marginRight: 4,
-    },
-    sourceTagSmall: {
-        backgroundColor: '#f0f0f0',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
+    sourceTag: {
+        position: 'absolute',
+        top: 8, right: 8,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: 6, paddingVertical: 2,
         borderRadius: 4,
     },
-    sourceTagTextSmall: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: '#666',
+    sourceTagText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+    gridTitle: {
+        fontSize: 13, fontWeight: '600',
+        color: '#1a1a1a', lineHeight: 18,
+        paddingHorizontal: 2,
     },
 
     // Search Overlay
     searchOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: '#fff',
-        zIndex: 999
+        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: '#fff', zIndex: 999,
     },
-    searchContainer: { flex: 1 },
     searchBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        margin: 12,
-        backgroundColor: '#f5f5f5',
-        borderRadius: 12,
-        paddingHorizontal: 12,
-        height: 48
+        flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 14, paddingVertical: 10,
+        backgroundColor: '#fff',
     },
-    searchIcon: { marginRight: 8 },
-    input: { flex: 1, fontSize: 16, color: '#000' },
-    noResults: {
-        padding: 20,
-        textAlign: 'center',
-        color: '#999',
-        fontSize: 15,
+    searchInput: {
+        flex: 1, fontSize: 16, color: '#000',
+        backgroundColor: '#f5f5f5', borderRadius: 10,
+        paddingHorizontal: 12, paddingVertical: 9,
+        marginRight: 8,
     },
-});
+    cancelBtn: { paddingHorizontal: 4 },
+    cancelText: { fontSize: 15, color: '#007AFF', fontWeight: '600' },
 
-const searchStyles = StyleSheet.create({
-    itemRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12
+    // Results
+    resultRow: {
+        flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 16, paddingVertical: 10,
     },
-    itemCover: {
-        width: 50,
-        height: 70,
-        borderRadius: 6,
-        marginRight: 12,
-        backgroundColor: '#f0f0f0'
+    resultCover: {
+        width: 46, height: 64, borderRadius: 5,
+        marginRight: 12, backgroundColor: '#f0f0f0',
     },
-    itemCoverFallback: {
-        width: 50,
-        height: 70,
-        borderRadius: 6,
-        marginRight: 12,
-        backgroundColor: '#f0f0f0'
+    resultInfo: { flex: 1 },
+    resultTitle: { fontSize: 15, fontWeight: '500', color: '#1a1a1a', marginBottom: 4 },
+    resultSourceBadge: {
+        backgroundColor: '#f0f0f0', paddingHorizontal: 6,
+        paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start',
     },
-    itemInfo: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between'
+    resultSourceText: { fontSize: 10, fontWeight: '700', color: '#666' },
+    separator: { height: 1, backgroundColor: '#f5f5f5', marginLeft: 74 },
+
+    // Empty / Recent
+    emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
+    emptyText: { color: '#999', fontSize: 15, marginTop: 12 },
+    recentLabel: { fontSize: 13, fontWeight: '700', color: '#999', paddingHorizontal: 16, paddingVertical: 10 },
+    recentRow: {
+        flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 16, paddingVertical: 12,
+        borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
     },
-    itemTitle: {
-        flex: 1,
-        fontSize: 15,
-        fontWeight: '500',
-        color: '#1a1a1a',
-        marginRight: 8
-    },
-    sourceTag: {
-        fontSize: 10,
-        fontWeight: '700',
-        color: '#666',
-        backgroundColor: '#f0f0f0',
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        borderRadius: 4
-    },
-    separator: { height: 1, backgroundColor: '#f0f0f0', marginLeft: 78 },
+    recentText: { fontSize: 15, color: '#333' },
 });
