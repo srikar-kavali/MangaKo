@@ -6,268 +6,98 @@ from typing import Dict
 
 class AsuraComic:
     def __init__(self):
-        self.proxy_url = "https://sup-proxy.zephex0-f6c.workers.dev/api-text?url="
         self.base_url = "https://asuracomic.net"
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Referer": "https://asuracomic.net/",
-            "Origin": "https://asuracomic.net",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
         }
-        self.client = httpx.Client(timeout=15.0, follow_redirects=True)
-
-    def _get(self, path: str) -> httpx.Response:
-        url = f"{self.proxy_url}{self.base_url}{path}"
-        return self.client.get(url, headers=self.headers)
-
-    def _extract_next_data(self, soup: BeautifulSoup) -> dict:
-        script = soup.find("script", id="__NEXT_DATA__")
-        if not script:
-            return {}
-        try:
-            return json.loads(script.string)
-        except Exception:
-            return {}
 
     def search(self, query: str, page: int = 1) -> Dict:
-        try:
-            # Use httpx instead of requests
-            api_url = f"{self.base_url}/api/series/search?name={query}"
-            response = self.client.get(api_url, headers=self.headers)
-            data = response.json()
-
-            if isinstance(data, list):
-                series_list = data
-            elif isinstance(data, dict):
-                series_list = (
-                        data.get("data") or
-                        data.get("results") or
-                        data.get("series") or
-                        []
-                )
-            else:
-                series_list = []
-
-            content = []
-            for s in series_list:
-                slug = s.get("series_slug") or s.get("slug") or s.get("id", "")
-                title = s.get("title") or s.get("name") or slug.replace("-", " ").title()
-                image = (
-                        s.get("thumbnail") or
-                        s.get("cover") or
-                        s.get("image") or
-                        s.get("thumb")
-                )
-                latest = s.get("latestChapter") or s.get("latest_chapter")
-                content.append({
-                    "title": title,
-                    "id": slug,
-                    "url": f"{self.base_url}/series/{slug}",
-                    "image": image,
-                    "latest_chapter": latest,
-                })
-
-            return {"status": response.status_code, "results": content}
-
-        except Exception as e:
-            return {"status": "error", "results": str(e)}
+        # Return empty - we're using hardcoded manhwa for search
+        return {"status": 200, "results": []}
 
     def info(self, series_id: str) -> Dict:
+        """Scrape manga info and chapters from HTML"""
         try:
-            response = self._get(f"/series/{series_id}")
-            soup = BeautifulSoup(response.content, "html.parser")
+            url = f"{self.base_url}/series/{series_id}"
 
-            next_data = self._extract_next_data(soup)
-            content = {}
+            with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+                response = client.get(url, headers=self.headers)
+                soup = BeautifulSoup(response.content, "html.parser")
 
-            try:
-                props = next_data.get("props", {}).get("pageProps", {})
-                comic = (
-                        props.get("comic") or
-                        props.get("series") or
-                        props.get("data") or
-                        {}
-                )
+                # Try to extract from __NEXT_DATA__ JSON
+                script = soup.find("script", id="__NEXT_DATA__")
+                if script:
+                    try:
+                        next_data = json.loads(script.string)
+                        props = next_data.get("props", {}).get("pageProps", {})
+                        comic = props.get("comic") or props.get("series") or {}
 
-                if comic:
-                    content["title"] = comic.get("name") or comic.get("title") or ""
-                    content["image"] = comic.get("thumbnail") or comic.get("cover") or comic.get("image")
-                    content["description"] = comic.get("description") or comic.get("synopsis") or ""
-                    content["genres"] = [
-                        g.get("name") or g if isinstance(g, str) else g.get("name", "")
-                        for g in (comic.get("genres") or [])
-                    ]
-                    content["status"] = comic.get("status", "")
+                        if comic:
+                            content = {
+                                "title": comic.get("name") or comic.get("title") or "",
+                                "image": comic.get("thumbnail") or comic.get("cover"),
+                                "description": comic.get("description") or comic.get("synopsis") or "",
+                                "genres": [g.get("name", "") if isinstance(g, dict) else str(g) for g in comic.get("genres", [])],
+                                "status": comic.get("status", ""),
+                                "chapters": []
+                            }
 
-                    raw_chapters = (
-                            comic.get("chapters") or
-                            props.get("chapters") or
-                            []
-                    )
-                    chapters = []
-                    for ch in raw_chapters:
-                        ch_id = str(ch.get("chapter_slug") or ch.get("id") or ch.get("number") or "")
-                        ch_num = ch.get("chapter") or ch.get("number") or 0
-                        chapters.append({
-                            "title": f"Chapter {ch_num}",
-                            "id": ch_id,
-                            "url": f"{self.base_url}/series/{series_id}/chapter/{ch_id}",
-                            "date": ch.get("created_at") or ch.get("date") or "",
-                        })
-                    content["chapters"] = chapters
+                            # Extract chapters from JSON
+                            raw_chapters = comic.get("chapters") or props.get("chapters") or []
+                            for ch in raw_chapters:
+                                ch_id = str(ch.get("chapter_slug") or ch.get("id") or ch.get("number") or "")
+                                ch_num = ch.get("chapter") or ch.get("number") or 0
+                                content["chapters"].append({
+                                    "title": f"Chapter {ch_num}",
+                                    "id": ch_id,
+                                    "url": f"{self.base_url}/series/{series_id}/chapter/{ch_id}",
+                                })
 
-                    if content.get("title"):
-                        return {"status": response.status_code, "results": content}
-            except Exception:
-                pass
+                            return {"status": 200, "results": content}
+                    except Exception as e:
+                        print(f"JSON extraction failed: {e}")
 
-            # HTML fallback (same as before)
-            cover = (
-                    soup.select_one("img[alt='poster']") or
-                    soup.select_one("div[class*='poster'] img") or
-                    soup.select_one("div[class*='relative'][class*='overflow'] img") or
-                    soup.select_one("img[src*='gg.asuracomic.net']")
-            )
-            content["image"] = None
-            if cover:
-                src = cover.get("src") or cover.get("data-src")
-                if src and not src.startswith("http"):
-                    src = f"{self.base_url}/{src.lstrip('/')}"
-                content["image"] = src
-
-            h1 = soup.select_one("h1")
-            content["title"] = h1.get_text(strip=True) if h1 else series_id.replace("-", " ").title()
-
-            content["description"] = "No description available."
-            for sel in ["div[class*='desc'] p", "div[class*='summary'] p", "p.text-sm"]:
-                el = soup.select_one(sel)
-                if el and len(el.get_text(strip=True)) > 50:
-                    content["description"] = el.get_text(strip=True)
-                    break
-
-            content["genres"] = list({
-                a.get_text(strip=True)
-                for a in soup.select("a[href*='genre'], a[href*='genres']")
-                if a.get_text(strip=True)
-            })
-
-            chapters = []
-            seen_ch = set()
-
-            for a in soup.find_all("a", href=re.compile(r"/series/.+/chapter/")):
-                href = a.get("href", "")
-                if href in seen_ch:
-                    continue
-                seen_ch.add(href)
-
-                ch_match = re.search(r"/chapter/([^/?#]+)", href)
-                if not ch_match:
-                    continue
-                ch_id = ch_match.group(1)
-
-                spans = a.find_all(["span", "p"], recursive=False)
-                if spans:
-                    ch_title = spans[0].get_text(strip=True)
-                    ch_date = spans[1].get_text(strip=True) if len(spans) > 1 else ""
-                else:
-                    full_text = a.get_text(strip=True)
-                    date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+", full_text)
-                    if date_match:
-                        ch_title = full_text[:date_match.start()].strip()
-                        ch_date = full_text[date_match.start():].strip()
-                    else:
-                        ch_title = full_text
-                        ch_date = ""
-
-                full_url = f"{self.base_url}{href}" if href.startswith("/") else href
-
-                chapters.append({
-                    "title": ch_title,
-                    "id": ch_id,
-                    "url": full_url,
-                    "date": ch_date,
-                })
-
-            content["chapters"] = chapters
-            return {"status": response.status_code, "results": content}
+                # Fallback: HTML scraping
+                return {"status": "error", "results": "Could not parse manga info"}
 
         except Exception as e:
             return {"status": "error", "results": str(e)}
 
     def pages(self, series_id: str, chapter_id: str) -> Dict:
+        """Get chapter pages from __NEXT_DATA__"""
         try:
-            response = self._get(f"/series/{series_id}/chapter/{chapter_id}")
-            soup = BeautifulSoup(response.content, "html.parser")
+            url = f"{self.base_url}/series/{series_id}/chapter/{chapter_id}"
 
-            next_data = self._extract_next_data(soup)
-            pages = []
+            with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+                response = client.get(url, headers=self.headers)
+                soup = BeautifulSoup(response.content, "html.parser")
 
-            try:
-                props = next_data.get("props", {}).get("pageProps", {})
-                chapter = (
-                        props.get("chapter") or
-                        props.get("data") or
-                        {}
-                )
+                # Extract from __NEXT_DATA__
+                script = soup.find("script", id="__NEXT_DATA__")
+                if script:
+                    try:
+                        next_data = json.loads(script.string)
+                        props = next_data.get("props", {}).get("pageProps", {})
+                        chapter = props.get("chapter") or {}
 
-                images = (
-                        chapter.get("images") or
-                        chapter.get("pages") or
-                        chapter.get("chapter_images") or
-                        []
-                )
+                        images = chapter.get("images") or chapter.get("pages") or []
+                        pages = []
 
-                for img in images:
-                    if isinstance(img, str):
-                        pages.append(img)
-                    elif isinstance(img, dict):
-                        src = img.get("url") or img.get("src") or img.get("image")
-                        if src:
-                            pages.append(src)
+                        for img in images:
+                            if isinstance(img, str):
+                                pages.append(img)
+                            elif isinstance(img, dict):
+                                src = img.get("url") or img.get("src") or img.get("image")
+                                if src:
+                                    pages.append(src)
 
-                if pages:
-                    return {"status": response.status_code, "results": pages}
+                        if pages:
+                            return {"status": 200, "results": pages}
+                    except Exception as e:
+                        print(f"Page extraction failed: {e}")
 
-                all_text = json.dumps(next_data)
-                found = re.findall(r'https://[^"\'\\]+gg\.asuracomic\.net[^"\'\\]+\.(?:jpg|jpeg|png|webp)', all_text)
-                if found:
-                    seen = set()
-                    for url in found:
-                        if url not in seen:
-                            seen.add(url)
-                            pages.append(url)
-                    return {"status": response.status_code, "results": pages}
+                return {"status": "error", "results": "No pages found"}
 
-            except Exception:
-                pass
-
-            for img in soup.find_all("img"):
-                src = img.get("src") or img.get("data-src")
-                if not src:
-                    continue
-                if "gg.asuracomic.net" in src or f"{self.base_url}" in src:
-                    if any(skip in src.lower() for skip in ["logo", "icon", "avatar", "banner", "thumbnail"]):
-                        continue
-                    if src not in pages:
-                        pages.append(src)
-
-            return {"status": response.status_code, "results": pages}
-
-        except Exception as e:
-            return {"status": "error", "results": str(e)}
-
-    def latest(self, page: int = 1) -> Dict:
-        try:
-            response = self._get(f"/series?page={page}&order=update")
-            soup = BeautifulSoup(response.content, "html.parser")
-            next_data = self._extract_next_data(soup)
-            return self.search("", page)
-        except Exception as e:
-            return {"status": "error", "results": str(e)}
-
-    def genres(self, genre_slug: str, page: int = 1) -> Dict:
-        try:
-            return self.search("", page)
         except Exception as e:
             return {"status": "error", "results": str(e)}
