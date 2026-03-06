@@ -9,7 +9,7 @@ export const manhwas = [
         status: "Completed",
     },
     {
-        id: "the-regressed-mercenarys-machinations-5572dcca",
+        id: "the-regressed-mercenarys-machinations-2752a697",
         title: "The Regressed Mercenary's Machinations",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/243966/conversions/01J9KCWWJBA7Z7P1XWYXX9MEZC-optimized.webp",
