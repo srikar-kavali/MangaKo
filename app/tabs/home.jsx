@@ -435,33 +435,37 @@ const styles = StyleSheet.create({
 
     // Updates Grid (ComicK style - 2 columns, tall cards)
     grid: {
-        flexDirection: 'row', flexWrap: 'wrap',
-        paddingHorizontal: 8, gap: 3,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        paddingHorizontal: 8,
+        gap: 6,
     },
     gridCard: {
-        width: '49.3%',
-        marginBottom: 16,
+        width: '23.5%',
+        marginBottom: 12,
     },
     gridCover: {
         width: '100%',
-        height: 260,
+        height: 120,
         borderRadius: 6,
         backgroundColor: '#f0f0f0',
-        marginBottom: 6,
+        marginBottom: 4,
+    },
+    gridTitle: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#1a1a1a',
+        lineHeight: 15,
+        paddingHorizontal: 1,
     },
     sourceTag: {
         position: 'absolute',
-        top: 8, right: 8,
+        top: 4, right: 4,
         backgroundColor: 'rgba(0,0,0,0.6)',
-        paddingHorizontal: 6, paddingVertical: 2,
-        borderRadius: 4,
+        paddingHorizontal: 4, paddingVertical: 1,
+        borderRadius: 3,
     },
-    sourceTagText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-    gridTitle: {
-        fontSize: 13, fontWeight: '600',
-        color: '#1a1a1a', lineHeight: 18,
-        paddingHorizontal: 2,
-    },
+    sourceTagText: { color: '#fff', fontSize: 9, fontWeight: '700' },
 
     // Search Overlay
     searchOverlay: {
@@ -510,4 +514,5 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
     },
     recentText: { fontSize: 15, color: '#333' },
+
 });

@@ -381,7 +381,7 @@ export function searchHardcodedManhwa(query) {
     const q = query.toLowerCase().trim();
 
     if (!q) {
-        return manhwas.slice(0, 10);
+        return manhwas;
     }
 
     const results = manhwas.filter(m => {
