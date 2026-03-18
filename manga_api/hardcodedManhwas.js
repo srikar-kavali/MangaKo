@@ -1,6 +1,6 @@
 export const manhwas = [
     {
-        id: "solo-leveling-86452095",
+        id: "solo-leveling",
         title: "Solo Leveling",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/256/conversions/01J3BAXFBTABT3VNAV3RPNZK7S-optimized.webp",
@@ -9,7 +9,7 @@ export const manhwas = [
         status: "Completed",
     },
     {
-        id: "the-regressed-mercenarys-machinations-2752a697",
+        id: "the-regressed-mercenarys-machinations",
         title: "The Regressed Mercenary's Machinations",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/243966/conversions/01J9KCWWJBA7Z7P1XWYXX9MEZC-optimized.webp",
@@ -23,7 +23,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "reaper-of-the-drifting-moon-faf8ab2d",
+        id: "reaper-of-the-drifting-moon",
         title: "Reaper of the Drifting Moon",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/239/01J3BAPD40P84ZADHW46D5R6G7.webp",
@@ -32,7 +32,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "the-divine-demons-grand-ascension-6b7e1323",
+        id: "the-divine-demons-grand-ascension",
         title: "The Divine Demon’s Grand Ascension",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/365836/conversions/01K6ZFV8K4PJJPY2RGMA9RBXZP-optimized.webp",
@@ -43,7 +43,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "swordmasters-youngest-son-0e7e88a0",
+        id: "swordmasters-youngest-son",
         title: "Swordmaster’s Youngest Son",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/316729/conversions/01JWECBDM60FZXH7BMGCMXBDM5-optimized.webp",
@@ -52,7 +52,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "nano-machine-195bdee2",
+        id: "nano-machine",
         title: "Nano Machine",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/270399/conversions/01JKTBDEEZRNKTH6TRHPF5PCXM-optimized.webp",
@@ -61,7 +61,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "the-world-after-the-end-2e90dd53",
+        id: "the-world-after-the-end",
         title: "The World After The End",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/258/conversions/01J3BAY4P9AZ1Y9GGSAAP2HQ1K-optimized.webp",
@@ -70,7 +70,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "absolute-regression-cca62ec8",
+        id: "absolute-regression",
         title: "Absolute Regression",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/285/conversions/01J4J7N5E8J6GSEYWGV23ZFHDG-optimized.webp",
@@ -79,7 +79,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "after-the-moonlight-falls-trial-e52d21f5",
+        id: "after-the-moonlight-falls-trial",
         title: "After the Moonlight Falls",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/414121/conversions/01KGFT7YYCDJG5TTQF7R2E4JQB-optimized.webp",
@@ -94,7 +94,7 @@ export const manhwas = [
         status: "Ongoing (TRIAL)",
     },
     {
-        id: "childhood-friend-of-the-zenith-88571be1",
+        id: "childhood-friend-of-the-zenith",
         title: "Childhood Friend of the Zenith",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/292/conversions/01J6AR9XJKAQHET3AJYG9YPZ57-optimized.webp",
@@ -111,7 +111,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "absolute-sword-sense-a36574e9",
+        id: "absolute-sword-sense",
         title: "Absolute Sword Sense",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/46/conversions/c20e9fb0-optimized.webp",
@@ -120,7 +120,7 @@ export const manhwas = [
         status: "",
     },
     {
-        id: "reformation-of-the-deadbeat-noble-bc910f59",
+        id: "reformation-of-the-deadbeat-noble",
         title: "Reformation of the Deadbeat Noble",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/30/conversions/ffdf3337-optimized.webp",
@@ -129,7 +129,7 @@ export const manhwas = [
         status: "Hiatus",
     },
     {
-        id: "doctors-rebirth-028842fb",
+        id: "doctors-rebirth",
         title: "Doctor’s Rebirth",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/171/conversions/28bb0778-optimized.webp",
@@ -138,7 +138,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "star-embracing-swordmaster-f5ce1d5a",
+        id: "star-embracing-swordmaster",
         title: "Star-Embracing Swordmaster",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/392598/conversions/01KD47Q56HZDKZDW47YY077XZM-optimized.webp",
@@ -147,7 +147,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "the-return-of-the-crazy-demon-4fc0ce10",
+        id: "the-return-of-the-crazy-demon",
         title: "The Return of the Crazy Demon",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/79/1be5e62f.webp",
@@ -156,7 +156,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "omniscient-readers-viewpoint-a5875631",
+        id: "omniscient-readers-viewpoint",
         title: "Omniscient Reader’s Viewpoint",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/105/conversions/9b59fdec-optimized.webp",
@@ -165,7 +165,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "the-shepherd-wizard-2ddfc688",
+        id: "the-shepherd-wizard",
         title: "The Shepherd Wizard",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/420622/conversions/01KJ5S95BZ6DN91TXXWK4MHPE4-optimized.webp",
@@ -176,7 +176,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "bad-born-blood-52ee3258",
+        id: "bad-born-blood",
         title: "Bad Born Blood",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/287436/conversions/01JRPWTRPD1Y6F4BB3V7274741-optimized.webp",
@@ -185,7 +185,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "surviving-as-a-genius-on-borrowed-time-38d0dd47",
+        id: "surviving-as-a-genius-on-borrowed-time",
         title: "Surviving as a Genius on Borrowed Time",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/245477/conversions/01JA6F7WP3N7Q1QCQ0EWFVYNWY-optimized.webp",
@@ -194,7 +194,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "myst-might-mayhem-7260244b",
+        id: "myst-might-mayhem",
         title: "Myst, Might, Mayhem",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/237/conversions/01J3BANTCGYVH30PHD7H3PP3VK-optimized.webp",
@@ -203,7 +203,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "the-regressed-son-of-a-duke-is-an-assassin-213a2736",
+        id: "the-regressed-son-of-a-duke-is-an-assassin",
         title: "The Regressed Son of a Duke is an Assassin",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/220/conversions/a2db97ee-optimized.webp",
@@ -212,7 +212,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "eternally-regressing-knight-da9c3280",
+        id: "eternally-regressing-knight",
         title: "Eternally Regressing Knight",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/283983/conversions/01JQJ3VBMPVV7DMYJ5PBFY2N3Y-optimized.webp",
@@ -221,7 +221,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "revenge-of-the-iron-blooded-sword-hound-11cd2e89",
+        id: "revenge-of-the-iron-blooded-sword-hound",
         title: "Revenge of the Iron-Blooded Sword Hound",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/298/conversions/01J7TV2G7719CVSTSW9T9M6F31-optimized.webp",
@@ -230,7 +230,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "murim-psychopath-6e96b0b1",
+        id: "murim-psychopath",
         title: "Murim Psychopath",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/412789/conversions/01KG7XG0JEG0GNYJB1W7SJ4ASE-optimized.webp",
@@ -251,7 +251,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "magic-academys-genius-blinker-746506e3",
+        id: "magic-academys-genius-blinker",
         title: "Magic Academy's Genius Blinker",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/383425/conversions/01KANG1W84PM9DC02ANND3ZPET-optimized.webp",
@@ -260,7 +260,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "chronicles-of-the-lazy-sovereign-50a2590a",
+        id: "chronicles-of-the-lazy-sovereign",
         title: "Chronicles of the Lazy Sovereign",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/350642/conversions/01K4J8PW7132G1J8XXEM13N9MW-optimized.webp",
@@ -275,7 +275,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "murim-login-e67a92e7",
+        id: "murim-login",
         title: "Murim Login",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/273/conversions/01J3QWG0P2B1T5RX1RB9G9D3AY-optimized.webp",
@@ -284,7 +284,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "bloodhounds-regression-instinct-2c516289",
+        id: "bloodhounds-regression-instinct",
         title: "Bloodhound's Regression Instinct",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/314786/conversions/01JVNJXAC0NRT60FMFB8RATR3V-optimized.webp",
@@ -293,7 +293,7 @@ export const manhwas = [
         status: "Completed",
     },
     {
-        id: "the-greatest-estate-developer-288d1b0d",
+        id: "the-greatest-estate-developer",
         title: "The Greatest Estate Developer",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/163/conversions/fc6b81ea-optimized.webp",
@@ -302,7 +302,7 @@ export const manhwas = [
         status: "Completed",
     },
     {
-        id: "overpowered-sword-8918dd7a",
+        id: "overpowered-sword",
         title: "Overpowered Sword",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/107/conversions/7a7d5385-optimized.webp",
@@ -311,7 +311,7 @@ export const manhwas = [
         status: "Hiatus",
     },
     {
-        id: "return-of-the-mount-hua-sect-d26346a7",
+        id: "return-of-the-mount-hua-sect",
         title: "Return of the Mount Hua Sect",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/54/conversions/fb9b38c7-optimized.webp",
@@ -320,7 +320,7 @@ export const manhwas = [
         status: "Hiatus",
     },
     {
-        id: "pick-me-up-infinite-gacha-369a9ba7",
+        id: "pick-me-up-infinite-gacha",
         title: "Pick Me Up, Infinite Gacha",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/368311/conversions/01K7Y2D725FJ9QH0EH4Q9BX58W-optimized.webp",
@@ -329,7 +329,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "the-extras-academy-survival-guide-d93839d4",
+        id: "the-extras-academy-survival-guide",
         title: "The Extra’s Academy Survival Guide",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/409710/conversions/01KFESH64YW64BARWHNWBMKWC2-optimized.webp",
@@ -338,7 +338,7 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "ending-maker-7f76907e",
+        id: "ending-maker",
         title: "Ending Maker",
         source: "asura",
         cover: "https://gg.asuracomic.net/storage/media/74/conversions/96eeb909-optimized.webp",
@@ -361,7 +361,7 @@ export const manhwas = [
         status: "Hiatus",
     },
     {
-        id: "demonic-beast-hunter-survival-guide-0aba7a80",
+        id: "demonic-beast-hunter-survival-guide",
         title:"Demonic Beast Hunter Survival Guide",
         source:"asura",
         cover:"https://gg.asuracomic.net/storage/media/422029/conversions/01KJFKVSZXDHWY2BYPDA556VWC-optimized.webp",

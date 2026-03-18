@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { View, SafeAreaView, ScrollView, Image, StyleSheet, Pressable, Text, ActivityIndicator, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
-import { getMangaInfo, getChapterPages, proxied as proxiedAsura } from "../manga_api/asurascans";
 import { getMangapillManga, getChapterPagesMangapill, proxied as proxiedMangapill } from "../manga_api/mangapill";
 import { updateLastRead } from "./searchStorage";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const BACKEND = 'https://manga-jhklnzntz-srikar-kavalis-projects.vercel.app';
 
 const ReadChapter = () => {
     const params = useLocalSearchParams();
@@ -14,8 +14,8 @@ const ReadChapter = () => {
     const router = useRouter();
     const scrollRef = useRef(null);
 
-    const isAsura = source === 'asura' || seriesId;
-    const isMangapill = source === 'mangapill' || mangapillUrl;
+    const isAsura = source === 'asura' || !!seriesId;
+    const isMangapill = source === 'mangapill' || !!mangapillUrl;
 
     const [selectedChapterId, setSelectedChapterId] = useState(chapterId || chapterUrl || null);
     const [pages, setPages] = useState([]);
@@ -23,7 +23,6 @@ const ReadChapter = () => {
     const [loadingPages, setLoadingPages] = useState(false);
     const [loadingChapters, setLoadingChapters] = useState(false);
 
-    // Update last read when chapter changes
     useEffect(() => {
         if (selectedChapterId) {
             const storageKey = seriesId || mangapillUrl;
@@ -34,36 +33,27 @@ const ReadChapter = () => {
         }
     }, [selectedChapterId, seriesId, mangapillUrl]);
 
-    // Fetch pages for selected chapter
     useEffect(() => {
         let cancelled = false;
         (async () => {
+            if (!selectedChapterId) { setPages([]); return; }
+            setLoadingPages(true);
+            scrollRef.current?.scrollTo({ y: 0, animated: false });
             try {
-                if (!selectedChapterId) {
-                    setPages([]);
-                    return;
-                }
-
-                setLoadingPages(true);
-                scrollRef.current?.scrollTo({ y: 0, animated: false });
-
                 let urls = [];
-
                 if (isAsura && seriesId) {
-                    // AsuraScans
-                    urls = await getChapterPages(seriesId, selectedChapterId);
-                    urls = urls.map(u => proxiedAsura(u));
+                    const res = await fetch(
+                        `${BACKEND}/api/asura-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedChapterId)}`
+                    );
+                    const json = await res.json();
+                    urls = json.pages || [];
                 } else if (isMangapill) {
-                    // MangaPill
-                    urls = await getChapterPagesMangapill(selectedChapterId);
-                    urls = (Array.isArray(urls) ? urls : []).map(u => proxiedMangapill(u));
+                    const raw = await getChapterPagesMangapill(selectedChapterId);
+                    urls = (Array.isArray(raw) ? raw : []).map(u => proxiedMangapill(u));
                 }
-
                 if (!cancelled) {
                     setPages(urls);
-                    setTimeout(() => {
-                        scrollRef.current?.scrollTo({ y: 0, animated: false });
-                    }, 100);
+                    setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: false }), 100);
                 }
             } catch (e) {
                 console.error("Failed to load chapter pages:", e);
@@ -75,35 +65,31 @@ const ReadChapter = () => {
         return () => { cancelled = true; };
     }, [selectedChapterId, seriesId, mangapillUrl, source]);
 
-    // Fetch chapters list
     useEffect(() => {
         let cancelled = false;
         (async () => {
+            if (!seriesId && !mangapillUrl) return;
+            setLoadingChapters(true);
             try {
-                if (!seriesId && !mangapillUrl) return;
-
-                setLoadingChapters(true);
-
                 let chapters = [];
-
                 if (isAsura && seriesId) {
-                    // AsuraScans
-                    const data = await getMangaInfo(seriesId);
-                    chapters = (data.chapters || []).map(ch => ({
+                    const res = await fetch(
+                        `${BACKEND}/api/asura-chapters?seriesId=${encodeURIComponent(seriesId)}`
+                    );
+                    const json = await res.json();
+                    chapters = (json.chapters || []).map(ch => ({
                         id: ch.id,
-                        title: ch.title,
-                        number: parseFloat(ch.id.match(/(\d+(\.\d+)?)/)?.[1] || 0)
+                        title: `Chapter ${ch.id}`,
+                        number: ch.number ?? parseFloat(ch.id) ?? 0,
                     }));
                 } else if (isMangapill && mangapillUrl) {
-                    // MangaPill - FIXED TYPO
                     const data = await getMangapillManga(mangapillUrl);
                     chapters = (data.chapters || []).map(ch => ({
                         id: ch.url,
                         title: (() => {
                             const slug = String(ch.url).split("/").filter(Boolean).pop() || "";
                             const m = slug.match(/(\d+(\.\d+)?)/);
-                            const n = m ? m[1] : "–";
-                            return `Ch. ${n}`;
+                            return `Ch. ${m ? m[1] : '–'}`;
                         })(),
                         number: (() => {
                             const slug = String(ch.url).split("/").filter(Boolean).pop() || "";
@@ -112,14 +98,11 @@ const ReadChapter = () => {
                         })()
                     }));
                 }
-
-                // Sort chapters ascending
                 chapters.sort((a, b) => a.number - b.number);
-
                 if (!cancelled) {
                     setAllChapters(chapters);
                     if (!selectedChapterId && chapters.length) {
-                        setSelectedChapterId(chapters[chapters.length - 1].id);
+                        setSelectedChapterId(chapters[0].id);
                     }
                 }
             } catch (e) {
@@ -134,7 +117,7 @@ const ReadChapter = () => {
     const idx = allChapters.findIndex(ch => ch.id === selectedChapterId);
     const hasPrev = idx > 0;
     const hasNext = idx >= 0 && idx < allChapters.length - 1;
-    const titleLabel = idx >= 0 ? allChapters[idx].title : "Chapter";
+    const titleLabel = idx >= 0 ? allChapters[idx].title : (chapterId ? `Chapter ${chapterId}` : "Chapter");
 
     return (
         <SafeAreaView style={styles.container}>
@@ -145,16 +128,12 @@ const ReadChapter = () => {
                 <Text style={styles.headerText}>{titleLabel}</Text>
             </View>
 
-            <ScrollView
-                ref={scrollRef}
-                contentContainerStyle={styles.scroll}
-                showsVerticalScrollIndicator={false}
-            >
+            <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
                 {loadingPages && (
-                    <ActivityIndicator size="large" color="#ccc" style={{ marginVertical: 16 }} />
+                    <ActivityIndicator size="large" color="#ccc" style={{ marginVertical: 40 }} />
                 )}
 
-                {pages.map((url, i) => (
+                {!loadingPages && pages.map((url, i) => (
                     <Image
                         key={url || i}
                         source={{ uri: url }}
@@ -165,20 +144,16 @@ const ReadChapter = () => {
                 ))}
 
                 {!loadingPages && pages.length === 0 && (
-                    <Text style={{ color: "#888", marginTop: 16, textAlign: 'center' }}>No pages found.</Text>
+                    <Text style={styles.noPages}>No pages found for this chapter.</Text>
                 )}
 
                 <View style={styles.pagerRow}>
                     <Pressable
                         disabled={!hasPrev}
-                        onPress={() => {
-                            if (hasPrev) {
-                                setSelectedChapterId(allChapters[idx - 1].id);
-                            }
-                        }}
+                        onPress={() => hasPrev && setSelectedChapterId(allChapters[idx - 1].id)}
                         style={[styles.pagerBtn, !hasPrev && styles.pagerBtnDisabled]}
                     >
-                        <Text style={styles.pagerText}>Previous</Text>
+                        <Text style={styles.pagerText}>← Previous</Text>
                     </Pressable>
 
                     <Text style={styles.pageNum}>
@@ -187,12 +162,10 @@ const ReadChapter = () => {
 
                     {hasNext ? (
                         <Pressable
-                            onPress={() => {
-                                setSelectedChapterId(allChapters[idx + 1].id);
-                            }}
+                            onPress={() => setSelectedChapterId(allChapters[idx + 1].id)}
                             style={styles.pagerBtn}
                         >
-                            <Text style={styles.pagerText}>Next</Text>
+                            <Text style={styles.pagerText}>Next →</Text>
                         </Pressable>
                     ) : (
                         <Pressable
@@ -213,46 +186,29 @@ export default ReadChapter;
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#000' },
     header: {
-        padding: 12,
-        backgroundColor: '#111',
-        borderBottomWidth: 1,
-        borderBottomColor: '#333',
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
+        padding: 12, backgroundColor: '#111',
+        borderBottomWidth: 1, borderBottomColor: '#333',
+        flexDirection: 'row', alignItems: 'center', gap: 8,
     },
     logoImage: { width: 36, height: 36, resizeMode: 'contain' },
-    headerText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-    scroll: {
-        alignItems: 'stretch',
-        paddingBottom: 24,
-        backgroundColor: '#000'
-    },
+    headerText: { color: '#fff', fontSize: 16, fontWeight: '600', flex: 1 },
+    scroll: { alignItems: 'stretch', paddingBottom: 24, backgroundColor: '#000' },
     pageImage: {
         width: SCREEN_WIDTH * 0.75,
         alignSelf: 'center',
         height: undefined,
-        aspectRatio: 0.7, // Standard manga page ratio
+        aspectRatio: 0.7,
         marginBottom: 2,
         backgroundColor: '#000',
     },
+    noPages: { color: "#888", marginTop: 40, textAlign: 'center', fontSize: 15 },
     pagerRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        marginVertical: 16,
-        paddingHorizontal: 12,
-        width: '100%',
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, marginVertical: 16, paddingHorizontal: 12, width: '100%',
     },
     pagerBtn: {
-        flex: 1,
-        backgroundColor: '#1e1e1e',
-        paddingVertical: 12,
-        borderRadius: 6,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#333',
+        flex: 1, backgroundColor: '#1e1e1e', paddingVertical: 12,
+        borderRadius: 6, alignItems: 'center', borderWidth: 1, borderColor: '#333',
     },
     pagerBtnDisabled: { opacity: 0.4 },
     pagerText: { color: '#fff', fontWeight: '600' },

@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, Image, StyleSheet, ActivityIndicator, ScrollView, Pressable, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
-import { getMangaInfo, proxied as proxiedAsura } from '../manga_api/asurascans';
+import { proxied as proxiedAsura } from '../manga_api/asurascans';
 import { getMangapillManga, proxied as proxiedMangapill } from '../manga_api/mangapill';
-import {searchHardcodedManhwa, getManhwaById} from '../manga_api/hardcodedManhwas';
+import { getManhwaById } from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, markCompleted, unmarkCompleted, getCompleted } from "./searchStorage";
 
 const PAGE_SIZE = 50;
+const BACKEND = 'https://manga-jhklnzntz-srikar-kavalis-projects.vercel.app';
 
 function extractChapterNumber(ch) {
     const s = ch?.id ?? ch?.title ?? ch?.url ?? '';
@@ -30,21 +31,15 @@ const MangaDetails = () => {
     const [page, setPage] = useState(1);
     const [isFavorite, setIsFavorite] = useState(false);
     const [isCompleted, setIsCompleted] = useState(false);
-
     const [mangaData, setMangaData] = useState(null);
     const [chapters, setChapters] = useState([]);
     const [lastReadChapter, setLastReadChapter] = useState(null);
 
-    // Determine which source we're using
-    const isAsura = source === 'asura' || seriesId;
-    const isMangapill = source === 'mangapill' || mangapillUrl;
+    const isAsura = source === 'asura' || !!seriesId;
+    const isMangapill = source === 'mangapill' || !!mangapillUrl;
 
-    // Storage key for favorites/progress
-    const storageKey = useMemo(() => {
-        return seriesId || mangapillUrl;
-    }, [seriesId, mangapillUrl]);
+    const storageKey = useMemo(() => seriesId || mangapillUrl, [seriesId, mangapillUrl]);
 
-    // Load last read chapter
     useEffect(() => {
         async function loadBookmark() {
             if (!storageKey) return;
@@ -58,7 +53,6 @@ const MangaDetails = () => {
         loadBookmark();
     }, [storageKey]);
 
-    // Load completed status
     useEffect(() => {
         (async () => {
             const completedList = await getCompleted();
@@ -66,18 +60,14 @@ const MangaDetails = () => {
         })();
     }, [storageKey]);
 
-    // Fetch manga details
     useEffect(() => {
         let cancelled = false;
         (async () => {
             setLoading(true);
             try {
                 if (isAsura && seriesId) {
-                    // First, load hardcoded data immediately
                     const hardcoded = getManhwaById(seriesId);
-
                     if (hardcoded && !cancelled) {
-                        // Set hardcoded data right away
                         setMangaData({
                             title: hardcoded.title,
                             description: hardcoded.description || 'No description available.',
@@ -86,23 +76,19 @@ const MangaDetails = () => {
                             status: hardcoded.status || 'Unknown',
                         });
                     }
-
-                    // Try to fetch chapters from API (may fail)
                     try {
-                        const data = await getMangaInfo(seriesId);
-                        if (data && data.chapters && !cancelled) {
-                            setChapters(data.chapters || []);
+                        const res = await fetch(
+                            `${BACKEND}/api/asura-chapters?seriesId=${encodeURIComponent(seriesId)}`
+                        );
+                        const json = await res.json();
+                        if (!cancelled && json.chapters) {
+                            setChapters(json.chapters);
                         }
                     } catch (err) {
-                        console.log('AsuraScans API failed, showing without chapters:', err.message);
-                        // Chapters remain empty, but we still have hardcoded metadata
-                        if (!cancelled) {
-                            setChapters([]);
-                        }
+                        console.log('Failed to fetch chapters from backend:', err.message);
+                        if (!cancelled) setChapters([]);
                     }
-
                 } else if (isMangapill && mangapillUrl) {
-                    // Fetch from MangaPill (same as before)
                     const data = await getMangapillManga(mangapillUrl);
                     if (!cancelled) {
                         setMangaData(data);
@@ -122,13 +108,11 @@ const MangaDetails = () => {
         return () => { cancelled = true; };
     }, [seriesId, mangapillUrl, source]);
 
-    // Load favorites
     useEffect(() => {
         (async () => {
             try {
                 const favs = await getFavorites();
-                const exists = favs.some(f => f.url === storageKey);
-                setIsFavorite(exists);
+                setIsFavorite(favs.some(f => f.url === storageKey));
             } catch (err) {
                 console.log("Failed to load favorites", err);
             }
@@ -142,10 +126,9 @@ const MangaDetails = () => {
                 title: mangaData?.title || "Manga",
                 description: mangaData?.description || "No description available.",
                 coverUrl: getCoverUrl(),
-                source: isAsura ? 'asura' : 'mangapill',  // ← ADD THIS LINE
-                cover: getCoverUrl(),  // ← ADD THIS LINE (for home page)
+                source: isAsura ? 'asura' : 'mangapill',
+                cover: getCoverUrl(),
             };
-
             if (isFavorite) {
                 await removeFavorite(storageKey);
                 setIsFavorite(false);
@@ -161,13 +144,10 @@ const MangaDetails = () => {
     const handleChapterPress = async (chapter) => {
         try {
             const chapterId = isAsura ? chapter.id : chapter.url;
-
             if (storageKey) {
                 await saveLastReadChapter(storageKey, chapterId);
                 setLastReadChapter(chapterId);
             }
-
-            // Navigate with appropriate params based on source
             if (isAsura) {
                 router.push(
                     `/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(chapter.id)}&source=asura`
@@ -184,14 +164,10 @@ const MangaDetails = () => {
 
     const getCoverUrl = () => {
         if (!mangaData) return null;
-        if (isAsura) {
-            return mangaData.image ? proxiedAsura(mangaData.image) : null;
-        } else {
-            return mangaData.cover ? proxiedMangapill(mangaData.cover) : null;
-        }
+        if (isAsura) return mangaData.image ? proxiedAsura(mangaData.image) : null;
+        return mangaData.cover ? proxiedMangapill(mangaData.cover) : null;
     };
 
-    // Chapter sorting
     const sortedChapters = useMemo(() => {
         const arr = [...chapters];
         arr.sort((a, b) => {
@@ -212,17 +188,10 @@ const MangaDetails = () => {
     const pagedChapters = sortedChapters.slice(startIdx, endIdx);
 
     const goPrevPage = () => {
-        if (page > 1) {
-            setPage(p => p - 1);
-            scrollRef.current?.scrollTo({ y: 0, animated: true });
-        }
+        if (page > 1) { setPage(p => p - 1); scrollRef.current?.scrollTo({ y: 0, animated: true }); }
     };
-
     const goNextPage = () => {
-        if (page < totalPages) {
-            setPage(p => p + 1);
-            scrollRef.current?.scrollTo({ y: 0, animated: true });
-        }
+        if (page < totalPages) { setPage(p => p + 1); scrollRef.current?.scrollTo({ y: 0, animated: true }); }
     };
 
     if (loading) {
@@ -253,31 +222,19 @@ const MangaDetails = () => {
                                     <Text style={styles.sourceBadgeText}>from {sourceLabel}</Text>
                                 </View>
                             </View>
-
                             <Pressable onPress={toggleFavorite}>
-                                <Ionicons
-                                    name={isFavorite ? "star" : "star-outline"}
-                                    size={28}
-                                    color="#FFD700"
-                                />
+                                <Ionicons name={isFavorite ? "star" : "star-outline"} size={28} color="#FFD700" />
                             </Pressable>
-
                             <Pressable
                                 onPress={async () => {
-                                    if (isCompleted) {
-                                        await unmarkCompleted(storageKey);
-                                        setIsCompleted(false);
-                                    } else {
-                                        await markCompleted(storageKey);
-                                        setIsCompleted(true);
-                                    }
+                                    if (isCompleted) { await unmarkCompleted(storageKey); setIsCompleted(false); }
+                                    else { await markCompleted(storageKey); setIsCompleted(true); }
                                 }}
                                 style={styles.completedBtn}
                             >
                                 <Ionicons
                                     name={isCompleted ? "checkmark-circle" : "checkmark-circle-outline"}
-                                    size={28}
-                                    color="#4CAF50"
+                                    size={28} color="#4CAF50"
                                 />
                             </Pressable>
                         </View>
@@ -287,13 +244,9 @@ const MangaDetails = () => {
                                 style={styles.continueBtn}
                                 onPress={() => {
                                     if (isAsura) {
-                                        router.push(
-                                            `/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(lastReadChapter)}&source=asura`
-                                        );
+                                        router.push(`/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(lastReadChapter)}&source=asura`);
                                     } else {
-                                        router.push(
-                                            `/ReadChapter?chapterUrl=${encodeURIComponent(lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`
-                                        );
+                                        router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
                                     }
                                 }}
                             >
@@ -309,7 +262,7 @@ const MangaDetails = () => {
                     <Text style={styles.description}>{description}</Text>
                 </ScrollView>
 
-                {mangaData?.genres && mangaData.genres.length > 0 && (
+                {mangaData?.genres?.length > 0 && (
                     <>
                         <Text style={styles.sectionTitle}>Genres</Text>
                         <View style={styles.tagContainer}>
@@ -323,7 +276,7 @@ const MangaDetails = () => {
                 )}
 
                 <View style={styles.chapterHeader}>
-                    <Text style={styles.sectionTitle}>Chapters ({sourceLabel})</Text>
+                    <Text style={styles.sectionTitle}>Chapters ({total})</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                         <Text style={styles.rangeText}>
                             {total ? `${startIdx + 1}–${endIdx} of ${total}` : '0 of 0'}
@@ -340,7 +293,7 @@ const MangaDetails = () => {
                     <View style={styles.noChaptersBox}>
                         <Ionicons name="alert-circle-outline" size={20} color="#856404" />
                         <Text style={styles.noChaptersText}>
-                            Chapters unavailable. AsuraScans API is currently not accessible.
+                            No chapters found in chapter_data.json for this series.
                         </Text>
                     </View>
                 )}
@@ -355,27 +308,19 @@ const MangaDetails = () => {
                     </Pressable>
                 </View>
 
-                {!!pagedChapters.length ? (
+                {pagedChapters.length > 0 ? (
                     pagedChapters.map((chapter) => {
                         const chapterId = isAsura ? chapter.id : chapter.url;
                         const isLastRead = lastReadChapter === chapterId;
-                        const chapterTitle = displayChapterTitle(chapter);
-
                         return (
                             <Pressable
                                 key={chapterId}
                                 onPress={() => handleChapterPress(chapter)}
-                                style={[
-                                    styles.chapterRow,
-                                    isLastRead && styles.chapterRowLastRead
-                                ]}
+                                style={[styles.chapterRow, isLastRead && styles.chapterRowLastRead]}
                             >
                                 <View style={styles.chapterInfo}>
-                                    <Text style={[
-                                        styles.chapterTitle,
-                                        isLastRead && styles.chapterTitleLastRead
-                                    ]}>
-                                        {chapterTitle}
+                                    <Text style={[styles.chapterTitle, isLastRead && styles.chapterTitleLastRead]}>
+                                        {displayChapterTitle(chapter)}
                                     </Text>
                                     {isLastRead && (
                                         <View style={styles.lastReadBadge}>
@@ -410,115 +355,43 @@ export default MangaDetails;
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: '#fff' },
     header: {
-        backgroundColor: '#fff',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderBottomColor: '#ddd',
-        borderBottomWidth: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
+        backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 16,
+        borderBottomColor: '#ddd', borderBottomWidth: 1,
+        flexDirection: 'row', alignItems: 'center',
     },
     logoImage: { width: 40, height: 40 },
     container: { padding: 16, paddingBottom: 60 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     headerSection: { flexDirection: 'row', marginBottom: 16 },
-    cover: {
-        width: 110, height: 160, resizeMode: 'cover',
-        borderRadius: 8, marginRight: 16, backgroundColor: '#eee',
-    },
+    cover: { width: 110, height: 160, resizeMode: 'cover', borderRadius: 8, marginRight: 16, backgroundColor: '#eee' },
     metaInfo: { flex: 1, justifyContent: 'center' },
     title: { fontSize: 22, fontWeight: 'bold', marginBottom: 8, color: '#1E1E1E' },
     sourceBadge: { backgroundColor: '#eee', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'flex-start' },
     sourceBadgeText: { fontSize: 12, color: '#555' },
     sectionTitle: { fontSize: 18, fontWeight: '600', marginTop: 20, marginBottom: 8, color: '#1E1E1E' },
-    descriptionBox: {
-        maxHeight: 200, borderWidth: 1, borderColor: '#eee',
-        borderRadius: 6, padding: 10, backgroundColor: '#fdfdfd',
-    },
+    descriptionBox: { maxHeight: 200, borderWidth: 1, borderColor: '#eee', borderRadius: 6, padding: 10, backgroundColor: '#fdfdfd' },
     description: { fontSize: 15, lineHeight: 22, color: '#444' },
     tagContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    tag: {
-        backgroundColor: '#e0e0e0', paddingHorizontal: 10, paddingVertical: 5,
-        borderRadius: 16, marginRight: 8, marginBottom: 8,
-    },
+    tag: { backgroundColor: '#e0e0e0', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16, marginRight: 8, marginBottom: 8 },
     tagText: { fontSize: 13, color: '#333' },
-    chapterHeader: {
-        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        marginTop: 20, marginBottom: 8,
-    },
+    chapterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, marginBottom: 8 },
     toggleOrder: { color: '#007AFF', fontSize: 14 },
     rangeText: { color: '#666', fontSize: 12 },
-    chapterRow: {
-        paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1,
-        borderBottomColor: '#eee', backgroundColor: '#f9f9f9',
-        borderRadius: 6, marginBottom: 6,
-    },
-    chapterRowLastRead: {
-        backgroundColor: '#f0f9ff',
-        borderLeftWidth: 4,
-        borderLeftColor: '#4CAF50',
-    },
+    chapterRow: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#f9f9f9', borderRadius: 6, marginBottom: 6 },
+    chapterRowLastRead: { backgroundColor: '#f0f9ff', borderLeftWidth: 4, borderLeftColor: '#4CAF50' },
     chapterInfo: { flexDirection: 'column' },
     chapterTitle: { fontSize: 16, color: '#000', fontWeight: '500' },
     chapterTitleLastRead: { color: '#2E7D32' },
-    lastReadBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 4,
-    },
-    lastReadText: {
-        fontSize: 12,
-        color: '#4CAF50',
-        fontWeight: '600',
-        marginLeft: 4,
-    },
-    pagerRow: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        gap: 12, marginVertical: 8,
-    },
-    pagerBtn: {
-        flex: 1, backgroundColor: '#efefef', paddingVertical: 10,
-        borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#ddd',
-    },
+    lastReadBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    lastReadText: { fontSize: 12, color: '#4CAF50', fontWeight: '600', marginLeft: 4 },
+    pagerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginVertical: 8 },
+    pagerBtn: { flex: 1, backgroundColor: '#efefef', paddingVertical: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#ddd' },
     pagerBtnDisabled: { opacity: 0.4 },
     pagerText: { color: '#111', fontWeight: '600' },
     pageNum: { minWidth: 90, textAlign: 'center', color: '#444' },
-    continueBtn: {
-        marginTop: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 16,
-        backgroundColor: '#4CAF50',
-        borderRadius: 8,
-        alignItems: 'center',
-        flexDirection: 'row',
-        justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 2,
-    },
-    continueBtnText: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    completedBtn: {
-        marginLeft: 12,
-    },
-    noChaptersBox: {
-        padding: 12,
-        backgroundColor: '#fff3cd',
-        borderRadius: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginVertical: 8,
-    },
-    noChaptersText: {
-        flex: 1,
-        fontSize: 13,
-        color: '#856404',
-        lineHeight: 18,
-    },
+    continueBtn: { marginTop: 8, paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#4CAF50', borderRadius: 8, alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
+    continueBtnText: { color: 'white', fontSize: 14, fontWeight: '600' },
+    completedBtn: { marginLeft: 12 },
+    noChaptersBox: { padding: 12, backgroundColor: '#fff3cd', borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 8 },
+    noChaptersText: { flex: 1, fontSize: 13, color: '#856404', lineHeight: 18 },
 });
