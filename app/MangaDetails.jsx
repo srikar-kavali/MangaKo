@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, markCompleted, unmarkCompleted, getCompleted } from "./searchStorage";
 
 const PAGE_SIZE = 50;
-const BACKEND = 'https://manga-jhklnzntz-srikar-kavalis-projects.vercel.app';
+const BACKEND = process.env.EXPO_PUBLIC_API_URL
 
 function extractChapterNumber(ch) {
     const s = ch?.id ?? ch?.title ?? ch?.url ?? '';

@@ -6,7 +6,7 @@ import { getMangapillManga, getChapterPagesMangapill, proxied as proxiedMangapil
 import { updateLastRead } from "./searchStorage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const BACKEND = 'https://manga-jhklnzntz-srikar-kavalis-projects.vercel.app';
+const BACKEND = process.env.EXPO_PUBLIC_API_URL;
 
 const ReadChapter = () => {
     const params = useLocalSearchParams();
