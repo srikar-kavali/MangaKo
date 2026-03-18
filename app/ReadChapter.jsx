@@ -6,7 +6,7 @@ import { getMangapillManga, getChapterPagesMangapill, proxied as proxiedMangapil
 import { updateLastRead } from "./searchStorage";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const BACKEND = process.env.EXPO_PUBLIC_API_URL;
+const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API;
 
 const ReadChapter = () => {
     const params = useLocalSearchParams();

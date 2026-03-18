@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, markCompleted, unmarkCompleted, getCompleted } from "./searchStorage";
 
 const PAGE_SIZE = 50;
-const BACKEND = process.env.EXPO_PUBLIC_API_URL
+const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API
 console.log('Backend URL:', BACKEND);
 
 function extractChapterNumber(ch) {
