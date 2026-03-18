@@ -46,7 +46,7 @@ const ReadChapter = () => {
                         `${BACKEND}/api/asura-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedChapterId)}`
                     );
                     const json = await res.json();
-                    urls = json.pages || [];
+                    urls = (json.pages || []).map(u => `${BACKEND}/api/image_proxy?url=${encodeURIComponent(u)}`);
                 } else if (isMangapill) {
                     const raw = await getChapterPagesMangapill(selectedChapterId);
                     urls = (Array.isArray(raw) ? raw : []).map(u => proxiedMangapill(u));
