@@ -10,6 +10,7 @@ import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLast
 
 const PAGE_SIZE = 50;
 const BACKEND = process.env.EXPO_PUBLIC_API_URL
+console.log('Backend URL:', BACKEND);
 
 function extractChapterNumber(ch) {
     const s = ch?.id ?? ch?.title ?? ch?.url ?? '';
