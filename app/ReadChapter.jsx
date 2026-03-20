@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-import { View, SafeAreaView, ScrollView, Image, StyleSheet, Pressable, Text, ActivityIndicator, Dimensions } from 'react-native';
+import { View, SafeAreaView, ScrollView, Image, StyleSheet, Pressable, Text, ActivityIndicator, Dimensions, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { getMangapillManga, getChapterPagesMangapill, proxied as proxiedMangapill } from "../manga_api/mangapill";
 import { updateLastRead } from "./searchStorage";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const getImageWidth = () => {
+    if (Platform.OS === 'web') return window.innerWidth;
+    return Dimensions.get('window').width;
+};
+
 const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API;
 
 const ReadChapter = () => {
@@ -22,6 +26,15 @@ const ReadChapter = () => {
     const [allChapters, setAllChapters] = useState([]);
     const [loadingPages, setLoadingPages] = useState(false);
     const [loadingChapters, setLoadingChapters] = useState(false);
+    const [imageSizes, setImageSizes] = useState({});
+    const [screenWidth, setScreenWidth] = useState(getImageWidth());
+
+    useEffect(() => {
+        if (Platform.OS !== 'web') return;
+        const handleResize = () => setScreenWidth(window.innerWidth);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     useEffect(() => {
         if (selectedChapterId) {
@@ -133,14 +146,39 @@ const ReadChapter = () => {
                     <ActivityIndicator size="large" color="#ccc" style={{ marginVertical: 40 }} />
                 )}
 
-                {!loadingPages && pages.map((url, i) => (
-                    <Image
-                        key={url || i}
-                        source={{ uri: url }}
-                        style={styles.pageImage}
-                        resizeMode="contain"
-                        onError={(e) => console.warn("Image error:", url, e.nativeEvent?.error)}
-                    />
+                {!loadingPages && pages.map((url, index) => (
+                    <View key={index} style={styles.pageWrapper}>
+                        {Platform.OS === 'web' ? (
+                            <img
+                                src={url}
+                                style={{
+                                    width: '100%',
+                                    height: 'auto',
+                                    display: 'block',
+                                    marginBottom: 2,
+                                    backgroundColor: '#000',
+                                }}
+                            />
+                        ) : (
+                            <Image
+                                source={{ uri: url }}
+                                style={{
+                                    width: '100%',
+                                    height: imageSizes[index]
+                                        ? screenWidth * 0.75 / imageSizes[index]
+                                        : screenWidth * 0.75 * 1.4,
+                                    marginBottom: 2,
+                                    backgroundColor: '#000',
+                                }}
+                                onLoad={(e) => {
+                                    const src = e.nativeEvent?.source;
+                                    if (src?.width && src?.height) {
+                                        setImageSizes(prev => ({ ...prev, [index]: src.width / src.height }));
+                                    }
+                                }}
+                            />
+                        )}
+                    </View>
                 ))}
 
                 {!loadingPages && pages.length === 0 && (
@@ -193,14 +231,6 @@ const styles = StyleSheet.create({
     logoImage: { width: 36, height: 36, resizeMode: 'contain' },
     headerText: { color: '#fff', fontSize: 16, fontWeight: '600', flex: 1 },
     scroll: { alignItems: 'stretch', paddingBottom: 24, backgroundColor: '#000' },
-    pageImage: {
-        width: SCREEN_WIDTH * 0.75,
-        alignSelf: 'center',
-        height: undefined,
-        aspectRatio: 0.7,
-        marginBottom: 2,
-        backgroundColor: '#000',
-    },
     noPages: { color: "#888", marginTop: 40, textAlign: 'center', fontSize: 15 },
     pagerRow: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -213,4 +243,9 @@ const styles = StyleSheet.create({
     pagerBtnDisabled: { opacity: 0.4 },
     pagerText: { color: '#fff', fontWeight: '600' },
     pageNum: { minWidth: 90, textAlign: 'center', color: '#aaa' },
+    pageWrapper: {
+        width: '75%',
+        alignSelf: 'center',
+        marginBottom: 2,
+    },
 });

@@ -29,11 +29,9 @@ const Home = () => {
     const abortRef = useRef(null);
     const searchInputRef = useRef(null);
 
-    // Load favorites on mount
     useEffect(() => {
         (async () => {
             setRecentSearches(await getRecentSearches());
-
             const favs = await getFavorites();
             const followedWithProgress = await Promise.all(
                 favs.map(async (fav) => {
@@ -46,7 +44,6 @@ const Home = () => {
         })();
     }, []);
 
-    // Load browse content
     useEffect(() => {
         (async () => {
             setLoadingBrowse(true);
@@ -68,7 +65,6 @@ const Home = () => {
         })();
     }, []);
 
-    // Search logic
     useEffect(() => {
         const q = query.trim();
         const qLower = q.toLowerCase();
@@ -138,10 +134,12 @@ const Home = () => {
     };
 
     const openManga = (item) => {
-        if (item.source === 'asura') {
-            router.push(`/MangaDetails?seriesId=${encodeURIComponent(item.id || item.url)}&source=asura`);
+        const src = item.source || getSource(item);
+        const id = item.id || item.url;
+        if (src === 'asura') {
+            router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=asura`);
         } else {
-            router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(item.id || item.url)}&source=mangapill`);
+            router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(id)}&source=mangapill`);
         }
     };
 
@@ -169,19 +167,42 @@ const Home = () => {
         return item.source === 'asura' ? proxiedAsura(url) : proxiedMangapill(url);
     };
 
+    const getSource = (manga) => {
+        if (manga.source) return manga.source;
+        if (String(manga.url || manga.id || '').includes('/') || String(manga.url || manga.id || '').includes('http')) return 'mangapill';
+        return 'asura';
+    };
+
+    const openLastReadChapter = (manga) => {
+        if (!manga.lastReadChapter) return;
+        const src = getSource(manga);
+        const id = manga.url || manga.id;
+        if (src === 'asura') {
+            router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=asura`);
+        } else {
+            router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(id)}&source=mangapill`);
+        }
+    };
+
+    const formatChapterLabel = (chapterId, source) => {
+        if (!chapterId) return '';
+        if (source === 'asura') return `Ch. ${chapterId}`;
+        // Extract last number from the URL — chapter-1175 not chapters/2-...
+        const slug = String(chapterId).split('/').filter(Boolean).pop() || '';
+        const m = slug.match(/(\d+(\.\d+)?)/);
+        return m ? `Ch. ${m[1]}` : 'Continue';
+    };
+
     return (
         <SafeAreaView style={styles.screen}>
-            {/* Header */}
             <View style={styles.header}>
                 <View style={styles.logoLeft}>
                     <Image source={dragonLogo} style={styles.logoImage} />
                     <Text style={styles.logoText}>Mangako</Text>
                 </View>
-
                 <Pressable style={styles.headerIcon} onPress={openSearch}>
                     <Ionicons name="search" size={22} color="#333" />
                 </Pressable>
-
                 <Pressable style={styles.headerIcon} onPress={() => setDropdownVisible(!dropdownVisible)}>
                     <Ionicons name="person-circle-outline" size={28} color="#333" />
                 </Pressable>
@@ -203,10 +224,8 @@ const Home = () => {
 
             <View style={styles.borderLine} />
 
-            {/* Main Scroll */}
             <ScrollView style={styles.mainScroll} showsVerticalScrollIndicator={false}>
 
-                {/* Continue Reading */}
                 {followedManga.length > 0 && (
                     <View style={styles.section}>
                         <View style={styles.sectionHeader}>
@@ -221,37 +240,27 @@ const Home = () => {
                             contentContainerStyle={styles.horizontalList}
                         >
                             {followedManga.map((manga, idx) => (
+                                // In the continueCard, replace the current layout with:
                                 <Pressable
                                     key={`${manga.url}-${idx}`}
                                     style={styles.continueCard}
-                                    onPress={() => openManga(manga)}
+                                    onPress={() => openLastReadChapter(manga)}  // whole card goes to chapter
                                 >
-                                    <Image
-                                        source={{ uri: getProxiedImage(manga) }}
-                                        style={styles.continueCover}
-                                    />
-                                    {manga.lastReadChapter && (
-                                        <View style={styles.chapterBadge}>
-                                            <Text style={styles.chapterBadgeText} numberOfLines={1}>
-                                                {manga.lastReadChapter}
-                                            </Text>
-                                        </View>
-                                    )}
-                                    <Text style={styles.continueTitle} numberOfLines={2}>
-                                        {manga.title}
+                                    <Image source={{ uri: getProxiedImage(manga) }} style={styles.continueCover} />
+                                    <Text style={styles.continueChapter}>
+                                        {formatChapterLabel(manga.lastReadChapter, manga.source)}
                                     </Text>
+                                    <Text style={styles.continueTitle} numberOfLines={2}>{manga.title}</Text>
                                 </Pressable>
                             ))}
                         </ScrollView>
                     </View>
                 )}
 
-                {/* Browse / Updates Grid */}
                 <View style={styles.section}>
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Updates</Text>
                     </View>
-
                     {loadingBrowse ? (
                         <ActivityIndicator size="large" style={{ marginTop: 30 }} />
                     ) : (
@@ -262,14 +271,17 @@ const Home = () => {
                                     style={styles.gridCard}
                                     onPress={() => openManga(manga)}
                                 >
-                                    <Image
-                                        source={{ uri: getProxiedImage(manga) }}
-                                        style={styles.gridCover}
-                                    />
-                                    <View style={styles.sourceTag}>
-                                        <Text style={styles.sourceTagText}>
-                                            {manga.source === 'asura' ? 'AS' : 'MP'}
-                                        </Text>
+                                    <View style={styles.gridCoverWrap}>
+                                        <Image
+                                            source={{ uri: getProxiedImage(manga) }}
+                                            style={styles.gridCover}
+                                            resizeMode="cover"
+                                        />
+                                        <View style={styles.sourceTag}>
+                                            <Text style={styles.sourceTagText}>
+                                                {manga.source === 'asura' ? 'AS' : 'MP'}
+                                            </Text>
+                                        </View>
                                     </View>
                                     <Text style={styles.gridTitle} numberOfLines={2}>
                                         {manga.title}
@@ -281,11 +293,9 @@ const Home = () => {
                 </View>
             </ScrollView>
 
-            {/* Search Overlay */}
             {searchActive && (
                 <View style={styles.searchOverlay}>
                     <SafeAreaView style={{ flex: 1 }}>
-                        {/* Search Bar */}
                         <View style={styles.searchBar}>
                             <Ionicons name="search" size={18} color="#aaa" style={{ marginRight: 8 }} />
                             <TextInput
@@ -303,10 +313,7 @@ const Home = () => {
                                 <Text style={styles.cancelText}>Cancel</Text>
                             </Pressable>
                         </View>
-
                         <View style={styles.borderLine} />
-
-                        {/* Results */}
                         {query.trim().length > 0 ? (
                             searchResults.length > 0 ? (
                                 <FlatList
@@ -323,9 +330,7 @@ const Home = () => {
                                                     <View style={[styles.resultCover, { backgroundColor: '#eee' }]} />
                                                 )}
                                                 <View style={styles.resultInfo}>
-                                                    <Text style={styles.resultTitle} numberOfLines={2}>
-                                                        {item.title}
-                                                    </Text>
+                                                    <Text style={styles.resultTitle} numberOfLines={2}>{item.title}</Text>
                                                     <View style={styles.resultSourceBadge}>
                                                         <Text style={styles.resultSourceText}>{sourceLabel}</Text>
                                                     </View>
@@ -346,16 +351,11 @@ const Home = () => {
                                 )
                             )
                         ) : (
-                            /* Recent Searches */
                             recentSearches.length > 0 && (
                                 <View>
                                     <Text style={styles.recentLabel}>Recent</Text>
                                     {recentSearches.map((term, i) => (
-                                        <Pressable
-                                            key={i}
-                                            style={styles.recentRow}
-                                            onPress={() => setQuery(term)}
-                                        >
+                                        <Pressable key={i} style={styles.recentRow} onPress={() => setQuery(term)}>
                                             <Ionicons name="time-outline" size={16} color="#999" style={{ marginRight: 10 }} />
                                             <Text style={styles.recentText}>{term}</Text>
                                         </Pressable>
@@ -374,31 +374,17 @@ export default Home;
 
 const styles = StyleSheet.create({
     screen: { flex: 1, backgroundColor: '#fff' },
-
-    // Header
     header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        backgroundColor: '#fff',
-        gap: 8,
+        flexDirection: 'row', alignItems: 'center',
+        paddingHorizontal: 16, paddingVertical: 10,
+        backgroundColor: '#fff', gap: 8,
     },
     logoLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
     logoImage: { width: 32, height: 32 },
     logoText: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-    headerIcon: {
-        width: 38,
-        height: 38,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+    headerIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
     borderLine: { height: 1, backgroundColor: '#e5e5e5' },
-
-    // Dropdown
-    dropdownOverlay: {
-        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99,
-    },
+    dropdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 },
     dropdown: {
         position: 'absolute', top: 60, right: 16,
         backgroundColor: '#fff', borderColor: '#ddd', borderWidth: 1,
@@ -407,94 +393,78 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
     },
     dropdownItem: { paddingVertical: 12, paddingHorizontal: 20, fontSize: 15, color: '#333' },
-
-    // Scroll
     mainScroll: { flex: 1 },
-    section: { paddingTop: 20, paddingBottom: 8 },
+    section: { paddingTop: 16, paddingBottom: 8 },
     sectionHeader: {
         flexDirection: 'row', justifyContent: 'space-between',
-        alignItems: 'center', paddingHorizontal: 16, marginBottom: 12,
+        alignItems: 'center', paddingHorizontal: 16, marginBottom: 10,
     },
-    sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
+    sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
     seeAll: { fontSize: 13, color: '#007AFF', fontWeight: '600' },
-
-    // Continue Reading (horizontal)
     horizontalList: { paddingHorizontal: 12, gap: 10 },
-    continueCard: { width: 110, marginHorizontal: 4 },
+    continueCard: { width: 90, marginHorizontal: 4 },
     continueCover: {
-        width: 110, height: 155, borderRadius: 6,
-        backgroundColor: '#f0f0f0', marginBottom: 4,
+        width: 100, height: 130, borderRadius: 6,
+        backgroundColor: '#f0f0f0', marginBottom: 5,
     },
-    chapterBadge: {
-        backgroundColor: 'rgba(0,0,0,0.72)',
-        paddingHorizontal: 6, paddingVertical: 3,
-        borderRadius: 4, alignSelf: 'flex-start', marginBottom: 4,
-    },
-    chapterBadgeText: { color: '#fff', fontSize: 10, fontWeight: '600' },
-    continueTitle: { fontSize: 12, fontWeight: '600', color: '#333', lineHeight: 16 },
-
-    // Updates Grid (ComicK style - 2 columns, tall cards)
-    grid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        paddingHorizontal: 8,
-        gap: 6,
-    },
-    gridCard: {
-        width: '23.5%',
-        marginBottom: 12,
-    },
-    gridCover: {
-        width: '100%',
-        height: 120,
-        borderRadius: 6,
-        backgroundColor: '#f0f0f0',
-        marginBottom: 4,
-    },
-    gridTitle: {
+    continueChapter: {
         fontSize: 11,
-        fontWeight: '600',
-        color: '#1a1a1a',
-        lineHeight: 15,
-        paddingHorizontal: 1,
+        color: '#fff',
+        fontWeight: '100',
+        marginBottom: 4,
+        backgroundColor: '#DCDCDC',
+        alignSelf: 'stretch',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        overflow: 'hidden',
+        textAlign: 'center',
     },
+    continueTitle: { fontSize: 11, fontWeight: '600', color: '#1a1a1a', lineHeight: 15, marginBottom: 4 },
+    chapterBadge: {
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: '#1a1a1a',
+        paddingHorizontal: 6, paddingVertical: 3,
+        borderRadius: 4, alignSelf: 'flex-start',
+    },
+    chapterBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
+    grid: {
+        flexDirection: 'row', flexWrap: 'wrap',
+        paddingHorizontal: 12, gap: 8,
+    },
+    gridCard: { width: '30.5%', marginBottom: 12 },
+    gridCoverWrap: {
+        width: '100%', aspectRatio: 0.68,
+        borderRadius: 6, overflow: 'hidden',
+        backgroundColor: '#f0f0f0', marginBottom: 5,
+    },
+    gridCover: { width: '100%', height: '100%' },
     sourceTag: {
-        position: 'absolute',
-        top: 4, right: 4,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        paddingHorizontal: 4, paddingVertical: 1,
-        borderRadius: 3,
+        position: 'absolute', top: 4, right: 4,
+        backgroundColor: 'rgba(0,0,0,0.65)',
+        paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3,
     },
     sourceTagText: { color: '#fff', fontSize: 9, fontWeight: '700' },
-
-    // Search Overlay
     searchOverlay: {
         position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
         backgroundColor: '#fff', zIndex: 999,
     },
     searchBar: {
         flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 14, paddingVertical: 10,
-        backgroundColor: '#fff',
+        paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff',
     },
     searchInput: {
         flex: 1, fontSize: 16, color: '#000',
         backgroundColor: '#f5f5f5', borderRadius: 10,
-        paddingHorizontal: 12, paddingVertical: 9,
-        marginRight: 8,
+        paddingHorizontal: 12, paddingVertical: 9, marginRight: 8,
     },
     cancelBtn: { paddingHorizontal: 4 },
     cancelText: { fontSize: 15, color: '#007AFF', fontWeight: '600' },
-
-    // Results
     resultRow: {
         flexDirection: 'row', alignItems: 'center',
         paddingHorizontal: 16, paddingVertical: 10,
     },
-    resultCover: {
-        width: 46, height: 64, borderRadius: 5,
-        marginRight: 12, backgroundColor: '#f0f0f0',
-    },
+    resultCover: { width: 46, height: 64, borderRadius: 5, marginRight: 12, backgroundColor: '#f0f0f0' },
     resultInfo: { flex: 1 },
     resultTitle: { fontSize: 15, fontWeight: '500', color: '#1a1a1a', marginBottom: 4 },
     resultSourceBadge: {
@@ -503,8 +473,6 @@ const styles = StyleSheet.create({
     },
     resultSourceText: { fontSize: 10, fontWeight: '700', color: '#666' },
     separator: { height: 1, backgroundColor: '#f5f5f5', marginLeft: 74 },
-
-    // Empty / Recent
     emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
     emptyText: { color: '#999', fontSize: 15, marginTop: 12 },
     recentLabel: { fontSize: 13, fontWeight: '700', color: '#999', paddingHorizontal: 16, paddingVertical: 10 },
@@ -514,5 +482,16 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
     },
     recentText: { fontSize: 15, color: '#333' },
-
+    cover: {
+        width: 150, height: 220, borderRadius: 10,
+        backgroundColor: '#eee', resizeMode: 'cover',
+    },
+    hero: {
+        flexDirection: 'row',
+        padding: 16,
+        gap: 16,
+        alignItems: 'flex-start',
+    },
+    heroMeta: { flex: 1, justifyContent: 'flex-start', gap: 8 },
+    title: { fontSize: 22, fontWeight: '800', color: '#111', lineHeight: 28 },
 });

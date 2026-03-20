@@ -4,11 +4,17 @@ import os
 import time
 import re
 import random
+import ssl
+import certifi
 import undetected_chromedriver as uc
+from urllib.parse import urlparse
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+# Fix SSL certificate verification issues
+os.environ["SSL_CERT_FILE"] = certifi.where()
+os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
 OUTPUT_FILE = "chapter_data.json"
 
@@ -16,9 +22,6 @@ OUTPUT_FILE = "chapter_data.json"
 # ADD ALL YOUR MANHWA LINKS HERE
 # =============================================
 MANHWA_URLS = [
-    "https://asuracomic.net/series/eternally-regressing-knight-027b8cf8",
-    "https://asuracomic.net/series/reaper-of-the-drifting-moon-384ff8cf",
-    "https://asuracomic.net/series/star-embracing-swordmaster-fa54299a",
 
 ]
 # =============================================
@@ -26,7 +29,7 @@ MANHWA_URLS = [
 DELAY_BETWEEN_CHAPTERS = (3, 6)  # seconds between chapters
 MAX_RETRIES = 3                   # retries per chapter if something goes wrong
 RETRY_BACKOFF = 30                # seconds to wait after a real block
-CHROME_VERSION = 145              # match your Chrome version (check chrome://version)
+CHROME_VERSION = 146              # match your Chrome version (check chrome://version)
 
 
 def make_driver():
@@ -40,7 +43,8 @@ def make_driver():
 
 
 def get_series_id(url):
-    match = re.search(r'/series/([^/?#]+)', url)
+    # Supports both /series/ (asuracomic.net) and /comics/ (asurascans.com)
+    match = re.search(r'/(?:series|comics)/([^/?#]+)', url)
     if not match:
         return None
     slug = match.group(1)
@@ -62,11 +66,14 @@ def get_all_chapters(driver, series_url):
     driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
     time.sleep(2)
 
+    # Detect domain so filtering works for both sites
+    domain = urlparse(series_url).netloc  # e.g. "asurascans.com" or "asuracomic.net"
+
     chapter_links = []
     seen = set()
     for a in driver.find_elements(By.TAG_NAME, "a"):
         href = a.get_attribute("href") or ""
-        if "/chapter/" in href and "asuracomic.net" in href:
+        if "/chapter/" in href and domain in href:
             match = re.search(r'/chapter/(\d+(?:\.\d+)?)', href)
             if match and href not in seen:
                 seen.add(href)
@@ -114,12 +121,22 @@ def get_chapter_pages(driver, chapter):
         if not src:
             continue
 
-        # Only grab images explicitly labeled as chapter or end pages
-        if not re.match(r'(chapter page \d+|end page)', alt.lower()):
+        # Match alt text format from both sites:
+        #   asuracomic.net  → "chapter page 1" / "end page"
+        #   asurascans.com  → "Page 1 - Chapter 81 - Series Title"
+        is_chapter_page = (
+                re.match(r'(chapter page \d+|end page)', alt.lower()) or
+                re.match(r'page \d+\s*-\s*chapter', alt.lower())
+        )
+        if not is_chapter_page:
             continue
 
-        # Must be a media/conversions URL — filters out profile_images, avatars, etc.
-        if "gg.asuracomic.net/storage/media/" not in src and "asuracomic.net/images/" not in src:
+        # Accept CDN domains from both sites; /chapters/ path excludes covers & avatars
+        if not any(cdn in src for cdn in [
+            "gg.asuracomic.net/storage/media/",
+            "asuracomic.net/images/",
+            "cdn.asurascans.com/asura-images/chapters/",
+        ]):
             continue
 
         if src not in seen:
@@ -156,7 +173,6 @@ def load_existing_data():
         print(f"  ⚠ chapter_data.json is corrupt (char {e.pos}): {e.msg}")
         print("  Attempting automatic repair...")
 
-        # Backup before repair
         backup = OUTPUT_FILE + ".bak"
         with open(backup, "w", encoding="utf-8") as f:
             f.write(raw)
@@ -166,7 +182,6 @@ def load_existing_data():
         if data:
             total = sum(len(v.get("chapters", {})) for v in data.values())
             print(f"  ✓ Repaired! Recovered {len(data)} series, {total} chapters")
-            # Save the repaired version immediately
             with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
             return data
@@ -198,7 +213,6 @@ def process_manhwa(series_url, data):
     existing = set(data[series_id]["chapters"].keys())
     print(f"  Cached chapters: {len(existing)}")
 
-    # Single driver for the entire series
     driver = make_driver()
     try:
         all_chapters = get_all_chapters(driver, series_url)
