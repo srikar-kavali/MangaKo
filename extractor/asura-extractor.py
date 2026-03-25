@@ -22,7 +22,9 @@ OUTPUT_FILE = "chapter_data.json"
 # ADD ALL YOUR MANHWA LINKS HERE
 # =============================================
 MANHWA_URLS = [
-
+    "https://asurascans.com/comics/omniscient-readers-viewpoint-f6174291",
+    "https://asurascans.com/comics/childhood-friend-of-the-zenith-f6174291",
+    "https://asurascans.com/comics/star-embracing-swordmaster-f6174291"
 ]
 # =============================================
 
