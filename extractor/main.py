@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 import os
-import ssl
 import certifi
 from urllib.parse import urlparse
 from shared.storage import load_data, save_data
 
-# Fix SSL certificate verification issues
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
@@ -13,11 +11,13 @@ os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 # ADD ALL YOUR MANHWA LINKS HERE
 # =============================================
 MANHWA_URLS = [
-    # --- Vortex Scans (weekly scraper) ---
+    # --- Asura Scans ---
+
+    # --- Vortex Scans ---
     #"https://vortexscans.org/series/the-beginning-after-the-end",
 
-    # --- Asura Scans (extractor) ---
-
+    # --- ManhwaZone ---
+    "https://manhwazone.to/series/eleceed-z0eq0",
 ]
 # =============================================
 
@@ -30,6 +30,8 @@ def get_site(url):
         return "asura"
     if "toongod.org" in domain:
         return "toongod"
+    if "manhwazone.to" in domain or "manhwazone.com" in domain:
+        return "manhwazone"
     return None
 
 
@@ -50,6 +52,14 @@ def main():
 
             elif site == "asura":
                 from sites.asura import scrape
+                scrape(url, data)
+
+            elif site == "toongod":
+                from sites.toongod import scrape
+                scrape(url, data)
+
+            elif site == "manhwazone":
+                from sites.manhwazone import scrape
                 scrape(url, data)
 
             else:

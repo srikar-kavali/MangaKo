@@ -80,14 +80,6 @@ def get_chapter_pages(driver, chapter):
 
     full_scroll(driver)
 
-    # DEBUG: uncomment to identify image format on a new series
-    print("\n  [DEBUG] Vortex images:")
-    for img in driver.find_elements(By.TAG_NAME, "img"):
-         src = img.get_attribute("src") or img.get_attribute("data-src") or ""
-         alt = img.get_attribute("alt") or ""
-         if src:
-             print(f"    alt='{alt}' | src={src[:100]}")
-
     pages = []
     seen = set()
 
@@ -98,12 +90,13 @@ def get_chapter_pages(driver, chapter):
         if not src:
             continue
 
-        # Skip obvious non-page images
-        if any(skip in src.lower() for skip in ["logo", "avatar", "profile", "banner", "icon", "cover"]):
+        # Only grab the "Chapter page N" set — this is the clean reader image list
+        # The "Series Title Chapter N Page N" set is a duplicate with the same URLs
+        if not re.match(r'chapter page \d+', alt.lower()):
             continue
 
-        # Only grab images hosted on vortex or their CDN
-        if "vortexscans.org" not in src and "cdn" not in src.lower():
+        # Must be on the vexmanga CDN
+        if "storage.vexmanga.com/public/upload/series/" not in src:
             continue
 
         if src not in seen:
@@ -114,10 +107,6 @@ def get_chapter_pages(driver, chapter):
 
 
 def scrape(series_url, data):
-    """
-    Main entry point called by main.py.
-    Only fetches chapters not already in data.
-    """
     series_id = get_series_id(series_url)
     if not series_id:
         print(f"  ✗ Could not parse series ID from {series_url}")
