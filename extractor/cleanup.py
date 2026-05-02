@@ -66,6 +66,33 @@ def remove(data, queries):
     return removed
 
 
+def rename(data, old_key, new_key):
+    matches = [k for k in data if old_key.lower() in k.lower()]
+
+    if not matches:
+        print(f"  ✗ No match for '{old_key}'")
+        return
+
+    if len(matches) > 1:
+        print(f"  ⚠ '{old_key}' matches multiple keys:")
+        for m in matches:
+            print(f"      {m}")
+        confirm = input("  Rename first match? (y/n): ").strip().lower()
+        if confirm != 'y':
+            print("  Skipped.")
+            return
+
+    src = matches[0]
+    if new_key in data:
+        print(f"  ✗ '{new_key}' already exists — choose a different name")
+        return
+
+    data[new_key] = data.pop(src)
+    ch_count = len(data[new_key].get("chapters", {}))
+    print(f"  ✓ Renamed '{src}' → '{new_key}' ({ch_count} chapters)")
+
+
+
 def main():
     args = sys.argv[1:]
 
@@ -77,6 +104,18 @@ def main():
 
     if args[0] == "--list":
         list_series(data)
+        sys.exit(0)
+
+    if args[0] == "--rename":
+        if len(args) < 3:
+            print("Usage: python cleanup.py --rename <old_name> <new_name>")
+            sys.exit(1)
+        backup = OUTPUT_FILE + ".bak"
+        with open(backup, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        print(f"Backup saved to {backup}\n")
+        rename(data, args[1], args[2])
+        save(data)
         sys.exit(0)
 
     print(f"\nLoaded {len(data)} series from {OUTPUT_FILE}\n")
