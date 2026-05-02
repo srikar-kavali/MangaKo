@@ -83,6 +83,14 @@ def get_chapter_pages(driver, chapter):
     pages = []
     seen = set()
 
+    # DEBUG
+    print("\n  [DEBUG] Vortex images sampled:")
+    for img in driver.find_elements(By.TAG_NAME, "img")[:15]:
+        src = img.get_attribute("src") or img.get_attribute("data-src") or ""
+        alt = img.get_attribute("alt") or ""
+        if src:
+            print(f"    alt='{alt}' | src={src[:100]}")
+
     for img in driver.find_elements(By.TAG_NAME, "img"):
         src = img.get_attribute("src") or img.get_attribute("data-src") or ""
         alt = img.get_attribute("alt") or ""

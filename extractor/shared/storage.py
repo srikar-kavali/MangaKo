@@ -1,7 +1,10 @@
 import json
 import os
+import time
+import threading
 
-OUTPUT_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "chapter_data.json")
+OUTPUT_FILE = "chapter_data.json"
+_lock = threading.Lock()
 
 
 def _try_repair_json(raw):
@@ -47,7 +50,25 @@ def load_data():
 
 
 def save_data(data):
-    tmp = OUTPUT_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-    os.replace(tmp, OUTPUT_FILE)
+    with _lock:
+        tmp = OUTPUT_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+        for attempt in range(20):
+            try:
+                if os.path.exists(OUTPUT_FILE):
+                    os.remove(OUTPUT_FILE)
+                os.rename(tmp, OUTPUT_FILE)
+                return
+            except PermissionError:
+                time.sleep(0.5 * (attempt + 1))  # grows: 0.5, 1.0, 1.5 ... up to 10s
+
+        # Nuclear fallback — write directly without rename
+        with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except:
+                pass

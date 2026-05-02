@@ -1,0 +1,21 @@
+export declare const loadBuffer: () => {
+    new (str: string, encoding?: string): Buffer;
+    new (size: number): Buffer;
+    new (array: Uint8Array): Buffer;
+    new (arrayBuffer: ArrayBuffer): Buffer;
+    new (array: ReadonlyArray<any>): Buffer;
+    new (buffer: Buffer): Buffer;
+    prototype: Buffer;
+    from(arrayBuffer: ArrayBuffer, byteOffset?: number, length?: number): Buffer;
+    from(data: ReadonlyArray<any> | string | Buffer | ArrayBuffer): Buffer;
+    from(str: string, encoding?: string): Buffer;
+    isBuffer(obj: any): obj is Buffer;
+    isEncoding(encoding: string): boolean;
+    byteLength(string: string | Buffer | DataView | ArrayBuffer, encoding?: string): number;
+    concat(list: ReadonlyArray<Buffer>, totalLength?: number): Buffer;
+    compare(buf1: Buffer, buf2: Buffer): number;
+    alloc(size: number, fill?: string | Buffer | number, encoding?: string): Buffer;
+    allocUnsafe(size: number): Buffer;
+    allocUnsafeSlow(size: number): Buffer;
+    poolSize: number;
+};
