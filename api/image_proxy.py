@@ -31,17 +31,9 @@ def get_headers(url: str) -> dict:
     if "asuracomic" in url:
         return {**base, "Referer": "https://asuracomic.net/"}
 
-    # ToonGod CDN — blocks without toongod.org referer
-    if "tngcdn.com" in url:
-        return {**base, "Referer": "https://www.toongod.org/"}
-
-    # Vortex Scans CDN
-    if "vexmanga.com" in url:
-        return {**base, "Referer": "https://vortexscans.org/"}
-
-    # ManhwaZone CDN
-    if "manhwatop.com" in url:
-        return {**base, "Referer": "https://manhwazone.to/"}
+    # MGEKO CDN
+    if "imgsrv4.com" in url or "mgeko" in url:
+        return {**base, "Referer": "https://mgeko.cc/"} # Replace with mgeko's active primary domain if different
 
     # Generic fallback — no referer
     return {

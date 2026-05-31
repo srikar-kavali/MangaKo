@@ -5,7 +5,7 @@ import { useNavigation} from "@react-navigation/native"
 import {Formik} from 'formik';
 import * as yup from 'yup';
 import { signUp } from "../auth/cognito";
-import dragonCircle from "../assets/dragonCircle.png"
+import dragonCircle from "../assets/dragonLogoTransparent.png"
 import { router } from 'expo-router'
 import { useAuth } from '../context/AuthContext'
 

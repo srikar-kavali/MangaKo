@@ -7,7 +7,7 @@ import {Formik} from 'formik';
 import * as yup from 'yup';
 import {Ionicons} from "@expo/vector-icons";
 import { useLocalSearchParams } from 'expo-router';
-import dragonCircle from "../assets/dragonCircle.png";
+import dragonCircle from "../assets/dragonLogoTransparent.png";
 
 const resetValidationSchema = yup.object().shape({
     newPassword: yup

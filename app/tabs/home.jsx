@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { SafeAreaView, View, Text, StyleSheet, Image, Pressable, TextInput, FlatList, ActivityIndicator, ScrollView } from 'react-native';
+import {
+    SafeAreaView, View, Text, StyleSheet, Image, Pressable,
+    TextInput, FlatList, ActivityIndicator, ScrollView,
+    Animated, StatusBar,
+} from 'react-native';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,11 +12,23 @@ import { getRecentSearches, saveRecentSearches, getFavorites, getLastReadChapter
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
+import { getCoverUrl } from "../../api/coverurls";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const C = {
+    bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',
+    border:'rgba(255,255,255,0.06)', borderMid:'rgba(255,255,255,0.10)',
+    text1:'#eeedf0', text2:'#7c7b88', text3:'#38373f',
+    accent:'#7c6af5', accentBright:'#9d8fff',
+    accentDim:'rgba(124,106,245,0.14)', accentBorder:'rgba(124,106,245,0.28)',
+    green:'#34d399', greenDim:'rgba(52,211,153,0.10)', greenBorder:'rgba(52,211,153,0.25)',
+    asuraBg:'rgba(124,106,245,0.82)', mpBg:'rgba(56,189,248,0.78)',
+};
 
 const LIVE_DELAY_MS = 300;
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 
-const Home = () => {
+export default function Home() {
     const [query, setQuery] = useState('');
     const [searchActive, setSearchActive] = useState(false);
     const [recentSearches, setRecentSearches] = useState([]);
@@ -23,6 +39,7 @@ const Home = () => {
     const [loadingBrowse, setLoadingBrowse] = useState(false);
     const [dropdownVisible, setDropdownVisible] = useState(false);
 
+    const overlayAnim = useRef(new Animated.Value(0)).current;
     const router = useRouter();
     const cacheRef = useRef(new Map());
     const timerRef = useRef(null);
@@ -33,14 +50,22 @@ const Home = () => {
         (async () => {
             setRecentSearches(await getRecentSearches());
             const favs = await getFavorites();
-            const followedWithProgress = await Promise.all(
-                favs.map(async (fav) => {
-                    const lastReadChapter = await getLastReadChapter(fav.url);
-                    return { ...fav, lastReadChapter: lastReadChapter || null };
+            const withProgress = await Promise.all(
+                favs.map(async f => {
+                    const lastReadChapter = await getLastReadChapter(f.url);
+                    const timestamp = await AsyncStorage.getItem('lastReadChapters').then(d => {
+                        try { return JSON.parse(d)?.[f.url]?.timestamp || 0; }
+                        catch { return 0; }
+                    });
+                    return { ...f, lastReadChapter: lastReadChapter || null, lastReadAt: timestamp };
                 })
             );
-            const inProgress = followedWithProgress.filter(f => f.lastReadChapter);
-            setFollowedManga(inProgress);
+            setFollowedManga(
+                withProgress
+                    .filter(f => f.lastReadChapter)          // only started titles
+                    .filter(f => f.completed !== true)       // hide completed
+                    .sort((a, b) => b.lastReadAt - a.lastReadAt) // newest read first
+            );
         })();
     }, []);
 
@@ -48,450 +73,457 @@ const Home = () => {
         (async () => {
             setLoadingBrowse(true);
             try {
-                const [mangapillResults] = await Promise.all([
-                    searchMangapill('', 20).catch(() => []),
-                ]);
-                const allManhwa = searchHardcodedManhwa('');
-                const formattedManhwa = allManhwa.map(item => ({ ...item, source: 'asura' }));
-                const formattedMangapill = (mangapillResults || []).map(item => ({
-                    ...item, source: 'mangapill', id: item.url,
-                }));
-                setBrowseManga([...formattedManhwa, ...formattedMangapill]);
-            } catch (err) {
-                console.log('Failed to load browse content:', err);
-            } finally {
-                setLoadingBrowse(false);
-            }
+                const [mp] = await Promise.all([searchMangapill('', 20).catch(() => [])]);
+                const hardcoded = searchHardcodedManhwa('').map(i => ({ ...i, source: 'asura' }));
+                const mpFmt = (mp || []).map(i => ({ ...i, source: 'mangapill', id: i.url }));
+                setBrowseManga([...hardcoded, ...mpFmt]);
+            } catch(e) {} finally { setLoadingBrowse(false); }
         })();
     }, []);
 
     useEffect(() => {
-        const q = query.trim();
-        const qLower = q.toLowerCase();
-        const cacheKey = `${CACHE_VERSION}:${qLower}`;
-
-        if (!q) {
-            setSearchResults([]);
-            setIsSearching(false);
-            if (abortRef.current) abortRef.current.abort();
-            if (timerRef.current) clearTimeout(timerRef.current);
-            return;
-        }
-
-        if (cacheRef.current.has(cacheKey)) {
-            setSearchResults(cacheRef.current.get(cacheKey));
-        }
-
-        if (timerRef.current) clearTimeout(timerRef.current);
+        const q = query.trim(), qL = q.toLowerCase(), key = `${CACHE_VERSION}:${qL}`;
+        if (!q) { setSearchResults([]); setIsSearching(false); abortRef.current?.abort(); clearTimeout(timerRef.current); return; }
+        if (cacheRef.current.has(key)) setSearchResults(cacheRef.current.get(key));
+        clearTimeout(timerRef.current);
         timerRef.current = setTimeout(async () => {
-            if (abortRef.current) abortRef.current.abort();
-            const controller = new AbortController();
-            abortRef.current = controller;
-
+            abortRef.current?.abort();
+            const ctrl = new AbortController(); abortRef.current = ctrl;
             setIsSearching(true);
             try {
-                const [asuraResults, mangapillResults] = await Promise.all([
-                    Promise.resolve(searchHardcodedManhwa(q)),
-                    searchMangapill(q, 15).catch(() => [])
-                ]);
-
-                const formattedAsura = (asuraResults || []).map(item => ({ ...item, source: 'asura', cover: item.cover }));
-                const formattedMangapill = (mangapillResults || []).map(item => ({ ...item, source: 'mangapill', id: item.url }));
-
-                const scoreResult = (item) => {
-                    const title = (item.title || '').toLowerCase();
-                    if (title === qLower) return 1000;
-                    if (title.startsWith(qLower)) return 500;
-                    if (title.includes(qLower)) return 100;
-                    return 0;
-                };
-
-                const allResults = [...formattedAsura, ...formattedMangapill]
-                    .map(item => ({ ...item, score: scoreResult(item) }))
-                    .sort((a, b) => b.score - a.score);
-
-                if (!controller.signal.aborted) {
-                    cacheRef.current.set(cacheKey, allResults);
-                    setSearchResults(allResults);
-                }
-            } catch (e) {
-                if (e?.name !== 'AbortError') console.log('Search error', e);
-                if (!controller.signal.aborted) setSearchResults([]);
-            } finally {
-                if (!controller.signal.aborted) setIsSearching(false);
-            }
+                const [ar, mr] = await Promise.all([Promise.resolve(searchHardcodedManhwa(q)), searchMangapill(q, 15).catch(() => [])]);
+                const score = i => { const t=(i.title||'').toLowerCase(); return t===qL?1000:t.startsWith(qL)?500:t.includes(qL)?100:0; };
+                const all = [...(ar||[]).map(i=>({...i,source:'asura'})), ...(mr||[]).map(i=>({...i,source:'mangapill',id:i.url}))]
+                    .map(i=>({...i,score:score(i)})).sort((a,b)=>b.score-a.score);
+                if (!ctrl.signal.aborted) { cacheRef.current.set(key, all); setSearchResults(all); }
+            } catch(e) { if (!abortRef.current?.signal.aborted) setSearchResults([]); }
+            finally { if (!abortRef.current?.signal.aborted) setIsSearching(false); }
         }, LIVE_DELAY_MS);
-
-        return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+        return () => clearTimeout(timerRef.current);
     }, [query]);
 
-    const handleAddSearch = async (text) => {
-        const trimmed = text.trim();
-        if (!trimmed) return;
-        const updated = [trimmed, ...recentSearches.filter((i) => i !== trimmed)].slice(0, 10);
-        setRecentSearches(updated);
-        await saveRecentSearches(updated);
+    const openSearch = () => {
+        setSearchActive(true);
+        Animated.spring(overlayAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 14 }).start();
+        setTimeout(() => searchInputRef.current?.focus(), 100);
     };
-
+    const closeSearch = () => {
+        Animated.timing(overlayAnim, { toValue: 0, duration: 160, useNativeDriver: true }).start(() => {
+            setSearchActive(false); setQuery(''); setSearchResults([]);
+        });
+    };
+    const handleAddSearch = async (text) => {
+        const t = text.trim(); if (!t) return;
+        const u = [t, ...recentSearches.filter(i=>i!==t)].slice(0,10);
+        setRecentSearches(u); await saveRecentSearches(u);
+    };
+    const getProxied = (item) => {
+        // Check coverUrls.js first (item.id for browse, item.url for followed manga)
+        const url = getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl;
+        if (!url) return null;
+        return item.source === 'asura' ? proxiedAsura(url) : proxiedMangapill(url);
+    };
+    const getSource = (m) => {
+        if (m.source) return m.source;
+        // mgeko IDs start with mgeko__
+        if (String(m.url || m.id || '').startsWith('mgeko__')) return 'mgeko';
+        return (String(m.url || m.id || '').includes('/') || String(m.url || m.id || '').includes('http')) ? 'mangapill' : 'asura';
+    };
     const openManga = (item) => {
         const src = item.source || getSource(item);
         const id = item.id || item.url;
-        if (src === 'asura') {
-            router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=asura`);
+        if (src === 'asura' || src === 'mgeko') {
+            router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}`);
         } else {
             router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(id)}&source=mangapill`);
         }
     };
+    const openResult = async (item) => { await handleAddSearch(item?.title||query); closeSearch(); openManga(item); };
 
-    const openResult = async (item) => {
-        await handleAddSearch(item?.title || query);
-        setQuery('');
-        setSearchActive(false);
-        openManga(item);
-    };
-
-    const openSearch = () => {
-        setSearchActive(true);
-        setTimeout(() => searchInputRef.current?.focus(), 100);
-    };
-
-    const closeSearch = () => {
-        setQuery('');
-        setSearchResults([]);
-        setSearchActive(false);
-    };
-
-    const getProxiedImage = (item) => {
-        const url = item.cover || item.coverUrl;
-        if (!url) return null;
-        return item.source === 'asura' ? proxiedAsura(url) : proxiedMangapill(url);
-    };
-
-    const getSource = (manga) => {
-        if (manga.source) return manga.source;
-        if (String(manga.url || manga.id || '').includes('/') || String(manga.url || manga.id || '').includes('http')) return 'mangapill';
-        return 'asura';
-    };
-
-    const openLastReadChapter = (manga) => {
+    // Navigate to last read chapter
+    const openLastRead = (manga) => {
         if (!manga.lastReadChapter) return;
-        const src = getSource(manga);
-        const id = manga.url || manga.id;
-        if (src === 'asura') {
-            router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=asura`);
+        const src = getSource(manga), id = manga.url || manga.id;
+        if (src === 'asura' || src === 'mgeko') {
+            router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=${src}`);
         } else {
             router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(id)}&source=mangapill`);
         }
     };
 
-    const formatChapterLabel = (chapterId, source) => {
-        if (!chapterId) return '';
-        if (source === 'asura') return `Ch. ${chapterId}`;
-        // Extract last number from the URL — chapter-1175 not chapters/2-...
-        const slug = String(chapterId).split('/').filter(Boolean).pop() || '';
-        const m = slug.match(/(\d+(\.\d+)?)/);
-        return m ? `Ch. ${m[1]}` : 'Continue';
+    const fmtCh = (id, src) => {
+        if (!id) return '';
+        if (src==='asura') return `Ch.${id}`;
+        const slug = String(id).split('/').filter(Boolean).pop()||'';
+        const m = slug.match(/(\d+(\.\d+)?)/); return m ? `Ch.${m[1]}` : '▶';
     };
 
     return (
-        <SafeAreaView style={styles.screen}>
-            <View style={styles.header}>
-                <View style={styles.logoLeft}>
-                    <Image source={dragonLogo} style={styles.logoImage} />
-                    <Text style={styles.logoText}>Mangako</Text>
+        <SafeAreaView style={S.screen}>
+            <StatusBar barStyle="light-content" backgroundColor={C.bg0} />
+
+            {/* HEADER */}
+            <View style={S.header}>
+                <View style={S.headerInner}>
+                    <View style={S.logoRow}>
+                        <Image source={dragonLogo} style={S.logoImg} />
+                        <Text style={S.logoText}>Mangako</Text>
+                    </View>
+                    <View style={S.headerRight}>
+                        <Pressable style={S.iconBtn} onPress={openSearch} hitSlop={10}>
+                            <Ionicons name="search-outline" size={20} color={C.text2} />
+                        </Pressable>
+                        <Pressable style={S.iconBtn} onPress={() => setDropdownVisible(v=>!v)} hitSlop={10}>
+                            <Ionicons name="person-circle-outline" size={23} color={C.text2} />
+                        </Pressable>
+                    </View>
                 </View>
-                <Pressable style={styles.headerIcon} onPress={openSearch}>
-                    <Ionicons name="search" size={22} color="#333" />
-                </Pressable>
-                <Pressable style={styles.headerIcon} onPress={() => setDropdownVisible(!dropdownVisible)}>
-                    <Ionicons name="person-circle-outline" size={28} color="#333" />
-                </Pressable>
             </View>
 
             {dropdownVisible && (
                 <>
-                    <Pressable style={styles.dropdownOverlay} onPress={() => setDropdownVisible(false)} />
-                    <View style={styles.dropdown}>
-                        <Pressable onPress={() => { setDropdownVisible(false); router.push('/settings'); }}>
-                            <Text style={styles.dropdownItem}>Settings</Text>
+                    <Pressable style={S.ddMask} onPress={() => setDropdownVisible(false)} />
+                    <View style={S.dropdown}>
+                        <Pressable style={S.ddRow} onPress={() => { setDropdownVisible(false); router.push('/settings'); }}>
+                            <Ionicons name="settings-outline" size={14} color={C.text2} />
+                            <Text style={S.ddText}>Settings</Text>
                         </Pressable>
-                        <Pressable onPress={async () => { setDropdownVisible(false); await signOut(); router.replace('/login'); }}>
-                            <Text style={styles.dropdownItem}>Sign Out</Text>
+                        <View style={S.ddLine} />
+                        <Pressable style={S.ddRow} onPress={async () => { setDropdownVisible(false); await signOut(); router.replace('/login'); }}>
+                            <Ionicons name="log-out-outline" size={14} color={C.accent} />
+                            <Text style={[S.ddText, { color: C.accent }]}>Sign Out</Text>
                         </Pressable>
                     </View>
                 </>
             )}
 
-            <View style={styles.borderLine} />
+            <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 36 }}>
 
-            <ScrollView style={styles.mainScroll} showsVerticalScrollIndicator={false}>
-
+                {/* CONTINUE READING */}
                 {followedManga.length > 0 && (
-                    <View style={styles.section}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Continue Reading</Text>
-                            <Pressable onPress={() => router.push('/tabs/library')}>
-                                <Text style={styles.seeAll}>See All</Text>
+                    <View style={S.section}>
+                        <View style={S.sectionHead}>
+                            <Text style={S.sectionTitle}>Continue Reading</Text>
+                            <Pressable onPress={() => router.push('/tabs/library')} style={S.seeAllBtn}>
+                                <Text style={S.seeAllText}>See All</Text>
+                                <Ionicons name="chevron-forward" size={12} color={C.accentBright} />
                             </Pressable>
                         </View>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.horizontalList}
-                        >
-                            {followedManga.map((manga, idx) => (
-                                // In the continueCard, replace the current layout with:
-                                <Pressable
-                                    key={`${manga.url}-${idx}`}
-                                    style={styles.continueCard}
-                                    onPress={() => openLastReadChapter(manga)}  // whole card goes to chapter
-                                >
-                                    <Image source={{ uri: getProxiedImage(manga) }} style={styles.continueCover} />
-                                    <Text style={styles.continueChapter}>
-                                        {formatChapterLabel(manga.lastReadChapter, manga.source)}
-                                    </Text>
-                                    <Text style={styles.continueTitle} numberOfLines={2}>{manga.title}</Text>
-                                </Pressable>
-                            ))}
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.hList}>
+                            {followedManga.map((manga, idx) => {
+                                const img = getProxied(manga);
+                                return (
+                                    // ── Outer card — no onPress (split below) ──
+                                    <View key={`${manga.url}-${idx}`} style={S.contCard}>
+
+                                        {/* COVER — taps to MangaDetails */}
+                                        <Pressable
+                                            style={({ pressed }) => [S.contCoverWrap, { opacity: pressed ? 0.75 : 1 }]}
+                                            onPress={() => openManga(manga)}
+                                        >
+                                            {img ? (
+                                                <>
+                                                    <Image
+                                                        source={{ uri: img }}
+                                                        style={S.contCover}
+                                                        resizeMode="cover"
+                                                        // If image errors, hide it — the placeholder underneath shows
+                                                        onError={() => {}}
+                                                    />
+                                                    <View style={S.contGradient} />
+                                                </>
+                                            ) : (
+                                                // Visible placeholder — dashed border + icon so it's clearly "loading/missing"
+                                                <View style={S.contCoverEmpty}>
+                                                    <Ionicons name="image-outline" size={26} color={C.text3} />
+                                                    <Text style={S.contCoverEmptyText}>No cover</Text>
+                                                </View>
+                                            )}
+                                            {/* Source dot */}
+                                            <View style={[S.srcDot, { backgroundColor: manga.source==='asura' ? C.asuraBg : C.mpBg }]} />
+                                        </Pressable>
+
+                                        {/* CHAPTER BUTTON — taps to ReadChapter */}
+                                        <Pressable
+                                            style={({ pressed }) => [S.contChBtn, { opacity: pressed ? 0.75 : 1 }]}
+                                            onPress={() => openLastRead(manga)}
+                                        >
+                                            <Ionicons name="play" size={9} color="#fff" />
+                                            <Text style={S.contChText} numberOfLines={1}>
+                                                {fmtCh(manga.lastReadChapter, manga.source)}
+                                            </Text>
+                                        </Pressable>
+
+                                        {/* Title below */}
+                                        <Text style={S.contTitle} numberOfLines={2}>{manga.title}</Text>
+                                    </View>
+                                );
+                            })}
                         </ScrollView>
                     </View>
                 )}
 
-                <View style={styles.section}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Updates</Text>
+                {/* NEW CHAPTERS */}
+                <View style={S.section}>
+                    <View style={S.sectionHead}>
+                        <Text style={S.sectionTitle}>New Chapters</Text>
+                        <View style={S.liveBadge}>
+                            <View style={S.liveDot} />
+                            <Text style={S.liveText}>LIVE</Text>
+                        </View>
                     </View>
+
                     {loadingBrowse ? (
-                        <ActivityIndicator size="large" style={{ marginTop: 30 }} />
-                    ) : (
-                        <View style={styles.grid}>
-                            {browseManga.map((manga, idx) => (
-                                <Pressable
-                                    key={`${manga.id}-${idx}`}
-                                    style={styles.gridCard}
-                                    onPress={() => openManga(manga)}
-                                >
-                                    <View style={styles.gridCoverWrap}>
-                                        <Image
-                                            source={{ uri: getProxiedImage(manga) }}
-                                            style={styles.gridCover}
-                                            resizeMode="cover"
-                                        />
-                                        <View style={styles.sourceTag}>
-                                            <Text style={styles.sourceTagText}>
-                                                {manga.source === 'asura' ? 'AS' : 'MP'}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <Text style={styles.gridTitle} numberOfLines={2}>
-                                        {manga.title}
-                                    </Text>
-                                </Pressable>
+                        <View style={S.grid}>
+                            {[...Array(6)].map((_,i) => (
+                                <View key={i} style={S.skelCard}>
+                                    <View style={S.skelCover} />
+                                    <View style={S.skelLine} />
+                                    <View style={[S.skelLine, { width: '55%' }]} />
+                                </View>
                             ))}
+                        </View>
+                    ) : (
+                        <View style={S.grid}>
+                            {browseManga.map((manga, idx) => {
+                                const img = getProxied(manga);
+                                const isAS = manga.source === 'asura';                                return (
+                                    <Pressable
+                                        key={`${manga.id}-${idx}`}
+                                        style={({ pressed }) => [S.gridCard, { opacity: pressed ? 0.72 : 1 }]}
+                                        onPress={() => openManga(manga)}
+                                    >
+                                        <View style={S.gridCoverWrap}>
+                                            {img ? (
+                                                <Image source={{ uri: img }} style={S.gridCover} resizeMode="cover" />
+                                            ) : (
+                                                <View style={S.gridCoverEmpty}>
+                                                    <Ionicons name="book-outline" size={20} color={C.text3} />
+                                                </View>
+                                            )}
+                                            {!!img && <View style={S.gridGradient} />}
+                                            <View style={[S.gridBadge, { backgroundColor: isAS ? C.asuraBg : manga.source === 'mgeko' ? 'rgba(52,211,153,0.80)' : C.mpBg }]}>
+                                                <Text style={S.gridBadgeText}>{isAS ? 'AS' : manga.source === 'mgeko' ? 'MG' : 'MP'}</Text>
+                                            </View>
+                                        </View>
+                                        <Text style={S.gridTitle} numberOfLines={2}>{manga.title}</Text>
+                                    </Pressable>
+                                );
+                            })}
                         </View>
                     )}
                 </View>
             </ScrollView>
 
+            {/* SEARCH OVERLAY */}
             {searchActive && (
-                <View style={styles.searchOverlay}>
+                <Animated.View style={[S.searchOverlay, {
+                    opacity: overlayAnim,
+                    transform: [{ translateY: overlayAnim.interpolate({ inputRange:[0,1], outputRange:[20,0] }) }],
+                }]}>
                     <SafeAreaView style={{ flex: 1 }}>
-                        <View style={styles.searchBar}>
-                            <Ionicons name="search" size={18} color="#aaa" style={{ marginRight: 8 }} />
-                            <TextInput
-                                ref={searchInputRef}
-                                placeholder="Search manga..."
-                                placeholderTextColor="#aaa"
-                                style={styles.searchInput}
-                                value={query}
-                                onChangeText={setQuery}
-                                autoFocus
-                                returnKeyType="search"
-                            />
-                            {isSearching && <ActivityIndicator size="small" style={{ marginRight: 8 }} />}
-                            <Pressable onPress={closeSearch} style={styles.cancelBtn}>
-                                <Text style={styles.cancelText}>Cancel</Text>
+                        <View style={S.searchTopBar}>
+                            <View style={S.searchInputRow}>
+                                <Ionicons name="search-outline" size={16} color={C.text3} style={{ marginRight: 8 }} />
+                                <TextInput
+                                    ref={searchInputRef}
+                                    placeholder="Search titles..."
+                                    placeholderTextColor={C.text3}
+                                    style={S.searchInput}
+                                    value={query}
+                                    onChangeText={setQuery}
+                                    returnKeyType="search"
+                                />
+                                {isSearching
+                                    ? <ActivityIndicator size="small" color={C.accent} />
+                                    : query.length > 0 && <Pressable onPress={() => setQuery('')} hitSlop={8}><Ionicons name="close-circle" size={16} color={C.text3} /></Pressable>
+                                }
+                            </View>
+                            <Pressable onPress={closeSearch} style={S.cancelBtn}>
+                                <Text style={S.cancelText}>Cancel</Text>
                             </Pressable>
                         </View>
-                        <View style={styles.borderLine} />
+                        <View style={S.hairline} />
+
                         {query.trim().length > 0 ? (
                             searchResults.length > 0 ? (
                                 <FlatList
                                     data={searchResults}
-                                    keyExtractor={(item, idx) => `${item?.id || idx}-${item.source}`}
+                                    keyExtractor={(item,i) => `${item?.id||i}-${item.source}`}
+                                    keyboardShouldPersistTaps="handled"
+                                    ItemSeparatorComponent={() => <View style={S.resSep} />}
                                     renderItem={({ item }) => {
-                                        const cover = getProxiedImage(item);
-                                        const sourceLabel = item.source === 'asura' ? 'AS' : 'MP';
+                                        const cover = getProxied(item);
+                                        const isAS = item.source === 'asura';
                                         return (
-                                            <Pressable onPress={() => openResult(item)} style={styles.resultRow}>
-                                                {cover ? (
-                                                    <Image source={{ uri: cover }} style={styles.resultCover} />
-                                                ) : (
-                                                    <View style={[styles.resultCover, { backgroundColor: '#eee' }]} />
-                                                )}
-                                                <View style={styles.resultInfo}>
-                                                    <Text style={styles.resultTitle} numberOfLines={2}>{item.title}</Text>
-                                                    <View style={styles.resultSourceBadge}>
-                                                        <Text style={styles.resultSourceText}>{sourceLabel}</Text>
+                                            <Pressable
+                                                onPress={() => openResult(item)}
+                                                style={({ pressed }) => [S.resRow, { backgroundColor: pressed ? C.bg3 : 'transparent' }]}
+                                            >
+                                                {cover
+                                                    ? <Image source={{ uri: cover }} style={S.resCover} />
+                                                    : <View style={[S.resCover, { backgroundColor: C.bg3, alignItems:'center', justifyContent:'center' }]}><Ionicons name="book-outline" size={18} color={C.text3} /></View>
+                                                }
+                                                <View style={S.resInfo}>
+                                                    <Text style={S.resTitle} numberOfLines={2}>{item.title}</Text>
+                                                    <View style={[S.resBadge, { backgroundColor: isAS ? C.accentDim : 'rgba(56,189,248,0.12)' }]}>
+                                                        <Text style={[S.resBadgeText, { color: isAS ? C.accentBright : '#7dd3fc' }]}>
+                                                            {isAS ? 'AsuraScans' : 'MangaPill'}
+                                                        </Text>
                                                     </View>
                                                 </View>
-                                                <Ionicons name="chevron-forward" size={16} color="#ccc" />
+                                                <Ionicons name="chevron-forward" size={14} color={C.text3} />
                                             </Pressable>
                                         );
                                     }}
-                                    ItemSeparatorComponent={() => <View style={styles.separator} />}
-                                    keyboardShouldPersistTaps="handled"
                                 />
                             ) : (
                                 !isSearching && (
-                                    <View style={styles.emptyState}>
-                                        <Ionicons name="search-outline" size={48} color="#ddd" />
-                                        <Text style={styles.emptyText}>No results for "{query}"</Text>
+                                    <View style={S.emptySearch}>
+                                        <Text style={S.emptySearchTitle}>No results</Text>
+                                        <Text style={S.emptySearchSub}>Try a different title</Text>
                                     </View>
                                 )
                             )
-                        ) : (
-                            recentSearches.length > 0 && (
-                                <View>
-                                    <Text style={styles.recentLabel}>Recent</Text>
-                                    {recentSearches.map((term, i) => (
-                                        <Pressable key={i} style={styles.recentRow} onPress={() => setQuery(term)}>
-                                            <Ionicons name="time-outline" size={16} color="#999" style={{ marginRight: 10 }} />
-                                            <Text style={styles.recentText}>{term}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )
-                        )}
+                        ) : recentSearches.length > 0 ? (
+                            <View>
+                                <Text style={S.recentLabel}>RECENT</Text>
+                                {recentSearches.map((term, i) => (
+                                    <Pressable
+                                        key={i}
+                                        style={({ pressed }) => [S.recentRow, { backgroundColor: pressed ? C.bg3 : 'transparent' }]}
+                                        onPress={() => setQuery(term)}
+                                    >
+                                        <Ionicons name="time-outline" size={14} color={C.text3} style={{ marginRight: 12 }} />
+                                        <Text style={S.recentText}>{term}</Text>
+                                        <Ionicons name="arrow-up-back-outline" size={13} color={C.text3} style={{ marginLeft: 'auto' }} />
+                                    </Pressable>
+                                ))}
+                            </View>
+                        ) : null}
                     </SafeAreaView>
-                </View>
+                </Animated.View>
             )}
         </SafeAreaView>
     );
-};
+}
 
-export default Home;
+const S = StyleSheet.create({
+    screen: { flex: 1, backgroundColor: C.bg1 },
 
-const styles = StyleSheet.create({
-    screen: { flex: 1, backgroundColor: '#fff' },
-    header: {
-        flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 16, paddingVertical: 10,
-        backgroundColor: '#fff', gap: 8,
-    },
-    logoLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-    logoImage: { width: 32, height: 32 },
-    logoText: { fontSize: 20, fontWeight: '700', color: '#1a1a1a' },
-    headerIcon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-    borderLine: { height: 1, backgroundColor: '#e5e5e5' },
-    dropdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 },
+    header: { backgroundColor: C.bg1, borderBottomWidth: 1, borderBottomColor: C.border },
+    headerInner: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 13 },
+    logoRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+    logoImg: { width: 28, height: 28 },
+    logoText: { fontSize: 20, fontWeight: '800', color: C.text1, letterSpacing: -0.8 },
+    headerRight: { flexDirection: 'row', gap: 2 },
+    iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18 },
+
+    ddMask: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 98 },
     dropdown: {
-        position: 'absolute', top: 60, right: 16,
-        backgroundColor: '#fff', borderColor: '#ddd', borderWidth: 1,
-        borderRadius: 8, paddingVertical: 6, zIndex: 100,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
+        position: 'absolute', top: 68, right: 14, zIndex: 99,
+        backgroundColor: C.bg3, borderWidth: 1, borderColor: C.borderMid,
+        borderRadius: 14, paddingVertical: 6, minWidth: 152,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.6, shadowRadius: 24, elevation: 14,
     },
-    dropdownItem: { paddingVertical: 12, paddingHorizontal: 20, fontSize: 15, color: '#333' },
-    mainScroll: { flex: 1 },
-    section: { paddingTop: 16, paddingBottom: 8 },
-    sectionHeader: {
-        flexDirection: 'row', justifyContent: 'space-between',
-        alignItems: 'center', paddingHorizontal: 16, marginBottom: 10,
+    ddRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, gap: 10 },
+    ddText: { fontSize: 14, fontWeight: '500', color: C.text1 },
+    ddLine: { height: 1, backgroundColor: C.border, marginHorizontal: 12 },
+
+    scroll: { flex: 1 },
+    section: { paddingTop: 24 },
+    sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, marginBottom: 14 },
+    sectionTitle: { fontSize: 15, fontWeight: '700', color: C.text1, letterSpacing: -0.2 },
+    seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+    seeAllText: { fontSize: 12, fontWeight: '600', color: C.accentBright },
+    liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: C.accentBorder, backgroundColor: C.accentDim, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 20 },
+    liveDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: C.accent },
+    liveText: { fontSize: 9, fontWeight: '800', color: C.accentBright, letterSpacing: 1 },
+
+    // ── Continue Reading cards ─────────────────────────────────────────
+    hList: { paddingHorizontal: 18, gap: 11, paddingRight: 24 },
+    contCard: { width: 108 },
+
+    // Cover — pressable separately, no black overlay when empty
+    contCoverWrap: {
+        width: 108, height: 154,
+        borderRadius: 10, overflow: 'hidden',
+        // Noticeably lighter than screen bg so unloaded slots have clear definition
+        backgroundColor: '#2a2a35',
+        borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
+        marginBottom: 8,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.55, shadowRadius: 14, elevation: 10,
     },
-    sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
-    seeAll: { fontSize: 13, color: '#007AFF', fontWeight: '600' },
-    horizontalList: { paddingHorizontal: 12, gap: 10 },
-    continueCard: { width: 90, marginHorizontal: 4 },
-    continueCover: {
-        width: 100, height: 130, borderRadius: 6,
-        backgroundColor: '#f0f0f0', marginBottom: 5,
+    // Image fills the entire cover using absolute so placeholder stays behind it
+    contCover: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
+    contCoverEmpty: {
+        flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5,
     },
-    continueChapter: {
-        fontSize: 11,
-        color: '#fff',
-        fontWeight: '100',
-        marginBottom: 4,
-        backgroundColor: '#DCDCDC',
-        alignSelf: 'stretch',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-        overflow: 'hidden',
-        textAlign: 'center',
+    contCoverEmptyText: { fontSize: 9, color: C.text3, fontWeight: '600', letterSpacing: 0.3 },
+    contGradient: {
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: 50,
+        backgroundColor: 'rgba(7,7,10,0.65)',
     },
-    continueTitle: { fontSize: 11, fontWeight: '600', color: '#1a1a1a', lineHeight: 15, marginBottom: 4 },
-    chapterBadge: {
-        flexDirection: 'row', alignItems: 'center',
-        backgroundColor: '#1a1a1a',
-        paddingHorizontal: 6, paddingVertical: 3,
-        borderRadius: 4, alignSelf: 'flex-start',
+    srcDot: {
+        position: 'absolute', top: 7, right: 7,
+        width: 7, height: 7, borderRadius: 4,
+        borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)',
     },
-    chapterBadgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-    grid: {
-        flexDirection: 'row', flexWrap: 'wrap',
-        paddingHorizontal: 12, gap: 8,
+
+    // Chapter button — sits BELOW the cover, separate tap target
+    contChBtn: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        gap: 4,
+        backgroundColor: C.accent,
+        borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6,
+        marginBottom: 7,
+        shadowColor: C.accent, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6,
     },
-    gridCard: { width: '30.5%', marginBottom: 12 },
+    contChText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
+
+    contTitle: { fontSize: 11, fontWeight: '600', color: C.text2, lineHeight: 15 },
+
+    // Grid
+    grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 14, gap: 10 },
+    gridCard: { width: '30.5%', marginBottom: 14 },
     gridCoverWrap: {
         width: '100%', aspectRatio: 0.68,
-        borderRadius: 6, overflow: 'hidden',
-        backgroundColor: '#f0f0f0', marginBottom: 5,
+        borderRadius: 9, overflow: 'hidden',
+        backgroundColor: C.bg3, marginBottom: 7,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 7,
     },
     gridCover: { width: '100%', height: '100%' },
-    sourceTag: {
-        position: 'absolute', top: 4, right: 4,
-        backgroundColor: 'rgba(0,0,0,0.65)',
-        paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3,
-    },
-    sourceTagText: { color: '#fff', fontSize: 9, fontWeight: '700' },
-    searchOverlay: {
-        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: '#fff', zIndex: 999,
-    },
-    searchBar: {
-        flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff',
-    },
-    searchInput: {
-        flex: 1, fontSize: 16, color: '#000',
-        backgroundColor: '#f5f5f5', borderRadius: 10,
-        paddingHorizontal: 12, paddingVertical: 9, marginRight: 8,
-    },
-    cancelBtn: { paddingHorizontal: 4 },
-    cancelText: { fontSize: 15, color: '#007AFF', fontWeight: '600' },
-    resultRow: {
-        flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 16, paddingVertical: 10,
-    },
-    resultCover: { width: 46, height: 64, borderRadius: 5, marginRight: 12, backgroundColor: '#f0f0f0' },
-    resultInfo: { flex: 1 },
-    resultTitle: { fontSize: 15, fontWeight: '500', color: '#1a1a1a', marginBottom: 4 },
-    resultSourceBadge: {
-        backgroundColor: '#f0f0f0', paddingHorizontal: 6,
-        paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start',
-    },
-    resultSourceText: { fontSize: 10, fontWeight: '700', color: '#666' },
-    separator: { height: 1, backgroundColor: '#f5f5f5', marginLeft: 74 },
-    emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-    emptyText: { color: '#999', fontSize: 15, marginTop: 12 },
-    recentLabel: { fontSize: 13, fontWeight: '700', color: '#999', paddingHorizontal: 16, paddingVertical: 10 },
-    recentRow: {
-        flexDirection: 'row', alignItems: 'center',
-        paddingHorizontal: 16, paddingVertical: 12,
-        borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
-    },
-    recentText: { fontSize: 15, color: '#333' },
-    cover: {
-        width: 150, height: 220, borderRadius: 10,
-        backgroundColor: '#eee', resizeMode: 'cover',
-    },
-    hero: {
-        flexDirection: 'row',
-        padding: 16,
-        gap: 16,
-        alignItems: 'flex-start',
-    },
-    heroMeta: { flex: 1, justifyContent: 'flex-start', gap: 8 },
-    title: { fontSize: 22, fontWeight: '800', color: '#111', lineHeight: 28 },
+    gridCoverEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg3 },
+    gridGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 36, backgroundColor: 'rgba(7,7,10,0.5)' },
+    gridBadge: { position: 'absolute', top: 6, right: 6, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+    gridBadgeText: { color: '#fff', fontSize: 8, fontWeight: '800' },
+    gridTitle: { fontSize: 11, fontWeight: '600', color: C.text2, lineHeight: 15 },
+
+    skelCard: { width: '30.5%', marginBottom: 14 },
+    skelCover: { width: '100%', aspectRatio: 0.68, borderRadius: 9, backgroundColor: C.bg3 },
+    skelLine: { height: 9, borderRadius: 4, backgroundColor: C.bg3, marginTop: 7, width: '80%' },
+
+    searchOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.bg0, zIndex: 999 },
+    searchTopBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
+    searchInputRow: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg3, borderRadius: 12, borderWidth: 1, borderColor: C.border, paddingHorizontal: 12, paddingVertical: 10 },
+    searchInput: { flex: 1, fontSize: 15, color: C.text1 },
+    cancelBtn: { paddingHorizontal: 2 },
+    cancelText: { fontSize: 14, fontWeight: '700', color: C.accentBright },
+    hairline: { height: 1, backgroundColor: C.border },
+
+    resRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, gap: 12 },
+    resCover: { width: 44, height: 62, borderRadius: 6, backgroundColor: C.bg3 },
+    resInfo: { flex: 1, gap: 5 },
+    resTitle: { fontSize: 14, fontWeight: '600', color: C.text1, lineHeight: 19 },
+    resBadge: { alignSelf: 'flex-start', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+    resBadgeText: { fontSize: 10, fontWeight: '700' },
+    resSep: { height: 1, backgroundColor: C.border, marginLeft: 72 },
+
+    emptySearch: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 6 },
+    emptySearchTitle: { fontSize: 16, fontWeight: '700', color: C.text2 },
+    emptySearchSub: { fontSize: 13, color: C.text3 },
+
+    recentLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: C.text3, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+    recentRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+    recentText: { fontSize: 14, color: C.text2 },
 });

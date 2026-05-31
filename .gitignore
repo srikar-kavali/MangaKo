@@ -16,4 +16,5 @@ extractor/shared/__pycache__/
 amplify/
 src/aws-exports.js
 src/amplifyconfiguration.json
+extractor/.env
 extractor/chapter_data.json

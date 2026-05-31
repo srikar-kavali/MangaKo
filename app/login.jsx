@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Formik } from 'formik';
 import * as yup from 'yup';
 import { signIn, getCurrentUser, signOut } from "../auth/cognito";
-import dragonCircle from "../assets/dragonCircle.png";
+import dragonCircle from "../assets/dragonLogoTransparent.png";
 import { router } from 'expo-router';
 
 const loginValidationSchema = yup.object().shape({

@@ -5,7 +5,7 @@ import {resetPassword} from "../auth/cognito";
 import { router } from 'expo-router';
 import {Formik} from 'formik';
 import * as yup from 'yup';
-import dragonCircle from "../assets/dragonCircle.png";
+import dragonCircle from "../assets/dragonLogoTransparent.png";
 import {Ionicons} from "@expo/vector-icons";
 
 const forgetValidationSchema = yup.object().shape({
