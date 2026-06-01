@@ -1,17 +1,8 @@
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import Response
+# api/image_proxy.py
+from http.server import BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs, unquote
 import httpx
-from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 def get_headers(url: str) -> dict:
     base = {
@@ -22,81 +13,72 @@ def get_headers(url: str) -> dict:
         "sec-fetch-mode": "no-cors",
         "sec-fetch-site": "cross-site",
     }
-
     if "readdetectiveconan.com" in url or "mangapill" in url:
         return {**base, "Referer": "https://mangapill.com/",
                 "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120"',
                 "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"'}
-
-    if "asuracomic" in url:
-        return {**base, "Referer": "https://asuracomic.net/"}
-
-    # MGEKO CDN
+    if "asuracomic" in url or "asurascans" in url or "cdn.asurascans" in url or "gg.asuracomic" in url:
+        parsed = urlparse(url)
+        return {**base, "Referer": f"https://{parsed.netloc}/", "Origin": f"https://{parsed.netloc}"}
     if "imgsrv4.com" in url or "mgeko" in url:
-        return {**base, "Referer": "https://mgeko.cc/"} # Replace with mgeko's active primary domain if different
-
-    # Generic fallback — no referer
+        return {**base, "Referer": "https://mgeko.cc/"}
     return {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "image/*",
     }
 
 
-@app.get("/")
-@app.get("/api/image_proxy")
-def proxy(url: str = Query(...)):
-    if not url.startswith("http"):
-        raise HTTPException(400, "Invalid URL")
+class handler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', '*')
+        self.end_headers()
 
-    headers = get_headers(url)
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        url = unquote(params.get('url', [''])[0])
 
-    try:
-        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
-            r = client.get(url, headers=headers)
-            r.raise_for_status()
+        if not url or not url.startswith('http'):
+            self.send_response(400)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"error":"Invalid URL"}')
+            return
 
-            content_type = r.headers.get("content-type", "image/jpeg")
-            if not content_type.startswith("image/"):
-                content_type = "image/jpeg"
+        headers = get_headers(url)
 
-            response_headers = {
-                "Content-Type": content_type,
-                "Cache-Control": "public, max-age=31536000, immutable",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-                "Content-Length": str(len(r.content)),
-            }
+        try:
+            with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+                r = client.get(url, headers=headers)
+                r.raise_for_status()
 
-            return Response(
-                content=r.content,
-                media_type=content_type,
-                headers=response_headers,
-                status_code=200
-            )
+                content_type = r.headers.get('content-type', 'image/jpeg')
+                if not content_type.startswith('image/'):
+                    content_type = 'image/jpeg'
 
-    except httpx.TimeoutException:
-        raise HTTPException(504, "Timeout fetching image")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Upstream error: {e.response.status_code}")
-    except Exception as e:
-        raise HTTPException(502, f"Failed: {str(e)}")
+                self.send_response(200)
+                self.send_header('Content-Type', content_type)
+                self.send_header('Cache-Control', 'public, max-age=31536000, immutable')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Length', str(len(r.content)))
+                self.end_headers()
+                self.wfile.write(r.content)
 
-
-@app.options("/")
-@app.options("/api/image_proxy")
-def proxy_options():
-    return Response(
-        content="",
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Max-Age": "3600",
-        }
-    )
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+        except httpx.TimeoutException:
+            self.send_response(504)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"error":"Timeout fetching image"}')
+        except httpx.HTTPStatusError as e:
+            self.send_response(e.response.status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(f'{{"error":"Upstream error: {e.response.status_code}"}}'.encode())
+        except Exception as e:
+            self.send_response(502)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(f'{{"error":"Failed: {str(e)}"}}'.encode())
