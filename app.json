@@ -26,13 +26,25 @@
       "package": "com.anonymous.firstapp"
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/dragonLogoTransparent.png",
       "bundler": "metro",
       "name": "Mangako",
       "shortName": "Mangako",
       "display": "standalone",
       "backgroundColor": "#0c0c10",
-      "themeColor": "#0c0c10"
+      "themeColor": "#0c0c10",
+      "icons": [
+        {
+          "src": "./assets/dragonLogoTransparent.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        },
+        {
+          "src": "./assets/dragonLogoTransparent.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
     },
     "plugins": [
       "expo-router",
