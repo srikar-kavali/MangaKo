@@ -5,26 +5,47 @@ import httpx
 
 
 def get_headers(url: str) -> dict:
+    parsed = urlparse(url)
+    host = parsed.netloc
+
+    # Base configuration mimicking a pristine, human browser context
     base = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
-        "sec-fetch-dest": "image",
-        "sec-fetch-mode": "no-cors",
-        "sec-fetch-site": "cross-site",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Sec-Fetch-Dest": "image",
+        "Sec-Fetch-Mode": "no-cors",
+        "Sec-Fetch-Site": "cross-site",
     }
-    if "readdetectiveconan.com" in url or "mangapill" in url:
-        return {**base, "Referer": "https://mangapill.com/",
-                "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120"',
-                "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": '"Windows"'}
-    if "asuracomic" in url or "asurascans" in url or "cdn.asurascans" in url or "gg.asuracomic" in url:
-        parsed = urlparse(url)
-        return {**base, "Referer": f"https://{parsed.netloc}/", "Origin": f"https://{parsed.netloc}"}
-    if "imgsrv4.com" in url or "mgeko" in url:
-        return {**base, "Referer": "https://mgeko.cc/"}
+
+    # Dynamic match for anything matching the Asura infrastructure
+    if any(keyword in host for keyword in ["asura", "gg.asuracomic"]):
+        return {
+            **base,
+            "Referer": "https://asurascans.com/",
+            "Origin": "https://asurascans.com",
+            "Host": host
+        }
+
+    if "readdetectiveconan.com" in host or "mangapill" in host:
+        return {
+            **base,
+            "Referer": "https://mangapill.com/",
+            "sec-ch-ua": '"Not_A Brand";v="8", "Chromium";v="120"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "Host": host
+        }
+
+    if "imgsrv4.com" in host or "mgeko" in host:
+        return {**base, "Referer": "https://mgeko.cc/", "Host": host}
+
     return {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "image/*",
+        **base,
+        "Referer": f"https://{host.replace('cdn.', '')}/",
+        "Host": host
     }
 
 
