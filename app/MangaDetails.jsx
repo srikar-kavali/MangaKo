@@ -35,7 +35,6 @@ function extractNum(ch) {
 }
 function displayTitle(ch) { return ch?.title || ch?.name || 'Chapter'; }
 
-// Normalize Mangapill URLs into clean storage slugs
 const normalizeKey = (key) => {
     if (!key) return '';
     if (key.includes('mangapill.com')) {
@@ -94,6 +93,12 @@ const MangaDetails = () => {
             setLoading(true);
             try {
                 if ((isAsura || isMgeko) && seriesId) {
+                    // FIX: Populate metadata state using your hardcoded manhwa configuration file
+                    const localData = getManhwaById(seriesId);
+                    if (!cancelled && localData) {
+                        setMangaData(localData);
+                    }
+
                     const endpoint = isMgeko ? 'mgeko-chapters' : 'asura-chapters';
                     const res = await fetch(`${BACKEND}/api/${endpoint}?seriesId=${encodeURIComponent(seriesId)}`);
                     const json = await res.json();
@@ -103,7 +108,6 @@ const MangaDetails = () => {
                             await AsyncStorage.setItem(`chapterCount:${storageKey}`, String(json.total)).catch(() => {});
                             await AsyncStorage.setItem(`updatedAt:${storageKey}`, String(Date.now())).catch(() => {});
 
-                            // Find the absolute newest chapter ID and cache it
                             const newest = [...json.chapters].sort((a, b) => extractNum(b) - extractNum(a))[0];
                             if (newest?.id) {
                                 await AsyncStorage.setItem(`latestChapter:${storageKey}`, newest.id).catch(() => {});
@@ -119,7 +123,6 @@ const MangaDetails = () => {
                             await AsyncStorage.setItem(`chapterCount:${storageKey}`, String(data.chapters.length)).catch(() => {});
                             await AsyncStorage.setItem(`updatedAt:${storageKey}`, String(Date.now())).catch(() => {});
 
-                            // Find the absolute newest chapter ID and cache it
                             const newest = [...data.chapters].sort((a, b) => extractNum(b) - extractNum(a))[0];
                             if (newest?.id) {
                                 await AsyncStorage.setItem(`latestChapter:${storageKey}`, newest.id).catch(() => {});
@@ -127,7 +130,7 @@ const MangaDetails = () => {
                         }
                     }
                 }
-            } catch(e) { // <-- Added the closing brace right here to close the try block!
+            } catch(e) {
                 console.error('MangaDetails fetch error:', e);
                 if (!cancelled) { setMangaData(null); setChapters([]); }
             } finally {
@@ -475,14 +478,12 @@ const S = StyleSheet.create({
     statusOptionActive: { color: '#4CAF50', fontWeight: '700' },
     statusOptionUnfollowText: { color: '#e53935' },
 
-    // Description
     sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111', paddingHorizontal: 16, marginTop: 20, marginBottom: 6 },
     description: { fontSize: 14, lineHeight: 22, color: '#444', paddingHorizontal: 16, marginBottom: 8 },
     tagContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginBottom: 8 },
     tag: { backgroundColor: '#f0f0f0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
     tagText: { fontSize: 12, color: '#444' },
 
-    // Chapters
     chapterHeader: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingHorizontal: 16, marginTop: 8, marginBottom: 6,

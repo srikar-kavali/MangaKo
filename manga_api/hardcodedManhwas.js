@@ -272,11 +272,12 @@ export const manhwas = [
         status: "Hiatus",
     },
     {
-        id: "demonic-beast-hunter-survival-guide",
-        title: "Demonic Beast Hunter Survival Guide",
+        id: "killer-pietro",
+        title: "Killer Peter",
         source: "asura",
-        description: "For 12 years, Woojin suffered from mysterious nightmares of unknown origin. When he opened his eyes, he found himself inside the very world from his nightmares—the \"Demon Realm.\"",
-        genres: ["Action", "Adventure", "Fantasy", "Mystery"],
+        description: "An old killer got betrayed but somehow rejuvenated. However... no one recognizes him anymore?! \"Then I'm the strongest again!\"\n" +
+            "\n",
+        genres: ["Action", "Adventure", "Revenge"],
         status: "Ongoing",
     },
     {
