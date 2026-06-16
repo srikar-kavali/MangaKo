@@ -36,6 +36,8 @@ export default function Layout() {
                     fontSize: 10,
                     fontWeight: '600',
                     letterSpacing: 0.2,
+                    backgroundColor: '#0c0c10',
+                    borderTopColor: 'rgba(255,255,255,0.06)',
                 },
             }}
         >
