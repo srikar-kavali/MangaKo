@@ -18,9 +18,25 @@ def get_series_id(url):
     if not match:
         return None
     slug = match.group(1)
-    # Strip trailing hash (e.g. -9b94cd20) so the key is stable
     slug = re.sub(r'-[a-f0-9]{6,10}$', '', slug)
     return slug
+
+
+def is_driver_alive(driver):
+    """Check if the Chrome session is still alive."""
+    try:
+        _ = driver.window_handles
+        return True
+    except Exception:
+        return False
+
+
+def safe_quit(driver):
+    """Quit driver without raising."""
+    try:
+        driver.quit()
+    except Exception:
+        pass
 
 
 def get_all_chapters(driver, series_url):
@@ -56,7 +72,7 @@ def get_chapter_pages(driver, chapter):
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.TAG_NAME, "img"))
         )
-    except:
+    except Exception:
         pass
 
     time.sleep(2)
@@ -77,7 +93,8 @@ def get_chapter_pages(driver, chapter):
 
         is_chapter_page = (
                 re.match(r'(chapter page \d+|end page)', alt.lower()) or
-                re.match(r'page \d+\s*-\s*chapter', alt.lower())
+                re.match(r'page \d+\s*-\s*chapter', alt.lower()) or
+                re.match(r'page \d+', alt.lower())  # new format: "Page 1 - Chapter 1 - Title"
         )
         if not is_chapter_page:
             continue
@@ -86,6 +103,7 @@ def get_chapter_pages(driver, chapter):
             "gg.asuracomic.net/storage/media/",
             "asuracomic.net/images/",
             "cdn.asurascans.com/asura-images/chapters/",
+            "cdn.asurascans.com/asura-images/chapters-restored/",  # new path
         ]):
             continue
 
@@ -128,23 +146,45 @@ def scrape(series_url, data):
             pages = None
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
+                    # Check if driver is still alive before using it
+                    if not is_driver_alive(driver):
+                        print(f"\n    ⚠ Driver window closed — restarting...")
+                        safe_quit(driver)
+                        time.sleep(5)
+                        driver = make_driver(headless=True)
+
                     pages = get_chapter_pages(driver, ch)
                     break
+
                 except ConnectionError as e:
                     print(f"\n    ⚠ Attempt {attempt}/{MAX_RETRIES} blocked: {e}")
                     if attempt < MAX_RETRIES:
-                        try:
-                            driver.quit()
-                        except:
-                            pass
+                        safe_quit(driver)
                         wait = RETRY_BACKOFF * attempt + random.uniform(5, 15)
                         print(f"    Restarting driver and waiting {wait:.0f}s...")
                         time.sleep(wait)
                         driver = make_driver(headless=True)
+
                 except Exception as e:
-                    print(f"\n    ✗ Attempt {attempt}/{MAX_RETRIES} error: {e}")
-                    if attempt < MAX_RETRIES:
-                        time.sleep(5)
+                    err_str = str(e)
+                    # Catch window/session closed errors specifically
+                    if any(msg in err_str for msg in [
+                        "no such window",
+                        "target window already closed",
+                        "web view not found",
+                        "invalid session id",
+                        "chrome not reachable",
+                    ]):
+                        print(f"\n    ⚠ Chrome window crashed — restarting driver...")
+                        safe_quit(driver)
+                        time.sleep(random.uniform(8, 15))
+                        driver = make_driver(headless=True)
+                        # Don't count this as an attempt — retry immediately
+                        continue
+                    else:
+                        print(f"\n    ✗ Attempt {attempt}/{MAX_RETRIES} error: {e}")
+                        if attempt < MAX_RETRIES:
+                            time.sleep(5)
 
             if pages:
                 data[series_id]["chapters"][ch["id"]] = pages
@@ -157,13 +197,16 @@ def scrape(series_url, data):
             save_data(data)
 
             if i < len(new_chapters) - 1:
-                time.sleep(random.uniform(*DELAY_BETWEEN_CHAPTERS))
+                delay = random.uniform(*DELAY_BETWEEN_CHAPTERS)
+                # Extra cooldown every 50 chapters to prevent Chrome overload
+                if (i + 1) % 50 == 0:
+                    print(f"  💤 Cooldown after {i+1} chapters (30s)...")
+                    time.sleep(30)
+                else:
+                    time.sleep(delay)
 
     finally:
-        try:
-            driver.quit()
-        except:
-            pass
+        safe_quit(driver)
 
     print(f"\n  Done. Total chapters: {len(data[series_id]['chapters'])}")
     if failed:

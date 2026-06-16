@@ -2,7 +2,7 @@ import os
 import time
 import undetected_chromedriver as uc
 
-CHROME_VERSION = 147
+CHROME_VERSION = 149
 
 # Path to extracted uBlock Origin chromium folder
 # Download from https://github.com/gorhill/uBlock/releases

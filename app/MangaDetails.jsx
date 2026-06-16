@@ -35,6 +35,21 @@ function extractNum(ch) {
 }
 function displayTitle(ch) { return ch?.title || ch?.name || 'Chapter'; }
 
+// Normalize Mangapill URLs into clean storage slugs
+const normalizeKey = (key) => {
+    if (!key) return '';
+    if (key.includes('mangapill.com')) {
+        const parts = key.split('/').filter(Boolean);
+        const index = parts.indexOf('manga');
+        if (index !== -1 && parts[index + 1]) {
+            return parts.slice(index + 1).join('__');
+        } else {
+            return parts.pop() || key;
+        }
+    }
+    return key;
+};
+
 const MangaDetails = () => {
     const { seriesId, mangapillUrl, source } = useLocalSearchParams();
     const router = useRouter();
@@ -54,8 +69,7 @@ const MangaDetails = () => {
     const isMgeko   = source === 'mgeko';
     const isMangapill = source === 'mangapill' || !!mangapillUrl;
 
-    // storageKey: for asura/mgeko it's seriesId, for mangapill it's the URL
-    const storageKey = useMemo(() => seriesId || mangapillUrl, [seriesId, mangapillUrl]);
+    const storageKey = useMemo(() => normalizeKey(seriesId || mangapillUrl), [seriesId, mangapillUrl]);
 
     useEffect(() => {
         (async () => {
@@ -80,26 +94,20 @@ const MangaDetails = () => {
             setLoading(true);
             try {
                 if ((isAsura || isMgeko) && seriesId) {
-                    // Hardcoded metadata
-                    const h = getManhwaById(seriesId);
-                    if (h && !cancelled) {
-                        setMangaData({
-                            title: h.title,
-                            description: h.description || '',
-                            image: h.cover,
-                            genres: h.genres || [],
-                            status: h.status || 'Unknown',
-                        });
-                    }
-                    // Fetch chapters from appropriate endpoint
                     const endpoint = isMgeko ? 'mgeko-chapters' : 'asura-chapters';
                     const res = await fetch(`${BACKEND}/api/${endpoint}?seriesId=${encodeURIComponent(seriesId)}`);
                     const json = await res.json();
                     if (!cancelled && json.chapters) {
                         setChapters(json.chapters);
-                        // Store chapter count for progress bar in Favorites
                         if (json.total) {
                             await AsyncStorage.setItem(`chapterCount:${storageKey}`, String(json.total)).catch(() => {});
+                            await AsyncStorage.setItem(`updatedAt:${storageKey}`, String(Date.now())).catch(() => {});
+
+                            // Find the absolute newest chapter ID and cache it
+                            const newest = [...json.chapters].sort((a, b) => extractNum(b) - extractNum(a))[0];
+                            if (newest?.id) {
+                                await AsyncStorage.setItem(`latestChapter:${storageKey}`, newest.id).catch(() => {});
+                            }
                         }
                     }
                 } else if (isMangapill && mangapillUrl) {
@@ -109,10 +117,17 @@ const MangaDetails = () => {
                         setChapters(data.chapters || []);
                         if (data.chapters?.length) {
                             await AsyncStorage.setItem(`chapterCount:${storageKey}`, String(data.chapters.length)).catch(() => {});
+                            await AsyncStorage.setItem(`updatedAt:${storageKey}`, String(Date.now())).catch(() => {});
+
+                            // Find the absolute newest chapter ID and cache it
+                            const newest = [...data.chapters].sort((a, b) => extractNum(b) - extractNum(a))[0];
+                            if (newest?.id) {
+                                await AsyncStorage.setItem(`latestChapter:${storageKey}`, newest.id).catch(() => {});
+                            }
                         }
                     }
                 }
-            } catch(e) {
+            } catch(e) { // <-- Added the closing brace right here to close the try block!
                 console.error('MangaDetails fetch error:', e);
                 if (!cancelled) { setMangaData(null); setChapters([]); }
             } finally {
@@ -171,7 +186,7 @@ const MangaDetails = () => {
     };
 
     const handleChapter = async (ch) => {
-        const cId = ch.id; // all sources now use ch.id
+        const cId = ch.id;
         if (storageKey) { await saveLastReadChapter(storageKey, cId); setLastRead(cId); }
 
         if (isAsura) {
@@ -415,62 +430,3 @@ const MangaDetails = () => {
 };
 
 export default MangaDetails;
-
-const S = StyleSheet.create({
-    safe: { flex: 1, backgroundColor: C.bg1 },
-    loadWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    topBar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: C.bg1, borderBottomWidth: 1, borderBottomColor: C.border },
-    logoImg: { width: 30, height: 30, resizeMode: 'contain' },
-    topTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: C.text2, letterSpacing: -0.2 },
-    hero: { flexDirection: 'row', padding: 18, gap: 16 },
-    coverShadow: { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.65, shadowRadius: 20, elevation: 14 },
-    cover: { width: 116, height: 170, borderRadius: 10 },
-    heroMeta: { flex: 1, gap: 9 },
-    heroTitle: { fontSize: 19, fontWeight: '800', color: C.text1, lineHeight: 25, letterSpacing: -0.5 },
-    srcRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: C.bg3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-    srcDot: { width: 6, height: 6, borderRadius: 3 },
-    srcText: { fontSize: 10, fontWeight: '700', color: C.text2, letterSpacing: 0.2 },
-    statusPill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
-    statusDot: { width: 6, height: 6, borderRadius: 3 },
-    statusText: { fontSize: 11, fontWeight: '600' },
-    genreRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-    genreTag: { backgroundColor: C.bg4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5 },
-    genreText: { fontSize: 10, fontWeight: '600', color: C.text3 },
-    genreMore: { fontSize: 10, color: C.text3, paddingVertical: 3 },
-    actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.border, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bg2 },
-    readBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: C.accent, paddingVertical: 11, borderRadius: 10, shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.38, shadowRadius: 10, elevation: 6 },
-    readBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-    statusWrap: { position: 'relative' },
-    listBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg4, borderWidth: 1, borderColor: C.border, paddingHorizontal: 10, paddingVertical: 11, borderRadius: 10 },
-    listBtnActive: { borderColor: C.greenBorder, backgroundColor: C.greenDim },
-    listBtnText: { fontSize: 12, fontWeight: '600', color: C.text2 },
-    statusMask: { position: 'absolute', top: 0, left: -300, right: -300, bottom: -400, zIndex: 98 },
-    statusMenu: { position: 'absolute', bottom: 48, right: 0, zIndex: 999, backgroundColor: C.bg3, borderWidth: 1, borderColor: C.borderMid, borderRadius: 12, minWidth: 168, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 14 },
-    statusOpt: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
-    statusOptText: { fontSize: 14, color: C.text1 },
-    starBtn: { padding: 6 },
-    block: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 14 },
-    blockLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.4, color: C.text3, marginBottom: 10 },
-    synopsis: { fontSize: 13.5, lineHeight: 22, color: C.text2 },
-    tagsBlock: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingBottom: 16, paddingTop: 12, borderTopWidth: 1 },
-    tagFull: { backgroundColor: C.bg3, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1, borderColor: C.border },
-    tagFullText: { fontSize: 11, color: C.text2 },
-    chSection: { borderTopWidth: 1 },
-    chHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 18, paddingBottom: 12 },
-    chCountBadge: { backgroundColor: C.bg4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
-    chCountText: { fontSize: 11, fontWeight: '700', color: C.text2 },
-    sortBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg3, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: C.border },
-    sortText: { fontSize: 11, fontWeight: '600', color: C.text2 },
-    pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.border },
-    pageBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.bg3, borderWidth: 1, borderColor: C.border, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
-    pageBtnText: { fontSize: 12, fontWeight: '600', color: C.text1 },
-    pageInfo: { fontSize: 12, color: C.text2 },
-    chRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingRight: 16 },
-    chBar: { width: 3, alignSelf: 'stretch', minHeight: 42, marginRight: 13, borderRadius: 1.5 },
-    chTitle: { fontSize: 13.5, fontWeight: '500', color: C.text1, flex: 1 },
-    lastBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, marginRight: 8 },
-    lastText: { fontSize: 10, fontWeight: '700', color: C.green },
-    warnBox: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 16, padding: 12, borderRadius: 10, backgroundColor: 'rgba(251,191,36,0.07)', borderWidth: 1, borderColor: 'rgba(251,191,36,0.18)' },
-    warnText: { flex: 1, fontSize: 12, color: C.star },
-    noCh: { padding: 20, textAlign: 'center', fontSize: 14, color: C.text3 },
-});

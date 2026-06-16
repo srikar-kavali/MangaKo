@@ -46,12 +46,29 @@ const ReadChapter = () => {
         return () => window.removeEventListener('resize', h);
     }, []);
 
-    // Save last read bookmark
+    // ── FIXED: Normalize keys before saving to storage ───────────────────────
     useEffect(() => {
         if (!selectedCh) return;
-        const k = seriesId || mangapillUrl;
-        if (k) updateLastRead(k, selectedCh).catch(() => {});
-    }, [selectedCh]);
+
+        let trackingKey = seriesId || mangapillUrl;
+        if (!trackingKey) return;
+
+        // If it's a full Mangapill URL, extract only the unique slug path string
+        if (trackingKey.includes('mangapill.com')) {
+            const parts = trackingKey.split('/').filter(Boolean);
+            // URL: https://mangapill.com/manga/1234/title -> parts will yield '1234/title' or 'title'
+            const index = parts.indexOf('manga');
+            if (index !== -1 && parts[index + 1]) {
+                trackingKey = parts.slice(index + 1).join('__'); // Creates clean key slug: '1234__title'
+            } else {
+                trackingKey = parts.pop() || trackingKey;
+            }
+        }
+
+        updateLastRead(trackingKey, selectedCh).catch((err) => {
+            console.error("Failed updating history tracking payload:", err);
+        });
+    }, [selectedCh, seriesId, mangapillUrl]);
 
     // Fetch pages for selected chapter
     useEffect(() => {
@@ -71,7 +88,6 @@ const ReadChapter = () => {
                 } else if (isMgeko && seriesId) {
                     const res = await fetch(`${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`);
                     const json = await res.json();
-                    // Pages are already filtered (no credits/gifs) by the API
                     urls = (json.pages || []).map(u => proxiedMgeko(u));
 
                 } else if (isMangapill) {
@@ -157,7 +173,6 @@ const ReadChapter = () => {
 
     return (
         <SafeAreaView style={S.container}>
-            {/* Header — fades on tap */}
             <Animated.View style={[S.header, {
                 opacity: headerAnim,
                 transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-60, 0] }) }],
@@ -224,7 +239,6 @@ const ReadChapter = () => {
                     </View>
                 )}
 
-                {/* Chapter navigation */}
                 <View style={S.nav}>
                     <Pressable
                         disabled={!hasPrev}

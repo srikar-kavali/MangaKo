@@ -53,18 +53,39 @@ export default function Home() {
             const withProgress = await Promise.all(
                 favs.map(async f => {
                     const lastReadChapter = await getLastReadChapter(f.url);
-                    const timestamp = await AsyncStorage.getItem('lastReadChapters').then(d => {
+
+                    const readTimestamp = await AsyncStorage.getItem('lastReadChapters').then(d => {
                         try { return JSON.parse(d)?.[f.url]?.timestamp || 0; }
                         catch { return 0; }
                     });
-                    return { ...f, lastReadChapter: lastReadChapter || null, lastReadAt: timestamp };
+
+                    const updateTimestamp = await AsyncStorage.getItem(`updatedAt:${f.url}`).then(d => {
+                        return d ? parseInt(d, 10) : 0;
+                    });
+
+                    // Pull the newest known chapter ID cached by the app
+                    const latestChapterId = await AsyncStorage.getItem(`latestChapter:${f.url}`).catch(() => null);
+
+                    const activeTimestamp = Math.max(readTimestamp, updateTimestamp);
+
+                    // You are caught up if your last read matches the source's latest chapter id
+                    const isCaughtUp = (lastReadChapter && latestChapterId) ? (lastReadChapter === latestChapterId) : false;
+
+                    return {
+                        ...f,
+                        lastReadChapter: lastReadChapter || null,
+                        lastReadAt: readTimestamp,
+                        activeAt: activeTimestamp,
+                        isCaughtUp: isCaughtUp // Attached flag
+                    };
                 })
             );
+
             setFollowedManga(
                 withProgress
-                    .filter(f => f.lastReadChapter)          // only started titles
-                    .filter(f => f.completed !== true)       // hide completed
-                    .sort((a, b) => b.lastReadAt - a.lastReadAt) // newest read first
+                    .filter(f => f.lastReadChapter)
+                    .filter(f => f.completed !== true)
+                    .sort((a, b) => b.activeAt - a.activeAt)
             );
         })();
     }, []);
