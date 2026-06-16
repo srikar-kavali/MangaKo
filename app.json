@@ -33,6 +33,9 @@
       "display": "standalone",
       "backgroundColor": "#0c0c10",
       "themeColor": "#0c0c10",
+      "pwa": {
+        "enabled": true
+      },
       "icons": [
         {
           "src": "./assets/dragonLogoTransparent.png",
