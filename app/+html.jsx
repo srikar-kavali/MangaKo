@@ -32,8 +32,14 @@ export default function RootHtml({ children }) {
 const responsiveBackgroundStyles = `
   html, body, #root {
     background-color: #07070a !important;
-    min-height: 100vh !important;
     height: 100% !important;
+    height: 100dvh !important; /* Forces the exact visible viewport on iOS */
+    margin: 0;
+    padding: 0;
     overflow: hidden;
+    position: fixed; /* Keeps iOS from rubber-banding and revealing white gaps */
+    width: 100%;
+    left: 0;
+    top: 0;
   }
 `;
