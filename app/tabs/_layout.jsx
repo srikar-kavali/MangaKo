@@ -8,9 +8,12 @@ Amplify.configure(awsconfig);
 
 const ACCENT     = '#7c6af5';
 const ACCENT_DIM = 'rgba(124,106,245,0.14)';
-const TAB_BG     = '#111118';
+const TAB_BG     = '#0c0c10'; // Unified to match the screen base background
 const BORDER     = 'rgba(255,255,255,0.06)';
-const INACTIVE   = '#38373f';
+const INACTIVE   = '#666570'; // Brightened slightly for dark mode contrast
+
+// Checks if device is iOS native OR running in mobile Safari/Web wrapper
+const isIOSDevice = Platform.OS === 'ios' || (Platform.OS === 'web' && /iPhone|iPad|iPod/i.test(navigator.userAgent));
 
 export default function Layout() {
     return (
@@ -21,9 +24,10 @@ export default function Layout() {
                     backgroundColor: TAB_BG,
                     borderTopWidth: 1,
                     borderTopColor: BORDER,
-                    height: Platform.OS === 'ios' ? 82 : 64,
-                    paddingBottom: Platform.OS === 'ios' ? 26 : 10,
-                    paddingTop: 10,
+                    // --- FIXED TAB BAR PROFILE ---
+                    height: isIOSDevice ? 74 : 64,
+                    paddingBottom: isIOSDevice ? 20 : 10,
+                    paddingTop: 8,
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: -4 },
                     shadowOpacity: 0.5,
@@ -36,8 +40,7 @@ export default function Layout() {
                     fontSize: 10,
                     fontWeight: '600',
                     letterSpacing: 0.2,
-                    backgroundColor: '#0c0c10',
-                    borderTopColor: 'rgba(255,255,255,0.06)',
+                    marginTop: 2,
                 },
             }}
         >
