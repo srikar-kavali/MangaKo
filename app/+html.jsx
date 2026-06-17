@@ -21,15 +21,9 @@ export default function RootHtml({ children }) {
 
 const responsiveBackgroundStyles = `
   html, body, #root {
-    background-color: #0c0c10 !important; /* Matches app theme colors perfectly */
-    height: 100% !important;
-    height: 100dvh !important;
+    background-color: #0c0c10 !important;
+    min-height: 100% !important;
     margin: 0;
     padding: 0;
-    overflow: hidden;
-    position: fixed;
-    width: 100%;
-    left: 0;
-    top: 0;
   }
 `;

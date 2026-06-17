@@ -24,10 +24,12 @@ export default function Layout() {
                     backgroundColor: TAB_BG,
                     borderTopWidth: 1,
                     borderTopColor: BORDER,
-                    // --- FIXED TAB BAR PROFILE ---
-                    height: isIOSDevice ? 74 : 64,
-                    paddingBottom: isIOSDevice ? 20 : 10,
+
+                    height: isIOSDevice ? 84 : 64,
+
+                    paddingBottom: isIOSDevice ? 24 : 8,
                     paddingTop: 8,
+
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: -4 },
                     shadowOpacity: 0.5,
