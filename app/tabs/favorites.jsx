@@ -101,8 +101,14 @@ export default function Favorites() {
 
     const getSource = (item) => {
         if (item.source) return item.source;
-        if (String(item.url).startsWith('mgeko__')) return 'mgeko';
-        return (String(item.url).includes('/') || String(item.url).includes('http')) ? 'mangapill' : 'asura';
+        const urlStr = String(item.url);
+        if (urlStr.startsWith('mgeko__')) return 'mgeko';
+
+        // Explicitly check for mangapill in the URL string
+        if (urlStr.includes('mangapill') || urlStr.includes('/') || urlStr.includes('http')) {
+            return 'mangapill';
+        }
+        return 'asura';
     };
 
     // Parse chapter number from a chapter id/url
@@ -128,19 +134,19 @@ export default function Favorites() {
 
     const openDetails = (item) => {
         const src = getSource(item);
-        if (src === 'asura' || src === 'mgeko') {
-            router.push(`/MangaDetails?seriesId=${encodeURIComponent(item.url)}&source=${src}`);
-        } else {
+        if (src === 'mangapill' || String(item.url).includes('mangapill')) {
             router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(item.url)}&source=mangapill`);
+        } else {
+            router.push(`/MangaDetails?seriesId=${encodeURIComponent(item.url)}&source=${src}`);
         }
     };
 
     const openContinue = (item, lr) => {
         const src = getSource(item);
-        if (src === 'asura' || src === 'mgeko') {
-            router.push(`/ReadChapter?seriesId=${encodeURIComponent(item.url)}&chapterId=${encodeURIComponent(lr.chapterUrl)}&source=${src}`);
-        } else {
+        if (src === 'mangapill' || String(item.url).includes('mangapill')) {
             router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(lr.chapterUrl)}&mangapillUrl=${encodeURIComponent(item.url)}&source=mangapill`);
+        } else {
+            router.push(`/ReadChapter?seriesId=${encodeURIComponent(item.url)}&chapterId=${encodeURIComponent(lr.chapterUrl)}&source=${src}`);
         }
     };
 
