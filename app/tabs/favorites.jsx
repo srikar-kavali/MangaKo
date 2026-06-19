@@ -100,12 +100,9 @@ export default function Favorites() {
     };
 
     const getSource = (item) => {
-        if (item.source) return item.source;  // ← if saved correctly, returns here for all 3
-        const url = String(item.url || '');
-        if (url.startsWith('mgeko__')) return 'mgeko';
-        if (url.includes('/') || url.includes('http')) return 'mangapill';
-        if (/^\d+__/.test(url)) return 'mangapill';
-        return 'asura';
+        if (item.source) return item.source;
+        if (String(item.url).startsWith('mgeko__')) return 'mgeko';
+        return (String(item.url).includes('/') || String(item.url).includes('http')) ? 'mangapill' : 'asura';
     };
 
     // Parse chapter number from a chapter id/url
