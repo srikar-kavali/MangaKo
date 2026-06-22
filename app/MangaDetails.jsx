@@ -65,20 +65,22 @@ const MangaDetails = () => {
     const [status, setStatus] = useState(null);
 
     // FIX: Catch MangaPill items passing back in via stored flat favorites key format
-    const isAsura   = source === 'asura';
-    const isMgeko   = source === 'mgeko';
-    const isMangapill = source === 'mangapill' || !!mangapillUrl || String(seriesId).includes('__');
+    const isMgeko = source === 'mgeko' || String(seriesId).startsWith('mgeko__');
+    const isAsura = source === 'asura' && !isMgeko;
+    const isMangapill = !isMgeko && (source === 'mangapill' || !!mangapillUrl || String(seriesId).includes('__'));
 
     const storageKey = useMemo(() => normalizeKey(seriesId || mangapillUrl), [seriesId, mangapillUrl]);
 
     // Derived full path helper for MangaPill deep targets
     const resolvedMangapillUrl = useMemo(() => {
-        if (mangapillUrl) return mangapillUrl;
-        if (isMangapill && seriesId && seriesId.includes('__')) {
-            return `https://mangapill.com/manga/${seriesId.replace('__', '/')}`;
+        const raw = mangapillUrl || seriesId;
+        if (!raw) return null;
+        if (raw.includes('mangapill.com')) return raw;
+        if (isMangapill && raw.includes('__')) {
+            return `https://mangapill.com/manga/${raw.replace('__', '/')}`;
         }
-        return null;
-    }, [mangapillUrl, isMangapill, seriesId]);
+        return raw;
+    }, [mangapillUrl, seriesId, isMangapill]);
 
     useEffect(() => {
         (async () => {
