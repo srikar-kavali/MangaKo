@@ -12,8 +12,7 @@ import { getRecentSearches, saveRecentSearches, getFavorites, getLastReadChapter
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
-import { getCoverUrl } from "../../api/coverurls";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCoverUrl } from "../../manga_api/coverUrls";
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',
@@ -51,42 +50,9 @@ export default function Home() {
             setRecentSearches(await getRecentSearches());
             const favs = await getFavorites();
             const withProgress = await Promise.all(
-                favs.map(async f => {
-                    const lastReadChapter = await getLastReadChapter(f.url);
-
-                    const readTimestamp = await AsyncStorage.getItem('lastReadChapters').then(d => {
-                        try { return JSON.parse(d)?.[f.url]?.timestamp || 0; }
-                        catch { return 0; }
-                    });
-
-                    const updateTimestamp = await AsyncStorage.getItem(`updatedAt:${f.url}`).then(d => {
-                        return d ? parseInt(d, 10) : 0;
-                    });
-
-                    // Pull the newest known chapter ID cached by the app
-                    const latestChapterId = await AsyncStorage.getItem(`latestChapter:${f.url}`).catch(() => null);
-
-                    const activeTimestamp = Math.max(readTimestamp, updateTimestamp);
-
-                    // You are caught up if your last read matches the source's latest chapter id
-                    const isCaughtUp = (lastReadChapter && latestChapterId) ? (lastReadChapter === latestChapterId) : false;
-
-                    return {
-                        ...f,
-                        lastReadChapter: lastReadChapter || null,
-                        lastReadAt: readTimestamp,
-                        activeAt: activeTimestamp,
-                        isCaughtUp: isCaughtUp // Attached flag
-                    };
-                })
+                favs.map(async f => ({ ...f, lastReadChapter: (await getLastReadChapter(f.url)) || null }))
             );
-
-            setFollowedManga(
-                withProgress
-                    .filter(f => f.lastReadChapter)
-                    .filter(f => f.completed !== true)
-                    .sort((a, b) => b.activeAt - a.activeAt)
-            );
+            setFollowedManga(withProgress.filter(f => f.lastReadChapter));
         })();
     }, []);
 
@@ -95,7 +61,7 @@ export default function Home() {
             setLoadingBrowse(true);
             try {
                 const [mp] = await Promise.all([searchMangapill('', 20).catch(() => [])]);
-                const hardcoded = searchHardcodedManhwa('').map(i => ({ ...i, source: 'asura' }));
+                const hardcoded = searchHardcodedManhwa('').map(i => ({ ...i, source: i.source || 'asura' }));
                 const mpFmt = (mp || []).map(i => ({ ...i, source: 'mangapill', id: i.url }));
                 setBrowseManga([...hardcoded, ...mpFmt]);
             } catch(e) {} finally { setLoadingBrowse(false); }
@@ -114,7 +80,7 @@ export default function Home() {
             try {
                 const [ar, mr] = await Promise.all([Promise.resolve(searchHardcodedManhwa(q)), searchMangapill(q, 15).catch(() => [])]);
                 const score = i => { const t=(i.title||'').toLowerCase(); return t===qL?1000:t.startsWith(qL)?500:t.includes(qL)?100:0; };
-                const all = [...(ar||[]).map(i=>({...i,source:'asura'})), ...(mr||[]).map(i=>({...i,source:'mangapill',id:i.url}))]
+                const all = [...(ar||[]).map(i=>({...i, source: i.source || 'asura'})), ...(mr||[]).map(i=>({...i,source:'mangapill',id:i.url}))]
                     .map(i=>({...i,score:score(i)})).sort((a,b)=>b.score-a.score);
                 if (!ctrl.signal.aborted) { cacheRef.current.set(key, all); setSearchResults(all); }
             } catch(e) { if (!abortRef.current?.signal.aborted) setSearchResults([]); }
@@ -139,10 +105,11 @@ export default function Home() {
         setRecentSearches(u); await saveRecentSearches(u);
     };
     const getProxied = (item) => {
-        // Check coverUrls.js first (item.id for browse, item.url for followed manga)
         const url = getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl;
         if (!url) return null;
-        return item.source === 'asura' ? proxiedAsura(url) : proxiedMangapill(url);
+        // Both asura and mgeko use the same image proxy
+        if (item.source === 'mangapill') return proxiedMangapill(url);
+        return proxiedAsura(url);
     };
     const getSource = (m) => {
         if (m.source) return m.source;
