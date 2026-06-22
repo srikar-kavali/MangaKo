@@ -12,7 +12,7 @@ import { getRecentSearches, saveRecentSearches, getFavorites, getLastReadChapter
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
-import { getCoverUrl } from "../../manga_api/coverUrls";
+import { getCoverUrl } from "../../api/coverurls";
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',
