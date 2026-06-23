@@ -103,11 +103,8 @@ export default function Favorites() {
         if (item.source) return item.source;
         const urlStr = String(item.url);
         if (urlStr.startsWith('mgeko__')) return 'mgeko';
-
-        // Explicitly check for mangapill in the URL string
-        if (urlStr.includes('mangapill') || urlStr.includes('/') || urlStr.includes('http')) {
-            return 'mangapill';
-        }
+        if (urlStr.includes('mangapill') || urlStr.includes('/') || urlStr.includes('http')) return 'mangapill';
+        if (/^\d+__/.test(urlStr)) return 'mangapill';  // catches "5460__dandadan"
         return 'asura';
     };
 
@@ -134,7 +131,7 @@ export default function Favorites() {
 
     const openDetails = (item) => {
         const src = getSource(item);
-        if (src === 'mangapill' || String(item.url).includes('mangapill')) {
+        if (src === 'mangapill') {
             router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(item.url)}&source=mangapill`);
         } else {
             router.push(`/MangaDetails?seriesId=${encodeURIComponent(item.url)}&source=${src}`);
@@ -143,7 +140,7 @@ export default function Favorites() {
 
     const openContinue = (item, lr) => {
         const src = getSource(item);
-        if (src === 'mangapill' || String(item.url).includes('mangapill')) {
+        if (src === 'mangapill') {
             router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(lr.chapterUrl)}&mangapillUrl=${encodeURIComponent(item.url)}&source=mangapill`);
         } else {
             router.push(`/ReadChapter?seriesId=${encodeURIComponent(item.url)}&chapterId=${encodeURIComponent(lr.chapterUrl)}&source=${src}`);
