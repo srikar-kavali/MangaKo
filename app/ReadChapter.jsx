@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
     View, SafeAreaView, ScrollView, Image, StyleSheet,
-    Pressable, Text, ActivityIndicator, Dimensions, Platform, Animated,
+    Pressable, Text, ActivityIndicator, Dimensions, Platform, Animated, Modal, FlatList
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
@@ -24,6 +24,7 @@ const ReadChapter = () => {
     const { seriesId, chapterId, chapterUrl, mangapillUrl, source } = params;
     const router = useRouter();
     const scrollRef = useRef(null);
+    const pickerListRef = useRef(null);
     const headerAnim = useRef(new Animated.Value(1)).current;
     const [headerVis, setHeaderVis] = useState(true);
     const tapTimer = useRef(null);
@@ -38,6 +39,7 @@ const ReadChapter = () => {
     const [loadingPages, setLoadingPages] = useState(false);
     const [imageSizes, setImageSizes] = useState({});
     const [screenWidth, setScreenWidth] = useState(getW());
+    const [pickerVisible, setPickerVisible] = useState(false);
 
     useEffect(() => {
         if (Platform.OS !== 'web') return;
@@ -46,31 +48,28 @@ const ReadChapter = () => {
         return () => window.removeEventListener('resize', h);
     }, []);
 
-    // ── FIXED: Normalize keys before saving to storage ───────────────────────
     useEffect(() => {
         if (!selectedCh) return;
 
         let trackingKey = seriesId || mangapillUrl;
         if (!trackingKey) return;
 
-        // If it's a full Mangapill URL, extract only the unique slug path string
         if (trackingKey.includes('mangapill.com')) {
             const parts = trackingKey.split('/').filter(Boolean);
-            // URL: https://mangapill.com/manga/1234/title -> parts will yield '1234/title' or 'title'
             const index = parts.indexOf('manga');
             if (index !== -1 && parts[index + 1]) {
-                trackingKey = parts.slice(index + 1).join('__'); // Creates clean key slug: '1234__title'
+                trackingKey = parts.slice(index + 1).join('__');
             } else {
                 trackingKey = parts.pop() || trackingKey;
             }
         }
 
-        updateLastRead(trackingKey, selectedCh).catch((err) => {
+        // Pass timestamp alongside selection to force carousel updates to front of shelf
+        updateLastRead(trackingKey, selectedCh, Date.now()).catch((err) => {
             console.error("Failed updating history tracking payload:", err);
         });
     }, [selectedCh, seriesId, mangapillUrl]);
 
-    // Fetch pages for selected chapter
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -109,7 +108,6 @@ const ReadChapter = () => {
         return () => { cancelled = true; };
     }, [selectedCh]);
 
-    // Fetch full chapter list for prev/next navigation
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -165,6 +163,13 @@ const ReadChapter = () => {
         }, 80);
     };
 
+    const scrollPickerToSelected = () => {
+        if (!pickerListRef.current || idx < 0) return;
+        setTimeout(() => {
+            pickerListRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+        }, 120);
+    };
+
     const idx = allChapters.findIndex(ch => ch.id === selectedCh);
     const hasPrev = idx > 0;
     const hasNext = idx >= 0 && idx < allChapters.length - 1;
@@ -173,9 +178,10 @@ const ReadChapter = () => {
 
     return (
         <SafeAreaView style={S.container}>
+            {/* TOP FIXED CONTROLLER HEADER */}
             <Animated.View style={[S.header, {
                 opacity: headerAnim,
-                transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-60, 0] }) }],
+                transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-110, 0] }) }],
             }]}>
                 <View style={S.headerContent}>
                     <Pressable onPress={() => router.replace('/tabs/home')} hitSlop={10}>
@@ -188,6 +194,34 @@ const ReadChapter = () => {
                         )}
                     </View>
                 </View>
+
+                {/* MIRRORED TOP NAVIGATION BUTTON BAR */}
+                <View style={S.topBarNav}>
+                    <Pressable
+                        disabled={!hasPrev}
+                        onPress={() => hasPrev && setSelectedCh(allChapters[idx - 1].id)}
+                        style={[S.topBarBtn, !hasPrev && S.disabledBtn]}
+                    >
+                        <Ionicons name="chevron-back" size={16} color={C.text1} />
+                    </Pressable>
+
+                    <Pressable
+                        style={S.topBarPickerTrigger}
+                        onPress={() => { setPickerVisible(true); scrollPickerToSelected(); }}
+                    >
+                        <Text style={S.topBarPickerText}>{label}</Text>
+                        <Ionicons name="chevron-down" size={12} color={C.text2} />
+                    </Pressable>
+
+                    <Pressable
+                        disabled={!hasNext}
+                        onPress={() => hasNext && setSelectedCh(allChapters[idx + 1].id)}
+                        style={[S.topBarBtn, !hasNext && S.disabledBtn]}
+                    >
+                        <Ionicons name="chevron-forward" size={16} color={C.text1} />
+                    </Pressable>
+                </View>
+
                 <View style={S.progWrap}>
                     <View style={[S.progFill, { width: `${progress}%` }]} />
                 </View>
@@ -195,7 +229,7 @@ const ReadChapter = () => {
 
             <ScrollView
                 ref={scrollRef}
-                contentContainerStyle={S.scrollContent}
+                contentContainerStyle={[S.scrollContent, { paddingTop: 100 }]}
                 showsVerticalScrollIndicator={false}
                 onTouchEnd={toggleHeader}
             >
@@ -239,6 +273,7 @@ const ReadChapter = () => {
                     </View>
                 )}
 
+                {/* BOTTOM NAVIGATION ACTIONS */}
                 <View style={S.nav}>
                     <Pressable
                         disabled={!hasPrev}
@@ -246,12 +281,18 @@ const ReadChapter = () => {
                         style={({ pressed }) => [S.navBtn, { opacity: (pressed || !hasPrev) ? 0.35 : 1 }]}
                     >
                         <Ionicons name="chevron-back" size={15} color={C.text1} />
-                        <Text style={S.navBtnText}>Previous</Text>
+                        <Text style={S.navBtnText}>Prev</Text>
                     </Pressable>
 
-                    <Text style={S.navCounter}>
-                        {idx >= 0 ? `${idx + 1} / ${allChapters.length}` : '—'}
-                    </Text>
+                    <Pressable
+                        style={S.navCounterContainer}
+                        onPress={() => { setPickerVisible(true); scrollPickerToSelected(); }}
+                    >
+                        <Text style={S.navCounterText}>
+                            {idx >= 0 ? `${idx + 1} / ${allChapters.length}` : '—'}
+                        </Text>
+                        <Ionicons name="unfold-outline" size={11} color={C.text2} />
+                    </Pressable>
 
                     {hasNext ? (
                         <Pressable
@@ -272,6 +313,48 @@ const ReadChapter = () => {
                     )}
                 </View>
             </ScrollView>
+
+            {/* SYNCED SCROLLABLE CHAPTER SELECTION MODAL */}
+            <Modal
+                transparent={true}
+                visible={pickerVisible}
+                animationType="fade"
+                onRequestClose={() => setPickerVisible(false)}
+            >
+                <Pressable style={S.modalOverlay} onPress={() => setPickerVisible(false)}>
+                    <View style={S.pickerCard}>
+                        <View style={S.pickerHeader}>
+                            <Text style={S.pickerHeaderTitle}>Select Chapter</Text>
+                            <Pressable onPress={() => setPickerVisible(false)} hitSlop={10}>
+                                <Ionicons name="close-circle" size={22} color={C.text2} />
+                            </Pressable>
+                        </View>
+                        <FlatList
+                            ref={pickerListRef}
+                            data={allChapters}
+                            keyExtractor={(item) => item.id}
+                            getItemLayout={(data, index) => ({ length: 48, offset: 48 * index, index })}
+                            renderItem={({ item }) => {
+                                const isActive = item.id === selectedCh;
+                                return (
+                                    <Pressable
+                                        style={[S.pickerItem, isActive && S.pickerItemActive]}
+                                        onPress={() => {
+                                            setSelectedCh(item.id);
+                                            setPickerVisible(false);
+                                        }}
+                                    >
+                                        <Text style={[S.pickerItemText, isActive && S.pickerItemTextActive]}>
+                                            {item.title}
+                                        </Text>
+                                        {isActive && <Ionicons name="checkmark-sharp" size={16} color={C.accent} />}
+                                    </Pressable>
+                                );
+                            }}
+                        />
+                    </View>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -280,12 +363,20 @@ export default ReadChapter;
 
 const S = StyleSheet.create({
     container: { flex: 1, backgroundColor: C.bg0 },
-    header: { backgroundColor: C.bg3, borderBottomWidth: 1, borderBottomColor: C.border, zIndex: 10 },
-    headerContent: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8 },
+    header: { backgroundColor: C.bg3, borderBottomWidth: 1, borderBottomColor: C.border, zIndex: 10, position: 'absolute', top: 0, left: 0, right: 0 },
+    headerContent: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4 },
     logoImg: { width: 30, height: 30, resizeMode: 'contain' },
     headerInfo: { flex: 1 },
     headerTitle: { fontSize: 14, fontWeight: '700', color: C.text1 },
     headerSub: { fontSize: 11, color: C.text3, marginTop: 1 },
+
+    // Top inline panel sizing styles
+    topBarNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingBottom: 8, gap: 10 },
+    topBarBtn: { width: 36, height: 32, backgroundColor: C.bg2, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: C.border },
+    topBarPickerTrigger: { flex: 1, height: 32, backgroundColor: C.bg2, borderRadius: 6, borderWidth: 1, borderColor: C.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 10 },
+    topBarPickerText: { color: C.text1, fontSize: 12, fontWeight: '600' },
+    disabledBtn: { opacity: 0.2 },
+
     progWrap: { height: 2, backgroundColor: C.bg0 },
     progFill: { height: 2, backgroundColor: C.accent },
     scrollContent: { backgroundColor: C.bg0, paddingBottom: 24 },
@@ -294,10 +385,23 @@ const S = StyleSheet.create({
     loadText: { color: C.text3, fontSize: 13 },
     emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 10 },
     emptyText: { color: C.text3, fontSize: 14 },
+
     nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginVertical: 20, paddingHorizontal: 14 },
     navBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: C.bg3, paddingVertical: 13, borderRadius: 10, borderWidth: 1, borderColor: C.border },
     navBtnNext: { backgroundColor: C.accent, borderColor: C.accent, shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 },
     navBtnDone: { backgroundColor: C.greenDim, borderColor: C.greenBorder },
     navBtnText: { color: C.text1, fontWeight: '700', fontSize: 13 },
-    navCounter: { width: 64, textAlign: 'center', color: C.text3, fontSize: 12 },
+
+    navCounterContainer: { width: 84, height: 44, backgroundColor: C.bg3, borderRadius: 10, borderWidth: 1, borderColor: C.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+    navCounterText: { color: C.text2, fontSize: 12, fontWeight: '600' },
+
+    // Overlay bottom dialog sheets styles
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+    pickerCard: { backgroundColor: C.bg3, borderRadius: 16, width: '100%', maxHeight: '70%', borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+    pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: C.border },
+    pickerHeaderTitle: { color: C.text1, fontSize: 15, fontWeight: '700' },
+    pickerItem: { height: 48, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.02)' },
+    pickerItemActive: { backgroundColor: 'rgba(124,106,245,0.08)' },
+    pickerItemText: { color: C.text2, fontSize: 14, fontWeight: '500' },
+    pickerItemTextActive: { color: C.accent, fontWeight: '700' }
 });

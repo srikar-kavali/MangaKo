@@ -49,10 +49,25 @@ export default function Home() {
         (async () => {
             setRecentSearches(await getRecentSearches());
             const favs = await getFavorites();
+
             const withProgress = await Promise.all(
-                favs.map(async f => ({ ...f, lastReadChapter: (await getLastReadChapter(f.url)) || null }))
+                favs.map(async f => {
+                    // Pull full storage context object safely (containing .chapterId and .timestamp updates)
+                    const progressData = await getLastReadChapter(f.url) || null;
+                    return {
+                        ...f,
+                        lastReadChapter: progressData?.chapterId || progressData || null,
+                        lastReadTimestamp: progressData?.timestamp || 0
+                    };
+                })
             );
-            setFollowedManga(withProgress.filter(f => f.lastReadChapter));
+
+            // SORT: Order items descending by tracking timestamp to move most recently read to the front
+            const sortedHistory = withProgress
+                .filter(f => f.lastReadChapter)
+                .sort((a, b) => b.lastReadTimestamp - a.lastReadTimestamp);
+
+            setFollowedManga(sortedHistory);
         })();
     }, []);
 
@@ -107,13 +122,11 @@ export default function Home() {
     const getProxied = (item) => {
         const url = getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl;
         if (!url) return null;
-        // Both asura and mgeko use the same image proxy
         if (item.source === 'mangapill') return proxiedMangapill(url);
         return proxiedAsura(url);
     };
     const getSource = (m) => {
         if (m.source) return m.source;
-        // mgeko IDs start with mgeko__
         if (String(m.url || m.id || '').startsWith('mgeko__')) return 'mgeko';
         return (String(m.url || m.id || '').includes('/') || String(m.url || m.id || '').includes('http')) ? 'mangapill' : 'asura';
     };
@@ -128,7 +141,6 @@ export default function Home() {
     };
     const openResult = async (item) => { await handleAddSearch(item?.title||query); closeSearch(); openManga(item); };
 
-    // Navigate to last read chapter
     const openLastRead = (manga) => {
         if (!manga.lastReadChapter) return;
         const src = getSource(manga), id = manga.url || manga.id;
@@ -200,49 +212,45 @@ export default function Home() {
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.hList}>
                             {followedManga.map((manga, idx) => {
                                 const img = getProxied(manga);
-                                return (
-                                    // ── Outer card — no onPress (split below) ──
-                                    <View key={`${manga.url}-${idx}`} style={S.contCard}>
+                                // CHECK: Verify if reader has hit the absolute edge of scraped material
+                                const isCaughtUp = manga.lastReadChapter && manga.latestChapter && (manga.lastReadChapter === manga.latestChapter);
 
-                                        {/* COVER — taps to MangaDetails */}
+                                return (
+                                    <View key={`${manga.url}-${idx}`} style={S.contCard}>
                                         <Pressable
                                             style={({ pressed }) => [S.contCoverWrap, { opacity: pressed ? 0.75 : 1 }]}
                                             onPress={() => openManga(manga)}
                                         >
                                             {img ? (
                                                 <>
-                                                    <Image
-                                                        source={{ uri: img }}
-                                                        style={S.contCover}
-                                                        resizeMode="cover"
-                                                        // If image errors, hide it — the placeholder underneath shows
-                                                        onError={() => {}}
-                                                    />
+                                                    <Image source={{ uri: img }} style={S.contCover} resizeMode="cover" />
                                                     <View style={S.contGradient} />
                                                 </>
                                             ) : (
-                                                // Visible placeholder — dashed border + icon so it's clearly "loading/missing"
                                                 <View style={S.contCoverEmpty}>
                                                     <Ionicons name="image-outline" size={26} color={C.text3} />
                                                     <Text style={S.contCoverEmptyText}>No cover</Text>
                                                 </View>
                                             )}
-                                            {/* Source dot */}
                                             <View style={[S.srcDot, { backgroundColor: manga.source==='asura' ? C.asuraBg : C.mpBg }]} />
                                         </Pressable>
 
-                                        {/* CHAPTER BUTTON — taps to ReadChapter */}
-                                        <Pressable
-                                            style={({ pressed }) => [S.contChBtn, { opacity: pressed ? 0.75 : 1 }]}
-                                            onPress={() => openLastRead(manga)}
-                                        >
-                                            <Ionicons name="play" size={9} color="#fff" />
-                                            <Text style={S.contChText} numberOfLines={1}>
-                                                {fmtCh(manga.lastReadChapter, manga.source)}
-                                            </Text>
-                                        </Pressable>
+                                        {/* CAUGHT-UP CORRECTION INDICATOR BLOCK */}
+                                        {!isCaughtUp ? (
+                                            <Pressable
+                                                style={({ pressed }) => [S.contChBtn, { opacity: pressed ? 0.75 : 1 }]}
+                                                onPress={() => openLastRead(manga)}
+                                            >
+                                                <Ionicons name="play" size={9} color="#fff" />
+                                                <Text style={S.contChText} numberOfLines={1}>
+                                                    {fmtCh(manga.lastReadChapter, manga.source)}
+                                                </Text>
+                                            </Pressable>
+                                        ) : (
+                                            /* Clean space fallback matching original card profile footprint dimensions when caught up */
+                                            <View style={S.caughtUpSpacer} />
+                                        )}
 
-                                        {/* Title below */}
                                         <Text style={S.contTitle} numberOfLines={2}>{manga.title}</Text>
                                     </View>
                                 );
@@ -275,7 +283,8 @@ export default function Home() {
                         <View style={S.grid}>
                             {browseManga.map((manga, idx) => {
                                 const img = getProxied(manga);
-                                const isAS = manga.source === 'asura';                                return (
+                                const isAS = manga.source === 'asura';
+                                return (
                                     <Pressable
                                         key={`${manga.id}-${idx}`}
                                         style={({ pressed }) => [S.gridCard, { opacity: pressed ? 0.72 : 1 }]}
@@ -398,7 +407,6 @@ export default function Home() {
 
 const S = StyleSheet.create({
     screen: { flex: 1, backgroundColor: C.bg1 },
-
     header: { backgroundColor: C.bg1, borderBottomWidth: 1, borderBottomColor: C.border },
     headerInner: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 13 },
     logoRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -428,50 +436,34 @@ const S = StyleSheet.create({
     liveDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: C.accent },
     liveText: { fontSize: 9, fontWeight: '800', color: C.accentBright, letterSpacing: 1 },
 
-    // ── Continue Reading cards ─────────────────────────────────────────
     hList: { paddingHorizontal: 18, gap: 11, paddingRight: 24 },
     contCard: { width: 108 },
-
-    // Cover — pressable separately, no black overlay when empty
     contCoverWrap: {
         width: 108, height: 154,
         borderRadius: 10, overflow: 'hidden',
-        // Noticeably lighter than screen bg so unloaded slots have clear definition
         backgroundColor: '#2a2a35',
         borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
         marginBottom: 8,
         shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.55, shadowRadius: 14, elevation: 10,
     },
-    // Image fills the entire cover using absolute so placeholder stays behind it
     contCover: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
-    contCoverEmpty: {
-        flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5,
-    },
+    contCoverEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5 },
     contCoverEmptyText: { fontSize: 9, color: C.text3, fontWeight: '600', letterSpacing: 0.3 },
-    contGradient: {
-        position: 'absolute', bottom: 0, left: 0, right: 0, height: 50,
-        backgroundColor: 'rgba(7,7,10,0.65)',
-    },
-    srcDot: {
-        position: 'absolute', top: 7, right: 7,
-        width: 7, height: 7, borderRadius: 4,
-        borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)',
-    },
+    contGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 50, backgroundColor: 'rgba(7,7,10,0.65)' },
+    srcDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' },
 
-    // Chapter button — sits BELOW the cover, separate tap target
     contChBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        gap: 4,
-        backgroundColor: C.accent,
+        gap: 4, backgroundColor: C.accent,
         borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6,
         marginBottom: 7,
         shadowColor: C.accent, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6,
     },
     contChText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
+    caughtUpSpacer: { height: 22, marginBottom: 7 }, // Precise spacer layout fallback
 
     contTitle: { fontSize: 11, fontWeight: '600', color: C.text2, lineHeight: 15 },
 
-    // Grid
     grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 14, gap: 10 },
     gridCard: { width: '30.5%', marginBottom: 14 },
     gridCoverWrap: {
