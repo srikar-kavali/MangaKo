@@ -8,7 +8,10 @@ import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
-import { getRecentSearches, saveRecentSearches, getFavorites, getLastReadChapter } from '../searchStorage';
+import {
+    getRecentSearches, saveRecentSearches, getFavorites,
+    getLastReadChapterInfo, getLatestChapter,
+} from '../searchStorage';
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
@@ -52,22 +55,32 @@ export default function Home() {
 
             const withProgress = await Promise.all(
                 favs.map(async f => {
-                    // Pull full storage context object safely (containing .chapterId and .timestamp updates)
-                    const progressData = await getLastReadChapter(f.url) || null;
+                    const mangaUrl = f.url;
+
+                    // getLastReadChapterInfo returns { chapterUrl, timestamp } or null
+                    const info = await getLastReadChapterInfo(mangaUrl);
+                    if (!info?.chapterUrl) return null; // skip if never read
+
+                    // getLatestChapter uses key `latest_chapter_${mangaUrl}`
+                    // written by MangaDetails via saveLatestChapter
+                    const latestChapter = await getLatestChapter(mangaUrl);
+
                     return {
                         ...f,
-                        lastReadChapter: progressData?.chapterId || progressData || null,
-                        lastReadTimestamp: progressData?.timestamp || 0
+                        lastReadChapter: info.chapterUrl,
+                        lastReadTimestamp: info.timestamp || 0,
+                        // latestChapter is a chapter number (int) or null
+                        latestChapter: latestChapter ?? null,
                     };
                 })
             );
 
-            // SORT: Order items descending by tracking timestamp to move most recently read to the front
-            const sortedHistory = withProgress
-                .filter(f => f.lastReadChapter)
+            // Filter out unread, sort most-recently-read first
+            const sorted = withProgress
+                .filter(Boolean)
                 .sort((a, b) => b.lastReadTimestamp - a.lastReadTimestamp);
 
-            setFollowedManga(sortedHistory);
+            setFollowedManga(sorted);
         })();
     }, []);
 
@@ -79,7 +92,7 @@ export default function Home() {
                 const hardcoded = searchHardcodedManhwa('').map(i => ({ ...i, source: i.source || 'asura' }));
                 const mpFmt = (mp || []).map(i => ({ ...i, source: 'mangapill', id: i.url }));
                 setBrowseManga([...hardcoded, ...mpFmt]);
-            } catch(e) {} finally { setLoadingBrowse(false); }
+            } catch (e) {} finally { setLoadingBrowse(false); }
         })();
     }, []);
 
@@ -93,13 +106,24 @@ export default function Home() {
             const ctrl = new AbortController(); abortRef.current = ctrl;
             setIsSearching(true);
             try {
-                const [ar, mr] = await Promise.all([Promise.resolve(searchHardcodedManhwa(q)), searchMangapill(q, 15).catch(() => [])]);
-                const score = i => { const t=(i.title||'').toLowerCase(); return t===qL?1000:t.startsWith(qL)?500:t.includes(qL)?100:0; };
-                const all = [...(ar||[]).map(i=>({...i, source: i.source || 'asura'})), ...(mr||[]).map(i=>({...i,source:'mangapill',id:i.url}))]
-                    .map(i=>({...i,score:score(i)})).sort((a,b)=>b.score-a.score);
+                const [ar, mr] = await Promise.all([
+                    Promise.resolve(searchHardcodedManhwa(q)),
+                    searchMangapill(q, 15).catch(() => []),
+                ]);
+                const score = i => {
+                    const t = (i.title || '').toLowerCase();
+                    return t === qL ? 1000 : t.startsWith(qL) ? 500 : t.includes(qL) ? 100 : 0;
+                };
+                const all = [
+                    ...(ar || []).map(i => ({ ...i, source: i.source || 'asura' })),
+                    ...(mr || []).map(i => ({ ...i, source: 'mangapill', id: i.url })),
+                ].map(i => ({ ...i, score: score(i) })).sort((a, b) => b.score - a.score);
                 if (!ctrl.signal.aborted) { cacheRef.current.set(key, all); setSearchResults(all); }
-            } catch(e) { if (!abortRef.current?.signal.aborted) setSearchResults([]); }
-            finally { if (!abortRef.current?.signal.aborted) setIsSearching(false); }
+            } catch (e) {
+                if (!abortRef.current?.signal.aborted) setSearchResults([]);
+            } finally {
+                if (!abortRef.current?.signal.aborted) setIsSearching(false);
+            }
         }, LIVE_DELAY_MS);
         return () => clearTimeout(timerRef.current);
     }, [query]);
@@ -116,20 +140,24 @@ export default function Home() {
     };
     const handleAddSearch = async (text) => {
         const t = text.trim(); if (!t) return;
-        const u = [t, ...recentSearches.filter(i=>i!==t)].slice(0,10);
+        const u = [t, ...recentSearches.filter(i => i !== t)].slice(0, 10);
         setRecentSearches(u); await saveRecentSearches(u);
     };
+
     const getProxied = (item) => {
         const url = getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl;
         if (!url) return null;
         if (item.source === 'mangapill') return proxiedMangapill(url);
         return proxiedAsura(url);
     };
+
     const getSource = (m) => {
         if (m.source) return m.source;
         if (String(m.url || m.id || '').startsWith('mgeko__')) return 'mgeko';
-        return (String(m.url || m.id || '').includes('/') || String(m.url || m.id || '').includes('http')) ? 'mangapill' : 'asura';
+        return (String(m.url || m.id || '').includes('/') || String(m.url || m.id || '').includes('http'))
+            ? 'mangapill' : 'asura';
     };
+
     const openManga = (item) => {
         const src = item.source || getSource(item);
         const id = item.id || item.url;
@@ -139,7 +167,7 @@ export default function Home() {
             router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(id)}&source=mangapill`);
         }
     };
-    const openResult = async (item) => { await handleAddSearch(item?.title||query); closeSearch(); openManga(item); };
+    const openResult = async (item) => { await handleAddSearch(item?.title || query); closeSearch(); openManga(item); };
 
     const openLastRead = (manga) => {
         if (!manga.lastReadChapter) return;
@@ -153,9 +181,27 @@ export default function Home() {
 
     const fmtCh = (id, src) => {
         if (!id) return '';
-        if (src==='asura') return `Ch.${id}`;
-        const slug = String(id).split('/').filter(Boolean).pop()||'';
-        const m = slug.match(/(\d+(\.\d+)?)/); return m ? `Ch.${m[1]}` : '▶';
+        if (src === 'asura' || src === 'mgeko') return `Ch.${id}`;
+        const slug = String(id).split('/').filter(Boolean).pop() || '';
+        const m = slug.match(/(\d+(\.\d+)?)/);
+        return m ? `Ch.${m[1]}` : '▶';
+    };
+
+    // isCaughtUp: lastReadChapter string contains the latest chapter number
+    // latestChapter from getLatestChapter is an int; lastReadChapter is a string/URL
+    // Compare by extracting the number from lastReadChapter
+    const checkCaughtUp = (manga) => {
+        if (!manga.latestChapter || !manga.lastReadChapter) return false;
+        const src = getSource(manga);
+        let readNum;
+        if (src === 'asura' || src === 'mgeko') {
+            readNum = parseFloat(manga.lastReadChapter);
+        } else {
+            const slug = String(manga.lastReadChapter).split('/').filter(Boolean).pop() || '';
+            const m = slug.match(/(\d+(\.\d+)?)/);
+            readNum = m ? parseFloat(m[1]) : null;
+        }
+        return readNum !== null && !isNaN(readNum) && readNum >= manga.latestChapter;
     };
 
     return (
@@ -173,7 +219,7 @@ export default function Home() {
                         <Pressable style={S.iconBtn} onPress={openSearch} hitSlop={10}>
                             <Ionicons name="search-outline" size={20} color={C.text2} />
                         </Pressable>
-                        <Pressable style={S.iconBtn} onPress={() => setDropdownVisible(v=>!v)} hitSlop={10}>
+                        <Pressable style={S.iconBtn} onPress={() => setDropdownVisible(v => !v)} hitSlop={10}>
                             <Ionicons name="person-circle-outline" size={23} color={C.text2} />
                         </Pressable>
                     </View>
@@ -210,20 +256,20 @@ export default function Home() {
                             </Pressable>
                         </View>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.hList}>
-                            {followedManga.map((manga, idx) => {
+                            {followedManga.map((manga, i) => {
                                 const img = getProxied(manga);
-                                // CHECK: Verify if reader has hit the absolute edge of scraped material
-                                const isCaughtUp = manga.lastReadChapter && manga.latestChapter && (manga.lastReadChapter === manga.latestChapter);
+                                const isCaughtUp = checkCaughtUp(manga);
 
                                 return (
-                                    <View key={`${manga.url}-${idx}`} style={S.contCard}>
+                                    <View key={`${manga.url}-${i}`} style={S.contCard}>
+                                        {/* Cover — taps to MangaDetails */}
                                         <Pressable
                                             style={({ pressed }) => [S.contCoverWrap, { opacity: pressed ? 0.75 : 1 }]}
                                             onPress={() => openManga(manga)}
                                         >
                                             {img ? (
                                                 <>
-                                                    <Image source={{ uri: img }} style={S.contCover} resizeMode="cover" />
+                                                    <Image source={{ uri: img }} style={S.contCover} resizeMode="cover" onError={() => {}} />
                                                     <View style={S.contGradient} />
                                                 </>
                                             ) : (
@@ -232,11 +278,17 @@ export default function Home() {
                                                     <Text style={S.contCoverEmptyText}>No cover</Text>
                                                 </View>
                                             )}
-                                            <View style={[S.srcDot, { backgroundColor: manga.source==='asura' ? C.asuraBg : C.mpBg }]} />
+                                            <View style={[S.srcDot, { backgroundColor: manga.source === 'asura' ? C.asuraBg : C.mpBg }]} />
                                         </Pressable>
 
-                                        {/* CAUGHT-UP CORRECTION INDICATOR BLOCK */}
-                                        {!isCaughtUp ? (
+                                        {isCaughtUp ? (
+                                            // Caught up: green pill, same height as chapter button so cards stay aligned
+                                            <View style={S.caughtUpPill}>
+                                                <Ionicons name="checkmark" size={9} color={C.green} />
+                                                <Text style={S.caughtUpText}>Up to date</Text>
+                                            </View>
+                                        ) : (
+                                            // Not caught up: resume button
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, { opacity: pressed ? 0.75 : 1 }]}
                                                 onPress={() => openLastRead(manga)}
@@ -246,9 +298,6 @@ export default function Home() {
                                                     {fmtCh(manga.lastReadChapter, manga.source)}
                                                 </Text>
                                             </Pressable>
-                                        ) : (
-                                            /* Clean space fallback matching original card profile footprint dimensions when caught up */
-                                            <View style={S.caughtUpSpacer} />
                                         )}
 
                                         <Text style={S.contTitle} numberOfLines={2}>{manga.title}</Text>
@@ -271,7 +320,7 @@ export default function Home() {
 
                     {loadingBrowse ? (
                         <View style={S.grid}>
-                            {[...Array(6)].map((_,i) => (
+                            {[...Array(6)].map((_, i) => (
                                 <View key={i} style={S.skelCard}>
                                     <View style={S.skelCover} />
                                     <View style={S.skelLine} />
@@ -281,12 +330,12 @@ export default function Home() {
                         </View>
                     ) : (
                         <View style={S.grid}>
-                            {browseManga.map((manga, idx) => {
+                            {browseManga.map((manga, i) => {
                                 const img = getProxied(manga);
                                 const isAS = manga.source === 'asura';
                                 return (
                                     <Pressable
-                                        key={`${manga.id}-${idx}`}
+                                        key={`${manga.id}-${i}`}
                                         style={({ pressed }) => [S.gridCard, { opacity: pressed ? 0.72 : 1 }]}
                                         onPress={() => openManga(manga)}
                                     >
@@ -299,8 +348,14 @@ export default function Home() {
                                                 </View>
                                             )}
                                             {!!img && <View style={S.gridGradient} />}
-                                            <View style={[S.gridBadge, { backgroundColor: isAS ? C.asuraBg : manga.source === 'mgeko' ? 'rgba(52,211,153,0.80)' : C.mpBg }]}>
-                                                <Text style={S.gridBadgeText}>{isAS ? 'AS' : manga.source === 'mgeko' ? 'MG' : 'MP'}</Text>
+                                            <View style={[S.gridBadge, {
+                                                backgroundColor: isAS ? C.asuraBg
+                                                    : manga.source === 'mgeko' ? 'rgba(52,211,153,0.80)'
+                                                        : C.mpBg,
+                                            }]}>
+                                                <Text style={S.gridBadgeText}>
+                                                    {isAS ? 'AS' : manga.source === 'mgeko' ? 'MG' : 'MP'}
+                                                </Text>
                                             </View>
                                         </View>
                                         <Text style={S.gridTitle} numberOfLines={2}>{manga.title}</Text>
@@ -316,7 +371,7 @@ export default function Home() {
             {searchActive && (
                 <Animated.View style={[S.searchOverlay, {
                     opacity: overlayAnim,
-                    transform: [{ translateY: overlayAnim.interpolate({ inputRange:[0,1], outputRange:[20,0] }) }],
+                    transform: [{ translateY: overlayAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
                 }]}>
                     <SafeAreaView style={{ flex: 1 }}>
                         <View style={S.searchTopBar}>
@@ -333,7 +388,11 @@ export default function Home() {
                                 />
                                 {isSearching
                                     ? <ActivityIndicator size="small" color={C.accent} />
-                                    : query.length > 0 && <Pressable onPress={() => setQuery('')} hitSlop={8}><Ionicons name="close-circle" size={16} color={C.text3} /></Pressable>
+                                    : query.length > 0 && (
+                                    <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                                        <Ionicons name="close-circle" size={16} color={C.text3} />
+                                    </Pressable>
+                                )
                                 }
                             </View>
                             <Pressable onPress={closeSearch} style={S.cancelBtn}>
@@ -346,7 +405,7 @@ export default function Home() {
                             searchResults.length > 0 ? (
                                 <FlatList
                                     data={searchResults}
-                                    keyExtractor={(item,i) => `${item?.id||i}-${item.source}`}
+                                    keyExtractor={(item, i) => `${item?.id || i}-${item.source}`}
                                     keyboardShouldPersistTaps="handled"
                                     ItemSeparatorComponent={() => <View style={S.resSep} />}
                                     renderItem={({ item }) => {
@@ -359,7 +418,9 @@ export default function Home() {
                                             >
                                                 {cover
                                                     ? <Image source={{ uri: cover }} style={S.resCover} />
-                                                    : <View style={[S.resCover, { backgroundColor: C.bg3, alignItems:'center', justifyContent:'center' }]}><Ionicons name="book-outline" size={18} color={C.text3} /></View>
+                                                    : <View style={[S.resCover, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
+                                                        <Ionicons name="book-outline" size={18} color={C.text3} />
+                                                    </View>
                                                 }
                                                 <View style={S.resInfo}>
                                                     <Text style={S.resTitle} numberOfLines={2}>{item.title}</Text>
@@ -439,10 +500,8 @@ const S = StyleSheet.create({
     hList: { paddingHorizontal: 18, gap: 11, paddingRight: 24 },
     contCard: { width: 108 },
     contCoverWrap: {
-        width: 108, height: 154,
-        borderRadius: 10, overflow: 'hidden',
-        backgroundColor: '#2a2a35',
-        borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
+        width: 108, height: 154, borderRadius: 10, overflow: 'hidden',
+        backgroundColor: '#2a2a35', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
         marginBottom: 8,
         shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.55, shadowRadius: 14, elevation: 10,
     },
@@ -452,23 +511,29 @@ const S = StyleSheet.create({
     contGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 50, backgroundColor: 'rgba(7,7,10,0.65)' },
     srcDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' },
 
+    // Resume chapter button
     contChBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         gap: 4, backgroundColor: C.accent,
-        borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6,
-        marginBottom: 7,
+        borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6, marginBottom: 7,
         shadowColor: C.accent, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6,
     },
     contChText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
-    caughtUpSpacer: { height: 22, marginBottom: 7 }, // Precise spacer layout fallback
+
+    // Caught-up pill — identical height to contChBtn so card layout stays stable
+    caughtUpPill: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        gap: 4, borderWidth: 1, borderColor: C.greenBorder, backgroundColor: C.greenDim,
+        borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6, marginBottom: 7,
+    },
+    caughtUpText: { color: C.green, fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
 
     contTitle: { fontSize: 11, fontWeight: '600', color: C.text2, lineHeight: 15 },
 
     grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 14, gap: 10 },
     gridCard: { width: '30.5%', marginBottom: 14 },
     gridCoverWrap: {
-        width: '100%', aspectRatio: 0.68,
-        borderRadius: 9, overflow: 'hidden',
+        width: '100%', aspectRatio: 0.68, borderRadius: 9, overflow: 'hidden',
         backgroundColor: C.bg3, marginBottom: 7,
         shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 7,
     },
