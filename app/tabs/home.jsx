@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
     SafeAreaView, View, Text, StyleSheet, Image, Pressable,
     TextInput, FlatList, ActivityIndicator, ScrollView,
@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
 import {
@@ -48,47 +49,57 @@ export default function Home() {
     const abortRef = useRef(null);
     const searchInputRef = useRef(null);
 
-    useEffect(() => {
-        (async () => {
-            setRecentSearches(await getRecentSearches());
-            const favs = await getFavorites();
+    // ── useFocusEffect: re-runs every time this screen comes into focus ──────
+    // This means navigating back from ReadChapter always re-sorts the list,
+    // so a newly-read chapter bubbles to the front immediately.
+    const loadFollowedManga = useCallback(async () => {
+        const favs = await getFavorites();
 
-            const withProgress = await Promise.all(
-                favs.map(async f => {
-                    const mangaUrl = f.url;
+        const withProgress = await Promise.all(
+            favs.map(async f => {
+                const mangaUrl = f.url;
 
-                    // getLastReadChapterInfo returns { chapterUrl, timestamp } or null
-                    const info = await getLastReadChapterInfo(mangaUrl);
-                    if (!info?.chapterUrl) return null; // skip if never read
+                // getLastReadChapterInfo returns { chapterUrl, timestamp } or null
+                const info = await getLastReadChapterInfo(mangaUrl);
+                if (!info?.chapterUrl) return null; // never read — skip
 
-                    // getLatestChapter uses key `latest_chapter_${mangaUrl}`
-                    // written by MangaDetails via saveLatestChapter
-                    const latestChapter = await getLatestChapter(mangaUrl);
+                // getLatestChapter uses key `latest_chapter_${mangaUrl}`
+                // written by MangaDetails via saveLatestChapter
+                const latestChapter = await getLatestChapter(mangaUrl);
 
-                    return {
-                        ...f,
-                        lastReadChapter: info.chapterUrl,
-                        lastReadTimestamp: info.timestamp || 0,
-                        // latestChapter is a chapter number (int) or null
-                        latestChapter: latestChapter ?? null,
-                    };
-                })
-            );
+                return {
+                    ...f,
+                    lastReadChapter: info.chapterUrl,
+                    lastReadTimestamp: info.timestamp || 0,
+                    latestChapter: latestChapter ?? null,
+                };
+            })
+        );
 
-            // Filter out unread, sort most-recently-read first
-            const sorted = withProgress
-                .filter(Boolean)
-                .sort((a, b) => b.lastReadTimestamp - a.lastReadTimestamp);
+        // Filter unread entries, sort most-recently-read to front
+        const sorted = withProgress
+            .filter(Boolean)
+            .sort((a, b) => b.lastReadTimestamp - a.lastReadTimestamp);
 
-            setFollowedManga(sorted);
-        })();
+        setFollowedManga(sorted);
     }, []);
 
-    useEffect(() => {
+    useFocusEffect(
+        useCallback(() => {
+            // Reload recent searches + followed manga every time screen focuses
+            (async () => {
+                setRecentSearches(await getRecentSearches());
+                await loadFollowedManga();
+            })();
+        }, [loadFollowedManga])
+    );
+
+    // Browse section only needs to load once — not focus-dependent
+    React.useEffect(() => {
         (async () => {
             setLoadingBrowse(true);
             try {
-                const [mp] = await Promise.all([searchMangapill('', 20).catch(() => [])]);
+                const mp = await searchMangapill('', 20).catch(() => []);
                 const hardcoded = searchHardcodedManhwa('').map(i => ({ ...i, source: i.source || 'asura' }));
                 const mpFmt = (mp || []).map(i => ({ ...i, source: 'mangapill', id: i.url }));
                 setBrowseManga([...hardcoded, ...mpFmt]);
@@ -96,9 +107,13 @@ export default function Home() {
         })();
     }, []);
 
-    useEffect(() => {
+    React.useEffect(() => {
         const q = query.trim(), qL = q.toLowerCase(), key = `${CACHE_VERSION}:${qL}`;
-        if (!q) { setSearchResults([]); setIsSearching(false); abortRef.current?.abort(); clearTimeout(timerRef.current); return; }
+        if (!q) {
+            setSearchResults([]); setIsSearching(false);
+            abortRef.current?.abort(); clearTimeout(timerRef.current);
+            return;
+        }
         if (cacheRef.current.has(key)) setSearchResults(cacheRef.current.get(key));
         clearTimeout(timerRef.current);
         timerRef.current = setTimeout(async () => {
@@ -167,15 +182,31 @@ export default function Home() {
             router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(id)}&source=mangapill`);
         }
     };
-    const openResult = async (item) => { await handleAddSearch(item?.title || query); closeSearch(); openManga(item); };
+    const openResult = async (item) => {
+        await handleAddSearch(item?.title || query);
+        closeSearch();
+        openManga(item);
+    };
 
     const openLastRead = (manga) => {
         if (!manga.lastReadChapter) return;
-        const src = getSource(manga), id = manga.url || manga.id;
-        if (src === 'asura' || src === 'mgeko') {
-            router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=${src}`);
+        const src = getSource(manga);
+        const id = manga.url || manga.id;
+
+        if (src === 'mangapill') {
+            // ── MANGAPILL FIX ────────────────────────────────────────────────
+            // lastReadChapter is the full chapter URL (e.g. https://mangapill.com/chapters/...)
+            // ReadChapter needs: chapterUrl + mangapillUrl + source=mangapill
+            // Using chapterId= here was the bug — it caused ReadChapter to treat
+            // this as an asura chapter and call the wrong API endpoint.
+            router.push(
+                `/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(id)}&source=mangapill`
+            );
         } else {
-            router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(id)}&source=mangapill`);
+            // asura + mgeko: lastReadChapter is a plain chapter ID number
+            router.push(
+                `/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=${src}`
+            );
         }
     };
 
@@ -187,9 +218,7 @@ export default function Home() {
         return m ? `Ch.${m[1]}` : '▶';
     };
 
-    // isCaughtUp: lastReadChapter string contains the latest chapter number
-    // latestChapter from getLatestChapter is an int; lastReadChapter is a string/URL
-    // Compare by extracting the number from lastReadChapter
+    // Compare extracted chapter number against saved latest chapter (int)
     const checkCaughtUp = (manga) => {
         if (!manga.latestChapter || !manga.lastReadChapter) return false;
         const src = getSource(manga);
@@ -235,7 +264,9 @@ export default function Home() {
                             <Text style={S.ddText}>Settings</Text>
                         </Pressable>
                         <View style={S.ddLine} />
-                        <Pressable style={S.ddRow} onPress={async () => { setDropdownVisible(false); await signOut(); router.replace('/login'); }}>
+                        <Pressable style={S.ddRow} onPress={async () => {
+                            setDropdownVisible(false); await signOut(); router.replace('/login');
+                        }}>
                             <Ionicons name="log-out-outline" size={14} color={C.accent} />
                             <Text style={[S.ddText, { color: C.accent }]}>Sign Out</Text>
                         </Pressable>
@@ -262,7 +293,7 @@ export default function Home() {
 
                                 return (
                                     <View key={`${manga.url}-${i}`} style={S.contCard}>
-                                        {/* Cover — taps to MangaDetails */}
+                                        {/* Cover → MangaDetails */}
                                         <Pressable
                                             style={({ pressed }) => [S.contCoverWrap, { opacity: pressed ? 0.75 : 1 }]}
                                             onPress={() => openManga(manga)}
@@ -278,17 +309,17 @@ export default function Home() {
                                                     <Text style={S.contCoverEmptyText}>No cover</Text>
                                                 </View>
                                             )}
-                                            <View style={[S.srcDot, { backgroundColor: manga.source === 'asura' ? C.asuraBg : C.mpBg }]} />
+                                            <View style={[S.srcDot, {
+                                                backgroundColor: manga.source === 'asura' ? C.asuraBg : C.mpBg,
+                                            }]} />
                                         </Pressable>
 
                                         {isCaughtUp ? (
-                                            // Caught up: green pill, same height as chapter button so cards stay aligned
                                             <View style={S.caughtUpPill}>
                                                 <Ionicons name="checkmark" size={9} color={C.green} />
                                                 <Text style={S.caughtUpText}>Up to date</Text>
                                             </View>
                                         ) : (
-                                            // Not caught up: resume button
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, { opacity: pressed ? 0.75 : 1 }]}
                                                 onPress={() => openLastRead(manga)}
@@ -511,7 +542,6 @@ const S = StyleSheet.create({
     contGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 50, backgroundColor: 'rgba(7,7,10,0.65)' },
     srcDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' },
 
-    // Resume chapter button
     contChBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         gap: 4, backgroundColor: C.accent,
@@ -520,7 +550,6 @@ const S = StyleSheet.create({
     },
     contChText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
 
-    // Caught-up pill — identical height to contChBtn so card layout stays stable
     caughtUpPill: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         gap: 4, borderWidth: 1, borderColor: C.greenBorder, backgroundColor: C.greenDim,

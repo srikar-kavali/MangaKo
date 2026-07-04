@@ -29,7 +29,6 @@ SLUG_OVERRIDES = {
 
 }
 
-
 def get_series_id(url):
     match = re.search(r'/manga/([^/?#]+)', url)
     if not match:
@@ -37,6 +36,23 @@ def get_series_id(url):
     slug = match.group(1).rstrip('/')
     slug = SLUG_OVERRIDES.get(slug, slug)
     return "mgeko__" + slug
+
+
+def is_driver_alive(driver):
+    """Check if the Chrome session is still alive."""
+    try:
+        _ = driver.window_handles
+        return True
+    except Exception:
+        return False
+
+
+def safe_quit(driver):
+    """Quit driver without raising."""
+    try:
+        driver.quit()
+    except Exception:
+        pass
 
 
 def get_all_chapters(driver, series_url):
@@ -193,6 +209,7 @@ def scrape(series_url, data):
     existing = set(data[series_id]["chapters"].keys())
     print(f"  Cached chapters: {len(existing)}")
 
+    # Kept headless=False here to respect your original mgeko initialization setup
     driver = make_driver(headless=False)
     try:
         all_chapters = get_all_chapters(driver, series_url)
@@ -216,25 +233,47 @@ def scrape(series_url, data):
             pages = None
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
+                    # Check if driver is still alive before using it
+                    if not is_driver_alive(driver):
+                        print(f"\n    ⚠ Driver window closed — restarting...")
+                        safe_quit(driver)
+                        time.sleep(5)
+                        driver = make_driver(headless=False)
+
                     pages = get_chapter_pages(driver, ch)
                     if not pages:
                         raise ValueError("0 pages returned")
                     break
+
                 except ConnectionError as e:
                     print(f"\n    ⚠ Attempt {attempt}/{MAX_RETRIES} blocked: {e}")
                     if attempt < MAX_RETRIES:
-                        try:
-                            driver.quit()
-                        except:
-                            pass
+                        safe_quit(driver)
                         wait = RETRY_BACKOFF * attempt + random.uniform(5, 15)
                         print(f"    Restarting driver and waiting {wait:.0f}s...")
                         time.sleep(wait)
-                        driver = make_driver(headless=True)
+                        driver = make_driver(headless=False)
+
                 except Exception as e:
-                    print(f"\n    ✗ Attempt {attempt}/{MAX_RETRIES} error: {e}")
-                    if attempt < MAX_RETRIES:
-                        time.sleep(5)
+                    err_str = str(e)
+                    # Catch window/session closed errors specifically
+                    if any(msg in err_str for msg in [
+                        "no such window",
+                        "target window already closed",
+                        "web view not found",
+                        "invalid session id",
+                        "chrome not reachable",
+                    ]):
+                        print(f"\n    ⚠ Chrome window crashed — restarting driver...")
+                        safe_quit(driver)
+                        time.sleep(random.uniform(8, 15))
+                        driver = make_driver(headless=False)
+                        # Don't count this as an attempt — retry immediately
+                        continue
+                    else:
+                        print(f"\n    ✗ Attempt {attempt}/{MAX_RETRIES} error: {e}")
+                        if attempt < MAX_RETRIES:
+                            time.sleep(5)
 
             if pages:
                 data[series_id]["chapters"][ch["id"]] = pages
@@ -247,13 +286,16 @@ def scrape(series_url, data):
             save_data(data)
 
             if i < len(new_chapters) - 1:
-                time.sleep(random.uniform(*DELAY_BETWEEN_CHAPTERS))
+                delay = random.uniform(*DELAY_BETWEEN_CHAPTERS)
+                # Extra cooldown every 50 chapters to prevent Chrome overload
+                if (i + 1) % 50 == 0:
+                    print(f"  💤 Cooldown after {i+1} chapters (30s)...")
+                    time.sleep(30)
+                else:
+                    time.sleep(delay)
 
     finally:
-        try:
-            driver.quit()
-        except:
-            pass
+        safe_quit(driver)
 
     print(f"\n  Done. Total chapters: {len(data[series_id]['chapters'])}")
     if failed:
