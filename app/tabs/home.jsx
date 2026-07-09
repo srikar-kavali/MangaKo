@@ -5,8 +5,7 @@ import {
     Animated, StatusBar,
 } from 'react-native';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
 import {
@@ -49,23 +48,26 @@ export default function Home() {
     const abortRef = useRef(null);
     const searchInputRef = useRef(null);
 
-    // ── useFocusEffect: re-runs every time this screen comes into focus ──────
-    // This means navigating back from ReadChapter always re-sorts the list,
-    // so a newly-read chapter bubbles to the front immediately.
+    // ── Load followed manga ───────────────────────────────────────────────────
+    // Called on every focus so the list re-sorts immediately after reading.
+    //
+    // Key contract (must match MangaDetails + ReadChapter):
+    //   - Favorites are stored with url = normalizeKey(seriesId | mangapillUrl)
+    //     e.g. "5460__dandadan" for mangapill, "solo-leveling" for asura
+    //   - lastReadChapters[url] = { chapterUrl, timestamp }
+    //   - latest_chapter_${url} = newest chapter id string
+    //
     const loadFollowedManga = useCallback(async () => {
         const favs = await getFavorites();
 
         const withProgress = await Promise.all(
             favs.map(async f => {
-                const mangaUrl = f.url;
+                const key = f.url; // already normalized by MangaDetails on addFavorite
 
-                // getLastReadChapterInfo returns { chapterUrl, timestamp } or null
-                const info = await getLastReadChapterInfo(mangaUrl);
-                if (!info?.chapterUrl) return null; // never read — skip
+                const info = await getLastReadChapterInfo(key);
+                if (!info?.chapterUrl) return null; // never read
 
-                // getLatestChapter uses key `latest_chapter_${mangaUrl}`
-                // written by MangaDetails via saveLatestChapter
-                const latestChapter = await getLatestChapter(mangaUrl);
+                const latestChapter = await getLatestChapter(key);
 
                 return {
                     ...f,
@@ -76,7 +78,6 @@ export default function Home() {
             })
         );
 
-        // Filter unread entries, sort most-recently-read to front
         const sorted = withProgress
             .filter(Boolean)
             .sort((a, b) => b.lastReadTimestamp - a.lastReadTimestamp);
@@ -84,9 +85,11 @@ export default function Home() {
         setFollowedManga(sorted);
     }, []);
 
+    // ── useFocusEffect from expo-router (NOT @react-navigation/native) ────────
+    // Expo Router exposes its own useFocusEffect — importing from
+    // @react-navigation/native won't fire reliably in file-based routing.
     useFocusEffect(
         useCallback(() => {
-            // Reload recent searches + followed manga every time screen focuses
             (async () => {
                 setRecentSearches(await getRecentSearches());
                 await loadFollowedManga();
@@ -94,7 +97,7 @@ export default function Home() {
         }, [loadFollowedManga])
     );
 
-    // Browse section only needs to load once — not focus-dependent
+    // Browse grid — load once, not focus-dependent
     React.useEffect(() => {
         (async () => {
             setLoadingBrowse(true);
@@ -191,19 +194,21 @@ export default function Home() {
     const openLastRead = (manga) => {
         if (!manga.lastReadChapter) return;
         const src = getSource(manga);
-        const id = manga.url || manga.id;
+        const id = manga.url || manga.id; // normalized key e.g. "5460__dandadan"
 
         if (src === 'mangapill') {
-            // ── MANGAPILL FIX ────────────────────────────────────────────────
-            // lastReadChapter is the full chapter URL (e.g. https://mangapill.com/chapters/...)
-            // ReadChapter needs: chapterUrl + mangapillUrl + source=mangapill
-            // Using chapterId= here was the bug — it caused ReadChapter to treat
-            // this as an asura chapter and call the wrong API endpoint.
+            // For mangapill: reconstruct the full mangapill URL from the normalized key
+            // key format: "5460__dandadan" → "https://mangapill.com/manga/5460/dandadan"
+            const mangapillUrl = id.includes('mangapill.com')
+                ? id
+                : `https://mangapill.com/manga/${id.replace('__', '/')}`;
+
+            // lastReadChapter = full chapter URL e.g. https://mangapill.com/chapters/...
             router.push(
-                `/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(id)}&source=mangapill`
+                `/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`
             );
         } else {
-            // asura + mgeko: lastReadChapter is a plain chapter ID number
+            // asura/mgeko: lastReadChapter is a plain chapter number string
             router.push(
                 `/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=${src}`
             );
@@ -218,7 +223,6 @@ export default function Home() {
         return m ? `Ch.${m[1]}` : '▶';
     };
 
-    // Compare extracted chapter number against saved latest chapter (int)
     const checkCaughtUp = (manga) => {
         if (!manga.latestChapter || !manga.lastReadChapter) return false;
         const src = getSource(manga);
@@ -293,7 +297,6 @@ export default function Home() {
 
                                 return (
                                     <View key={`${manga.url}-${i}`} style={S.contCard}>
-                                        {/* Cover → MangaDetails */}
                                         <Pressable
                                             style={({ pressed }) => [S.contCoverWrap, { opacity: pressed ? 0.75 : 1 }]}
                                             onPress={() => openManga(manga)}
