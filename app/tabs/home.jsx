@@ -4,16 +4,17 @@ import {
     TextInput, FlatList, ActivityIndicator, ScrollView,
     Animated, StatusBar,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
 import {
     getRecentSearches, saveRecentSearches, getFavorites,
-    getLastReadChapterInfo, getLatestChapter,
+    getLastReadChapterInfo, getLatestChapter, saveLatestChapter,
 } from '../searchStorage';
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
-import { searchMangapill, proxied as proxiedMangapill } from '../../manga_api/mangapill';
+import { searchMangapill, getMangapillManga, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
 import { getCoverUrl } from "../../api/coverurls";
 
@@ -29,6 +30,60 @@ const C = {
 
 const LIVE_DELAY_MS = 300;
 const CACHE_VERSION = 'v3';
+const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API;
+
+// ── Background fetch config ───────────────────────────────────────────────────
+const BATCH_SIZE = 5;           // concurrent fetches per batch
+const BATCH_GAP_MS = 1200;      // pause between batches
+const STALE_AFTER_MS = 30 * 60 * 1000; // skip series checked within 30 min
+
+// ── Extract newest chapter id from a chapters array ──────────────────────────
+function extractNewest(chapters) {
+    if (!chapters?.length) return null;
+    const withNums = chapters.map(ch => {
+        const s = String(ch?.id ?? ch?.url ?? '');
+        const m = s.match(/(\d+(\.\d+)?)/);
+        return { ch, num: m ? parseFloat(m[1]) : -1 };
+    });
+    withNums.sort((a, b) => b.num - a.num);
+    return withNums[0]?.ch?.id ?? null;
+}
+
+// ── Fetch latest chapter id for a single series ───────────────────────────────
+async function fetchLatestChapterId(key, source) {
+    try {
+        if (source === 'mangapill') {
+            const mangapillUrl = key.includes('mangapill.com')
+                ? key
+                : `https://mangapill.com/manga/${key.replace('__', '/')}`;
+            const data = await getMangapillManga(mangapillUrl);
+            return extractNewest(data?.chapters);
+        }
+
+        const endpoint = source === 'mgeko' ? 'mgeko-chapters' : 'asura-chapters';
+        const res = await fetch(
+            `${BACKEND}/api/${endpoint}?seriesId=${encodeURIComponent(key)}`,
+            { signal: AbortSignal.timeout(10000) }
+        );
+        if (!res.ok) return null;
+        const json = await res.json();
+        return extractNewest(json?.chapters);
+    } catch {
+        return null;
+    }
+}
+
+// ── Run an array of async tasks in batches of N ───────────────────────────────
+async function runBatched(tasks, batchSize, gapMs, cancelled) {
+    for (let i = 0; i < tasks.length; i += batchSize) {
+        if (cancelled?.current) return;
+        const batch = tasks.slice(i, i + batchSize);
+        await Promise.all(batch.map(t => t()));
+        if (i + batchSize < tasks.length) {
+            await new Promise(r => setTimeout(r, gapMs));
+        }
+    }
+}
 
 export default function Home() {
     const [query, setQuery] = useState('');
@@ -47,28 +102,29 @@ export default function Home() {
     const timerRef = useRef(null);
     const abortRef = useRef(null);
     const searchInputRef = useRef(null);
+    const bgFetchCancelledRef = useRef(false);
 
-    // ── Load followed manga ───────────────────────────────────────────────────
-    // Called on every focus so the list re-sorts immediately after reading.
-    //
-    // Key contract (must match MangaDetails + ReadChapter):
-    //   - Favorites are stored with url = normalizeKey(seriesId | mangapillUrl)
-    //     e.g. "5460__dandadan" for mangapill, "solo-leveling" for asura
-    //   - lastReadChapters[url] = { chapterUrl, timestamp }
-    //   - latest_chapter_${url} = newest chapter id string
-    //
+    // ── Source detection ──────────────────────────────────────────────────────
+    const getSource = (m) => {
+        if (m.source) return m.source;
+        const id = String(m.url || m.id || '');
+        if (id.startsWith('mgeko__')) return 'mgeko';
+        if (/^\d+__/.test(id)) return 'mangapill';
+        if (id.includes('mangapill.com')) return 'mangapill';
+        if (id.includes('/') || id.includes('http')) return 'mangapill';
+        return 'asura';
+    };
+
+    // ── Load followed manga from storage ─────────────────────────────────────
     const loadFollowedManga = useCallback(async () => {
         const favs = await getFavorites();
 
         const withProgress = await Promise.all(
             favs.map(async f => {
-                const key = f.url; // already normalized by MangaDetails on addFavorite
-
+                const key = f.url;
                 const info = await getLastReadChapterInfo(key);
-                if (!info?.chapterUrl) return null; // never read
-
+                if (!info?.chapterUrl) return null;
                 const latestChapter = await getLatestChapter(key);
-
                 return {
                     ...f,
                     lastReadChapter: info.chapterUrl,
@@ -83,21 +139,79 @@ export default function Home() {
             .sort((a, b) => b.lastReadTimestamp - a.lastReadTimestamp);
 
         setFollowedManga(sorted);
+        return sorted;
     }, []);
 
-    // ── useFocusEffect from expo-router (NOT @react-navigation/native) ────────
-    // Expo Router exposes its own useFocusEffect — importing from
-    // @react-navigation/native won't fire reliably in file-based routing.
+    // ── Background chapter fetch ──────────────────────────────────────────────
+    // Runs after the UI is already painted with cached data.
+    // For each followed series:
+    //   - Skip if checked within STALE_AFTER_MS
+    //   - Fetch latest chapter id from the API
+    //   - If it differs from what's stored, save it and patch the card in state
+    const runBackgroundFetch = useCallback(async (series) => {
+        if (!series?.length) return;
+        bgFetchCancelledRef.current = false;
+
+        const now = Date.now();
+
+        // Build tasks — one per series
+        const tasks = series.map(manga => async () => {
+            if (bgFetchCancelledRef.current) return;
+
+            const key = manga.url;
+            const src = getSource(manga);
+
+            // Skip if freshly checked
+            try {
+                const lastChecked = await AsyncStorage.getItem(`bgcheck:${key}`);
+                if (lastChecked && now - parseInt(lastChecked) < STALE_AFTER_MS) return;
+            } catch { /* continue */ }
+
+            const latestId = await fetchLatestChapterId(key, src);
+            if (!latestId || bgFetchCancelledRef.current) return;
+
+            // Stamp check time regardless of whether chapter changed
+            await AsyncStorage.setItem(`bgcheck:${key}`, String(now)).catch(() => {});
+
+            // Compare against stored value
+            const stored = await getLatestChapter(key);
+            if (latestId === String(stored)) return; // no change
+
+            // New chapter found — save and patch state
+            await saveLatestChapter(key, latestId);
+
+            setFollowedManga(prev => {
+                const idx = prev.findIndex(m => m.url === key);
+                if (idx < 0) return prev;
+                const updated = [...prev];
+                updated[idx] = { ...updated[idx], latestChapter: latestId };
+                return updated;
+            });
+        });
+
+        await runBatched(tasks, BATCH_SIZE, BATCH_GAP_MS, bgFetchCancelledRef);
+    }, []);
+
+    // ── Focus effect: load cached data immediately, then fetch in background ──
     useFocusEffect(
         useCallback(() => {
+            bgFetchCancelledRef.current = false;
+
             (async () => {
                 setRecentSearches(await getRecentSearches());
-                await loadFollowedManga();
+                const series = await loadFollowedManga();
+                // Kick off background fetch without awaiting — UI stays responsive
+                runBackgroundFetch(series);
             })();
-        }, [loadFollowedManga])
+
+            return () => {
+                // Cancel background fetch when leaving the screen
+                bgFetchCancelledRef.current = true;
+            };
+        }, [loadFollowedManga, runBackgroundFetch])
     );
 
-    // Browse grid — load once, not focus-dependent
+    // Browse grid — load once
     React.useEffect(() => {
         (async () => {
             setLoadingBrowse(true);
@@ -169,22 +283,19 @@ export default function Home() {
         return proxiedAsura(url);
     };
 
-    const getSource = (m) => {
-        if (m.source) return m.source;
-        if (String(m.url || m.id || '').startsWith('mgeko__')) return 'mgeko';
-        return (String(m.url || m.id || '').includes('/') || String(m.url || m.id || '').includes('http'))
-            ? 'mangapill' : 'asura';
-    };
-
     const openManga = (item) => {
         const src = item.source || getSource(item);
         const id = item.id || item.url;
         if (src === 'asura' || src === 'mgeko') {
             router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}`);
         } else {
-            router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(id)}&source=mangapill`);
+            const mangapillUrl = id.includes('mangapill.com')
+                ? id
+                : `https://mangapill.com/manga/${id.replace('__', '/')}`;
+            router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
         }
     };
+
     const openResult = async (item) => {
         await handleAddSearch(item?.title || query);
         closeSearch();
@@ -194,21 +305,15 @@ export default function Home() {
     const openLastRead = (manga) => {
         if (!manga.lastReadChapter) return;
         const src = getSource(manga);
-        const id = manga.url || manga.id; // normalized key e.g. "5460__dandadan"
-
+        const id = manga.url || manga.id;
         if (src === 'mangapill') {
-            // For mangapill: reconstruct the full mangapill URL from the normalized key
-            // key format: "5460__dandadan" → "https://mangapill.com/manga/5460/dandadan"
             const mangapillUrl = id.includes('mangapill.com')
                 ? id
                 : `https://mangapill.com/manga/${id.replace('__', '/')}`;
-
-            // lastReadChapter = full chapter URL e.g. https://mangapill.com/chapters/...
             router.push(
                 `/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`
             );
         } else {
-            // asura/mgeko: lastReadChapter is a plain chapter number string
             router.push(
                 `/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=${src}`
             );
@@ -234,7 +339,14 @@ export default function Home() {
             const m = slug.match(/(\d+(\.\d+)?)/);
             readNum = m ? parseFloat(m[1]) : null;
         }
-        return readNum !== null && !isNaN(readNum) && readNum >= manga.latestChapter;
+        // Compare as strings first (exact id match), then numerically
+        if (String(manga.lastReadChapter) === String(manga.latestChapter)) return true;
+        const latestNum = (() => {
+            const s = String(manga.latestChapter);
+            const m = s.match(/(\d+(\.\d+)?)/);
+            return m ? parseFloat(m[1]) : parseFloat(s);
+        })();
+        return readNum !== null && !isNaN(readNum) && !isNaN(latestNum) && readNum >= latestNum;
     };
 
     return (
@@ -294,6 +406,7 @@ export default function Home() {
                             {followedManga.map((manga, i) => {
                                 const img = getProxied(manga);
                                 const isCaughtUp = checkCaughtUp(manga);
+                                const src = getSource(manga);
 
                                 return (
                                     <View key={`${manga.url}-${i}`} style={S.contCard}>
@@ -313,7 +426,9 @@ export default function Home() {
                                                 </View>
                                             )}
                                             <View style={[S.srcDot, {
-                                                backgroundColor: manga.source === 'asura' ? C.asuraBg : C.mpBg,
+                                                backgroundColor: src === 'asura' ? C.asuraBg
+                                                    : src === 'mgeko' ? 'rgba(52,211,153,0.82)'
+                                                        : C.mpBg,
                                             }]} />
                                         </Pressable>
 
@@ -329,7 +444,7 @@ export default function Home() {
                                             >
                                                 <Ionicons name="play" size={9} color="#fff" />
                                                 <Text style={S.contChText} numberOfLines={1}>
-                                                    {fmtCh(manga.lastReadChapter, manga.source)}
+                                                    {fmtCh(manga.lastReadChapter, src)}
                                                 </Text>
                                             </Pressable>
                                         )}
