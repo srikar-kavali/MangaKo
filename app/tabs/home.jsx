@@ -32,12 +32,12 @@ const LIVE_DELAY_MS = 300;
 const CACHE_VERSION = 'v3';
 const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API;
 
-// ── Background fetch config ───────────────────────────────────────────────────
-const BATCH_SIZE = 5;           // concurrent fetches per batch
-const BATCH_GAP_MS = 1200;      // pause between batches
-const STALE_AFTER_MS = 30 * 60 * 1000; // skip series checked within 30 min
+const BATCH_SIZE = 5;
+const BATCH_GAP_MS = 1200;
+const STALE_AFTER_MS = 30 * 60 * 1000;
 
-// ── Extract newest chapter id from a chapters array ──────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function extractNewest(chapters) {
     if (!chapters?.length) return null;
     const withNums = chapters.map(ch => {
@@ -49,7 +49,6 @@ function extractNewest(chapters) {
     return withNums[0]?.ch?.id ?? null;
 }
 
-// ── Fetch latest chapter id for a single series ───────────────────────────────
 async function fetchLatestChapterId(key, source) {
     try {
         if (source === 'mangapill') {
@@ -59,7 +58,6 @@ async function fetchLatestChapterId(key, source) {
             const data = await getMangapillManga(mangapillUrl);
             return extractNewest(data?.chapters);
         }
-
         const endpoint = source === 'mgeko' ? 'mgeko-chapters' : 'asura-chapters';
         const res = await fetch(
             `${BACKEND}/api/${endpoint}?seriesId=${encodeURIComponent(key)}`,
@@ -73,16 +71,35 @@ async function fetchLatestChapterId(key, source) {
     }
 }
 
-// ── Run an array of async tasks in batches of N ───────────────────────────────
-async function runBatched(tasks, batchSize, gapMs, cancelled) {
+async function runBatched(tasks, batchSize, gapMs, cancelledRef) {
     for (let i = 0; i < tasks.length; i += batchSize) {
-        if (cancelled?.current) return;
-        const batch = tasks.slice(i, i + batchSize);
-        await Promise.all(batch.map(t => t()));
+        if (cancelledRef?.current) return;
+        await Promise.all(tasks.slice(i, i + batchSize).map(t => t()));
         if (i + batchSize < tasks.length) {
             await new Promise(r => setTimeout(r, gapMs));
         }
     }
+}
+
+// Sort by timestamp descending — extracted so both load and patch use identical logic
+function sortByTimestamp(arr) {
+    return [...arr].sort((a, b) => b.lastReadTimestamp - a.lastReadTimestamp);
+}
+
+// Extract chapter number from any id/url string
+function chapterNum(id) {
+    const s = String(id ?? '');
+    const m = s.match(/(\d+(\.\d+)?)/);
+    return m ? parseFloat(m[1]) : null;
+}
+
+// True when lastReadChapter >= latestChapter (numerically or exact string match)
+function isCaughtUp(manga) {
+    if (!manga.latestChapter || !manga.lastReadChapter) return false;
+    if (String(manga.lastReadChapter) === String(manga.latestChapter)) return true;
+    const read = chapterNum(manga.lastReadChapter);
+    const latest = chapterNum(manga.latestChapter);
+    return read !== null && latest !== null && read >= latest;
 }
 
 export default function Home() {
@@ -102,9 +119,8 @@ export default function Home() {
     const timerRef = useRef(null);
     const abortRef = useRef(null);
     const searchInputRef = useRef(null);
-    const bgFetchCancelledRef = useRef(false);
+    const bgCancelledRef = useRef(false);
 
-    // ── Source detection ──────────────────────────────────────────────────────
     const getSource = (m) => {
         if (m.source) return m.source;
         const id = String(m.url || m.id || '');
@@ -115,10 +131,8 @@ export default function Home() {
         return 'asura';
     };
 
-    // ── Load followed manga from storage ─────────────────────────────────────
     const loadFollowedManga = useCallback(async () => {
         const favs = await getFavorites();
-
         const withProgress = await Promise.all(
             favs.map(async f => {
                 const key = f.url;
@@ -133,85 +147,67 @@ export default function Home() {
                 };
             })
         );
-
-        const sorted = withProgress
-            .filter(Boolean)
-            .sort((a, b) => b.lastReadTimestamp - a.lastReadTimestamp);
-
+        const sorted = sortByTimestamp(withProgress.filter(Boolean));
         setFollowedManga(sorted);
         return sorted;
     }, []);
 
-    // ── Background chapter fetch ──────────────────────────────────────────────
-    // Runs after the UI is already painted with cached data.
-    // For each followed series:
-    //   - Skip if checked within STALE_AFTER_MS
-    //   - Fetch latest chapter id from the API
-    //   - If it differs from what's stored, save it and patch the card in state
     const runBackgroundFetch = useCallback(async (series) => {
         if (!series?.length) return;
-        bgFetchCancelledRef.current = false;
-
+        bgCancelledRef.current = false;
         const now = Date.now();
 
-        // Build tasks — one per series
         const tasks = series.map(manga => async () => {
-            if (bgFetchCancelledRef.current) return;
-
+            if (bgCancelledRef.current) return;
             const key = manga.url;
             const src = getSource(manga);
 
-            // Skip if freshly checked
+            // Skip if checked recently
             try {
                 const lastChecked = await AsyncStorage.getItem(`bgcheck:${key}`);
                 if (lastChecked && now - parseInt(lastChecked) < STALE_AFTER_MS) return;
             } catch { /* continue */ }
 
             const latestId = await fetchLatestChapterId(key, src);
-            if (!latestId || bgFetchCancelledRef.current) return;
+            if (!latestId || bgCancelledRef.current) return;
 
-            // Stamp check time regardless of whether chapter changed
             await AsyncStorage.setItem(`bgcheck:${key}`, String(now)).catch(() => {});
 
-            // Compare against stored value
             const stored = await getLatestChapter(key);
-            if (latestId === String(stored)) return; // no change
+            if (latestId === String(stored ?? '')) return; // no change
 
-            // New chapter found — save and patch state
+            // New chapter found — persist and patch state
             await saveLatestChapter(key, latestId);
 
             setFollowedManga(prev => {
                 const idx = prev.findIndex(m => m.url === key);
                 if (idx < 0) return prev;
-                const updated = [...prev];
-                updated[idx] = { ...updated[idx], latestChapter: latestId };
-                return updated;
+
+                // Patch the chapter on this card
+                const patched = { ...prev[idx], latestChapter: latestId };
+                const rest = prev.filter((_, i) => i !== idx);
+
+                // A new chapter means this title is no longer caught up —
+                // bump it to the front of the list so the user sees it immediately.
+                return [patched, ...rest];
             });
         });
 
-        await runBatched(tasks, BATCH_SIZE, BATCH_GAP_MS, bgFetchCancelledRef);
+        await runBatched(tasks, BATCH_SIZE, BATCH_GAP_MS, bgCancelledRef);
     }, []);
 
-    // ── Focus effect: load cached data immediately, then fetch in background ──
     useFocusEffect(
         useCallback(() => {
-            bgFetchCancelledRef.current = false;
-
+            bgCancelledRef.current = false;
             (async () => {
                 setRecentSearches(await getRecentSearches());
                 const series = await loadFollowedManga();
-                // Kick off background fetch without awaiting — UI stays responsive
-                runBackgroundFetch(series);
+                runBackgroundFetch(series); // fire-and-forget
             })();
-
-            return () => {
-                // Cancel background fetch when leaving the screen
-                bgFetchCancelledRef.current = true;
-            };
+            return () => { bgCancelledRef.current = true; };
         }, [loadFollowedManga, runBackgroundFetch])
     );
 
-    // Browse grid — load once
     React.useEffect(() => {
         (async () => {
             setLoadingBrowse(true);
@@ -295,13 +291,13 @@ export default function Home() {
             router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
         }
     };
-
     const openResult = async (item) => {
         await handleAddSearch(item?.title || query);
         closeSearch();
         openManga(item);
     };
 
+    // Navigate to last read chapter (resume button)
     const openLastRead = (manga) => {
         if (!manga.lastReadChapter) return;
         const src = getSource(manga);
@@ -310,13 +306,24 @@ export default function Home() {
             const mangapillUrl = id.includes('mangapill.com')
                 ? id
                 : `https://mangapill.com/manga/${id.replace('__', '/')}`;
-            router.push(
-                `/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`
-            );
+            router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
         } else {
-            router.push(
-                `/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=${src}`
-            );
+            router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=${src}`);
+        }
+    };
+
+    // Navigate to the newest available chapter (new chapter button)
+    const openLatest = (manga) => {
+        if (!manga.latestChapter) return;
+        const src = getSource(manga);
+        const id = manga.url || manga.id;
+        if (src === 'mangapill') {
+            const mangapillUrl = id.includes('mangapill.com')
+                ? id
+                : `https://mangapill.com/manga/${id.replace('__', '/')}`;
+            router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(manga.latestChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
+        } else {
+            router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.latestChapter)}&source=${src}`);
         }
     };
 
@@ -326,27 +333,6 @@ export default function Home() {
         const slug = String(id).split('/').filter(Boolean).pop() || '';
         const m = slug.match(/(\d+(\.\d+)?)/);
         return m ? `Ch.${m[1]}` : '▶';
-    };
-
-    const checkCaughtUp = (manga) => {
-        if (!manga.latestChapter || !manga.lastReadChapter) return false;
-        const src = getSource(manga);
-        let readNum;
-        if (src === 'asura' || src === 'mgeko') {
-            readNum = parseFloat(manga.lastReadChapter);
-        } else {
-            const slug = String(manga.lastReadChapter).split('/').filter(Boolean).pop() || '';
-            const m = slug.match(/(\d+(\.\d+)?)/);
-            readNum = m ? parseFloat(m[1]) : null;
-        }
-        // Compare as strings first (exact id match), then numerically
-        if (String(manga.lastReadChapter) === String(manga.latestChapter)) return true;
-        const latestNum = (() => {
-            const s = String(manga.latestChapter);
-            const m = s.match(/(\d+(\.\d+)?)/);
-            return m ? parseFloat(m[1]) : parseFloat(s);
-        })();
-        return readNum !== null && !isNaN(readNum) && !isNaN(latestNum) && readNum >= latestNum;
     };
 
     return (
@@ -405,11 +391,19 @@ export default function Home() {
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.hList}>
                             {followedManga.map((manga, i) => {
                                 const img = getProxied(manga);
-                                const isCaughtUp = checkCaughtUp(manga);
                                 const src = getSource(manga);
+                                const caught = isCaughtUp(manga);
+
+                                // What to show in the button slot:
+                                //   caught up   → nothing (no box at all)
+                                //   new chapter → accent button with latest chapter number
+                                //   in progress → accent button with last read chapter number
+                                const showNewChapter = !caught && manga.latestChapter &&
+                                    String(manga.lastReadChapter) !== String(manga.latestChapter);
 
                                 return (
                                     <View key={`${manga.url}-${i}`} style={S.contCard}>
+                                        {/* Cover → MangaDetails */}
                                         <Pressable
                                             style={({ pressed }) => [S.contCoverWrap, { opacity: pressed ? 0.75 : 1 }]}
                                             onPress={() => openManga(manga)}
@@ -432,12 +426,22 @@ export default function Home() {
                                             }]} />
                                         </Pressable>
 
-                                        {isCaughtUp ? (
-                                            <View style={S.caughtUpPill}>
-                                                <Ionicons name="checkmark" size={9} color={C.green} />
-                                                <Text style={S.caughtUpText}>Up to date</Text>
-                                            </View>
+                                        {caught ? (
+                                            // Caught up: empty spacer so card height stays consistent
+                                            <View style={S.btnSpacer} />
+                                        ) : showNewChapter ? (
+                                            // New chapter available: green button with latest chapter, jump straight there
+                                            <Pressable
+                                                style={({ pressed }) => [S.contChBtn, S.contChBtnNew, { opacity: pressed ? 0.75 : 1 }]}
+                                                onPress={() => openLatest(manga)}
+                                            >
+                                                <Ionicons name="sparkles" size={9} color="#fff" />
+                                                <Text style={S.contChText} numberOfLines={1}>
+                                                    {fmtCh(manga.latestChapter, src)}
+                                                </Text>
+                                            </Pressable>
                                         ) : (
+                                            // In progress: purple button with last read chapter, resume there
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, { opacity: pressed ? 0.75 : 1 }]}
                                                 onPress={() => openLastRead(manga)}
@@ -660,20 +664,22 @@ const S = StyleSheet.create({
     contGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 50, backgroundColor: 'rgba(7,7,10,0.65)' },
     srcDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' },
 
+    // Resume / in-progress button (purple)
     contChBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         gap: 4, backgroundColor: C.accent,
         borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6, marginBottom: 7,
         shadowColor: C.accent, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6,
     },
+    // New chapter available button (green)
+    contChBtnNew: {
+        backgroundColor: C.green,
+        shadowColor: C.green,
+    },
     contChText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
 
-    caughtUpPill: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        gap: 4, borderWidth: 1, borderColor: C.greenBorder, backgroundColor: C.greenDim,
-        borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6, marginBottom: 7,
-    },
-    caughtUpText: { color: C.green, fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
+    // Empty spacer when caught up — keeps card height identical to when button is shown
+    btnSpacer: { height: 27, marginBottom: 7 },
 
     contTitle: { fontSize: 11, fontWeight: '600', color: C.text2, lineHeight: 15 },
 

@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
     View, Text, Image, StyleSheet, ActivityIndicator,
     ScrollView, Pressable, SafeAreaView, StatusBar,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { proxied as proxiedAsura } from '../manga_api/asurascans';
@@ -64,14 +64,12 @@ const MangaDetails = () => {
     const [statusOpen, setStatusOpen] = useState(false);
     const [status, setStatus] = useState(null);
 
-    // FIX: Catch MangaPill items passing back in via stored flat favorites key format
     const isMgeko = source === 'mgeko' || String(seriesId).startsWith('mgeko__');
     const isAsura = source === 'asura' && !isMgeko;
     const isMangapill = !isMgeko && (source === 'mangapill' || !!mangapillUrl || String(seriesId).includes('__'));
 
     const storageKey = useMemo(() => normalizeKey(seriesId || mangapillUrl), [seriesId, mangapillUrl]);
 
-    // Derived full path helper for MangaPill deep targets
     const resolvedMangapillUrl = useMemo(() => {
         const raw = mangapillUrl || seriesId;
         if (!raw) return null;
@@ -82,12 +80,19 @@ const MangaDetails = () => {
         return raw;
     }, [mangapillUrl, seriesId, isMangapill]);
 
-    useEffect(() => {
-        (async () => {
+    // ── Reload lastRead on every focus ────────────────────────────────────────
+    // Previously this was a plain useEffect([storageKey]) which only ran on mount.
+    // When the user reads a chapter in ReadChapter and navigates back here,
+    // the progress written by ReadChapter wasn't reflected because MangaDetails
+    // never re-read it. useFocusEffect fixes this for all sources including mangapill.
+    useFocusEffect(
+        useCallback(() => {
             if (!storageKey) return;
-            setLastRead(await getLastReadChapter(storageKey).catch(() => null));
-        })();
-    }, [storageKey]);
+            getLastReadChapter(storageKey)
+                .then(val => setLastRead(val ?? null))
+                .catch(() => {});
+        }, [storageKey])
+    );
 
     useEffect(() => {
         (async () => {
@@ -112,7 +117,6 @@ const MangaDetails = () => {
                         if (data.chapters?.length) {
                             await AsyncStorage.setItem(`chapterCount:${storageKey}`, String(data.chapters.length)).catch(() => {});
                             await AsyncStorage.setItem(`updatedAt:${storageKey}`, String(Date.now())).catch(() => {});
-
                             const newest = [...data.chapters].sort((a, b) => extractNum(b) - extractNum(a))[0];
                             if (newest?.id) {
                                 await AsyncStorage.setItem(`latestChapter:${storageKey}`, newest.id).catch(() => {});
@@ -121,9 +125,7 @@ const MangaDetails = () => {
                     }
                 } else if ((isAsura || isMgeko) && seriesId) {
                     const localData = getManhwaById(seriesId);
-                    if (!cancelled && localData) {
-                        setMangaData(localData);
-                    }
+                    if (!cancelled && localData) setMangaData(localData);
 
                     const endpoint = isMgeko ? 'mgeko-chapters' : 'asura-chapters';
                     const res = await fetch(`${BACKEND}/api/${endpoint}?seriesId=${encodeURIComponent(seriesId)}`);
@@ -133,7 +135,6 @@ const MangaDetails = () => {
                         if (json.total) {
                             await AsyncStorage.setItem(`chapterCount:${storageKey}`, String(json.total)).catch(() => {});
                             await AsyncStorage.setItem(`updatedAt:${storageKey}`, String(Date.now())).catch(() => {});
-
                             const newest = [...json.chapters].sort((a, b) => extractNum(b) - extractNum(a))[0];
                             if (newest?.id) {
                                 await AsyncStorage.setItem(`latestChapter:${storageKey}`, newest.id).catch(() => {});
@@ -201,8 +202,10 @@ const MangaDetails = () => {
 
     const handleChapter = async (ch) => {
         const cId = ch.id;
-        if (storageKey) { await saveLastReadChapter(storageKey, cId); setLastRead(cId); }
-
+        if (storageKey) {
+            await saveLastReadChapter(storageKey, cId);
+            setLastRead(cId);
+        }
         if (isMangapill) {
             router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(ch.url)}&mangapillUrl=${encodeURIComponent(resolvedMangapillUrl)}&source=mangapill`);
         } else if (isAsura) {
@@ -261,7 +264,9 @@ const MangaDetails = () => {
                     <View style={S.coverShadow}>
                         {cover
                             ? <Image source={{ uri: cover }} style={S.cover} resizeMode="cover" />
-                            : <View style={[S.cover, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="book-outline" size={38} color={C.text3} /></View>
+                            : <View style={[S.cover, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
+                                <Ionicons name="book-outline" size={38} color={C.text3} />
+                            </View>
                         }
                     </View>
                     <View style={S.heroMeta}>
@@ -470,53 +475,6 @@ const S = StyleSheet.create({
     readBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: C.accent, paddingVertical: 11, borderRadius: 10, shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.38, shadowRadius: 10, elevation: 6 },
     readBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
     statusWrap: { position: 'relative' },
-    statusBtn: {
-        flexDirection: 'row', alignItems: 'center',
-        backgroundColor: '#4CAF50', paddingHorizontal: 12,
-        paddingVertical: 10, borderRadius: 8,
-    },
-    statusBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
-    statusDropdown: {
-        position: 'absolute', bottom: 46, right: 0,
-        backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd',
-        borderRadius: 8, zIndex: 999, minWidth: 150,
-        shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8,
-        shadowOffset: { width: 0, height: -2 }, elevation: 10,
-    },
-    statusOption: { paddingVertical: 11, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
-    statusOptionUnfollow: { borderBottomWidth: 0 },
-    statusOptionText: { fontSize: 14, color: '#333' },
-    statusOptionActive: { color: '#4CAF50', fontWeight: '700' },
-    statusOptionUnfollowText: { color: '#e53935' },
-
-    sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111', paddingHorizontal: 16, marginTop: 20, marginBottom: 6 },
-    description: { fontSize: 14, lineHeight: 22, color: '#444', paddingHorizontal: 16, marginBottom: 8 },
-    tagContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginBottom: 8 },
-    tag: { backgroundColor: '#f0f0f0', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-    tagText: { fontSize: 12, color: '#444' },
-
-    chapterHeader: {
-        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        paddingHorizontal: 16, marginTop: 8, marginBottom: 6,
-    },
-    toggleOrder: { color: '#007AFF', fontSize: 13 },
-    rangeText: { color: '#888', fontSize: 12 },
-    chapterRow: {
-        paddingVertical: 13, paddingHorizontal: 16,
-        borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
-    },
-    chapterRowLastRead: { backgroundColor: '#f0faf0', borderLeftWidth: 3, borderLeftColor: '#4CAF50' },
-    chapterTitle: { fontSize: 15, color: '#111', fontWeight: '500' },
-    chapterTitleLastRead: { color: '#2E7D32', fontWeight: '600' },
-    lastReadBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
-    lastReadText: { fontSize: 11, color: '#4CAF50', fontWeight: '600', marginLeft: 3 },
-    pagerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginVertical: 8, paddingHorizontal: 16 },
-    pagerBtn: { flex: 1, backgroundColor: '#f5f5f5', paddingVertical: 10, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#e0e0e0' },
-    pagerBtnDisabled: { opacity: 0.4 },
-    pagerText: { color: '#111', fontWeight: '600', fontSize: 13 },
-    pageNum: { minWidth: 90, textAlign: 'center', color: '#666', fontSize: 13 },
-    noChaptersBox: { margin: 16, padding: 12, backgroundColor: '#fff3cd', borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
-    noChaptersText: { flex: 1, fontSize: 13, color: '#856404' },
     listBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bg4, borderWidth: 1, borderColor: C.border, paddingHorizontal: 10, paddingVertical: 11, borderRadius: 10 },
     listBtnActive: { borderColor: C.greenBorder, backgroundColor: C.greenDim },
     listBtnText: { fontSize: 12, fontWeight: '600', color: C.text2 },
@@ -549,4 +507,7 @@ const S = StyleSheet.create({
     warnBox: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 16, padding: 12, borderRadius: 10, backgroundColor: 'rgba(251,191,36,0.07)', borderWidth: 1, borderColor: 'rgba(251,191,36,0.18)' },
     warnText: { flex: 1, fontSize: 12, color: C.star },
     noCh: { padding: 20, textAlign: 'center', fontSize: 14, color: C.text3 },
+    // Legacy styles kept to avoid any reference errors
+    statusBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
+    statusBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });
