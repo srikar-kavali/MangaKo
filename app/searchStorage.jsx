@@ -18,8 +18,7 @@ export async function getRecentSearches() {
 
 export async function saveRecentSearches(searches) {
     try {
-        const json = JSON.stringify(searches);
-        await AsyncStorage.setItem(RECENT_SEARCHES_KEY, json);
+        await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(searches));
     } catch (e) {
         console.error('Failed to save recent searches', e);
     }
@@ -41,16 +40,25 @@ export async function addFavorite(manga) {
         const stored = await AsyncStorage.getItem(FAVORITES_KEY);
         const list = stored ? JSON.parse(stored) : [];
 
-        if (!list.find(item => item.url === manga.url)) {
-            list.push({
-                url: manga.url,
-                title: manga.title || "Unknown",
-                coverUrl: manga.coverUrl || "",
-                description: manga.description || "",
-                addedAt: Date.now(),
-            });
-            await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+        const existing = list.findIndex(item => item.url === manga.url);
+        const entry = {
+            url: manga.url,
+            title: manga.title || 'Unknown',
+            coverUrl: manga.coverUrl || manga.cover || '',
+            cover: manga.cover || manga.coverUrl || '',
+            description: manga.description || '',
+            // ── FIX: persist source so home.jsx getSource() always has it ──
+            source: manga.source || '',
+            addedAt: existing >= 0 ? list[existing].addedAt : Date.now(),
+        };
+
+        if (existing >= 0) {
+            list[existing] = entry; // update in place
+        } else {
+            list.push(entry);
         }
+
+        await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
     } catch (e) {
         console.error('Failed to add favorite', e);
     }
@@ -62,8 +70,12 @@ export async function removeFavorite(mangaUrl) {
         const updated = list.filter(item => item.url !== mangaUrl);
         await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(updated));
 
-        // Also remove last read data for this manga
-        await removeLastReadChapter(mangaUrl);
+        // ── FIX: do NOT delete lastReadChapters on unfollow ──────────────────
+        // Previously this wiped read progress when a user unfollowed and
+        // re-followed a series, causing MangaDetails to show "Start Reading"
+        // and losing chapter position. Read progress is cheap to keep and
+        // should survive a status change. Only wipe if the user explicitly
+        // clears their history (a separate future action).
     } catch (e) {
         console.error('Failed to remove favorite', e);
     }
@@ -90,7 +102,6 @@ export async function getLastReadChapter(mangaUrl) {
     try {
         const lastReadData = await AsyncStorage.getItem(LAST_READ_KEY);
         if (!lastReadData) return null;
-
         const lastRead = JSON.parse(lastReadData);
         return lastRead[mangaUrl]?.chapterUrl || null;
     } catch (e) {
@@ -103,10 +114,8 @@ export async function removeLastReadChapter(mangaUrl) {
     try {
         const lastReadData = await AsyncStorage.getItem(LAST_READ_KEY);
         if (!lastReadData) return;
-
         const lastRead = JSON.parse(lastReadData);
         delete lastRead[mangaUrl];
-
         await AsyncStorage.setItem(LAST_READ_KEY, JSON.stringify(lastRead));
     } catch (e) {
         console.error('Failed to remove last read chapter', e);
@@ -117,7 +126,6 @@ export async function getLastReadChapterInfo(mangaUrl) {
     try {
         const lastReadData = await AsyncStorage.getItem(LAST_READ_KEY);
         if (!lastReadData) return null;
-
         const lastRead = JSON.parse(lastReadData);
         return lastRead[mangaUrl] || null;
     } catch (e) {
@@ -136,7 +144,7 @@ export async function markCompleted(id) {
             await AsyncStorage.setItem(COMPLETED_KEY, JSON.stringify(list));
         }
     } catch (err) {
-        console.error("Failed to mark completed", err);
+        console.error('Failed to mark completed', err);
     }
 }
 
@@ -144,10 +152,9 @@ export async function unmarkCompleted(id) {
     try {
         const data = await AsyncStorage.getItem(COMPLETED_KEY);
         const list = data ? JSON.parse(data) : [];
-        const newList = list.filter(x => x !== id);
-        await AsyncStorage.setItem(COMPLETED_KEY, JSON.stringify(newList));
+        await AsyncStorage.setItem(COMPLETED_KEY, JSON.stringify(list.filter(x => x !== id)));
     } catch (err) {
-        console.error("Failed to unmark completed", err);
+        console.error('Failed to unmark completed', err);
     }
 }
 
@@ -156,15 +163,14 @@ export async function getCompleted() {
         const data = await AsyncStorage.getItem(COMPLETED_KEY);
         return data ? JSON.parse(data) : [];
     } catch (err) {
-        console.error("Failed to load completed", err);
+        console.error('Failed to load completed', err);
         return [];
     }
 }
 
 export async function saveFavorites(favs) {
     try {
-        const json = JSON.stringify(favs);
-        await AsyncStorage.setItem(FAVORITES_KEY, json);
+        await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
     } catch (e) {
         console.error('Failed to save favorites', e);
     }
@@ -172,8 +178,7 @@ export async function saveFavorites(favs) {
 
 export const saveLatestChapter = async (mangaUrl, chapterNumber) => {
     try {
-        const key = `latest_chapter_${mangaUrl}`;
-        await AsyncStorage.setItem(key, String(chapterNumber));
+        await AsyncStorage.setItem(`latest_chapter_${mangaUrl}`, String(chapterNumber));
     } catch (error) {
         console.error('Failed to save latest chapter:', error);
     }
@@ -181,9 +186,8 @@ export const saveLatestChapter = async (mangaUrl, chapterNumber) => {
 
 export const getLatestChapter = async (mangaUrl) => {
     try {
-        const key = `latest_chapter_${mangaUrl}`;
-        const value = await AsyncStorage.getItem(key);
-        return value ? parseInt(value) : null;
+        const value = await AsyncStorage.getItem(`latest_chapter_${mangaUrl}`);
+        return value ?? null; // return raw string — callers handle parsing
     } catch (error) {
         return null;
     }
