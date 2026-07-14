@@ -37,12 +37,10 @@ const BATCH_GAP_MS = 1200;
 const STALE_AFTER_MS = 30 * 60 * 1000;
 
 // ── Storage key helpers ───────────────────────────────────────────────────────
-// newchapter:${key}  — timestamp written when bg fetch finds a new chapter
-//                      beyond where user was caught up. Cleared when user reads it.
-// caughtup:${key}    — written when user finishes all available chapters.
-//                      Cleared when user reads past it.
-const newChapterKey  = (k) => `newchapter:${k}`;
-const caughtUpKey    = (k) => `caughtup:${k}`;
+// newchapter:${key}  — timestamp written when bg fetch finds a new chapter.
+//                      Used as sort priority so card stays at front after reopen.
+//                      Cleared when user reads that new chapter.
+const newChapterKey = (k) => `newchapter:${k}`;
 
 // ── Chapter number extraction ─────────────────────────────────────────────────
 function chapterNum(id) {
@@ -97,41 +95,35 @@ async function runBatched(tasks, batchSize, gapMs, cancelledRef) {
 
 // ── Card state logic ──────────────────────────────────────────────────────────
 //
-// Four possible card states:
+// Three possible card states:
 //
-//  1. CAUGHT_UP      — lastRead === latestChapter (numerically equal)
-//                      → green "Up to date" box, no button
+//  1. CAUGHT_UP     — lastRead === latestChapter (exact or numeric)
+//                     → "Up to date" box
 //
-//  2. NEW_CHAPTER    — user WAS caught up (caughtup flag set in storage)
-//                      AND latestChapter has advanced beyond lastRead
-//                      → green button with latestChapter number
+//  2. NEW_CHAPTER   — latestChapter exists and is ahead of lastRead
+//                     → green button showing lastReadChapter (resume from here)
+//                       green colour signals something new is available
 //
-//  3. IN_PROGRESS    — user is mid-series, never been caught up or
-//                      caughtup flag is absent
-//                      → purple button with lastReadChapter number
-//
-//  4. NO_DATA        — no latestChapter stored yet
-//                      → purple button with lastReadChapter (best we can do)
+//  3. IN_PROGRESS   — no latestChapter data yet, or mid-series
+//                     → purple button showing lastReadChapter
 //
 function resolveCardState(manga) {
-    const { lastReadChapter, latestChapter, wasCaughtUp } = manga;
+    const { lastReadChapter, latestChapter } = manga;
 
     if (!lastReadChapter) return { state: 'IN_PROGRESS' };
 
     const readNum   = chapterNum(lastReadChapter);
     const latestNum = chapterNum(latestChapter);
 
-    // Exact string match (handles URL-based mangapill ids)
     const exactMatch = latestChapter && String(lastReadChapter) === String(latestChapter);
-    // Numeric match
     const numMatch   = readNum !== null && latestNum !== null && readNum >= latestNum;
 
     if (exactMatch || numMatch) return { state: 'CAUGHT_UP' };
 
-    // User was previously caught up and a new chapter has arrived
-    if (wasCaughtUp && latestChapter) return { state: 'NEW_CHAPTER' };
+    // latestChapter is ahead of lastRead — new chapter available
+    if (latestChapter) return { state: 'NEW_CHAPTER' };
 
-    // Mid-series or no latest data
+    // No latest chapter data yet — just show progress
     return { state: 'IN_PROGRESS' };
 }
 
@@ -182,19 +174,11 @@ export default function Home() {
                     if (raw) newChapterAt = parseInt(raw);
                 } catch { /* ignore */ }
 
-                // Read whether user was ever caught up on this series
-                let wasCaughtUp = false;
-                try {
-                    const raw = await AsyncStorage.getItem(caughtUpKey(key));
-                    wasCaughtUp = raw === '1';
-                } catch { /* ignore */ }
-
                 return {
                     ...f,
                     lastReadChapter: info.chapterUrl,
                     lastReadTimestamp: info.timestamp || 0,
                     latestChapter: latestChapter ?? null,
-                    wasCaughtUp,
                     sortPriority: newChapterAt ?? info.timestamp ?? 0,
                 };
             })
@@ -205,16 +189,6 @@ export default function Home() {
             .sort((a, b) => b.sortPriority - a.sortPriority);
 
         setFollowedManga(sorted);
-
-        // After rendering, write caughtup flag for any series that is now caught up
-        // so future new-chapter detections work correctly
-        sorted.forEach(async manga => {
-            const { state } = resolveCardState(manga);
-            if (state === 'CAUGHT_UP') {
-                await AsyncStorage.setItem(caughtUpKey(manga.url), '1').catch(() => {});
-            }
-        });
-
         return sorted;
     }, []);
 
@@ -241,37 +215,16 @@ export default function Home() {
             const stored = await getLatestChapter(key);
             if (latestId === String(stored ?? '')) return;
 
-            // New chapter found — only bump to front if user was previously caught up
-            const wasCaughtUp = (await AsyncStorage.getItem(caughtUpKey(key)).catch(() => null)) === '1';
-
+            // New chapter found — persist, write sort bump, move card to front
             await saveLatestChapter(key, latestId);
+            await AsyncStorage.setItem(newChapterKey(key), String(now)).catch(() => {});
 
-            if (wasCaughtUp) {
-                // User was caught up — write new-chapter bump and move to front
-                await AsyncStorage.setItem(newChapterKey(key), String(now)).catch(() => {});
-
-                setFollowedManga(prev => {
-                    const idx = prev.findIndex(m => m.url === key);
-                    if (idx < 0) return prev;
-                    const patched = {
-                        ...prev[idx],
-                        latestChapter: latestId,
-                        wasCaughtUp: true,
-                        sortPriority: now,
-                    };
-                    return [patched, ...prev.filter((_, i) => i !== idx)];
-                });
-            } else {
-                // User is mid-series — just update the latest chapter silently,
-                // don't move the card or change the button (still shows their chapter)
-                setFollowedManga(prev => {
-                    const idx = prev.findIndex(m => m.url === key);
-                    if (idx < 0) return prev;
-                    const updated = [...prev];
-                    updated[idx] = { ...updated[idx], latestChapter: latestId };
-                    return updated;
-                });
-            }
+            setFollowedManga(prev => {
+                const idx = prev.findIndex(m => m.url === key);
+                if (idx < 0) return prev;
+                const patched = { ...prev[idx], latestChapter: latestId, sortPriority: now };
+                return [patched, ...prev.filter((_, i) => i !== idx)];
+            });
         });
 
         await runBatched(tasks, BATCH_SIZE, BATCH_GAP_MS, bgCancelledRef);
@@ -391,26 +344,6 @@ export default function Home() {
             router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
         } else {
             router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=${src}`);
-        }
-    };
-
-    // Jump to newest chapter (NEW_CHAPTER state) — clears bump flags
-    const openLatest = async (manga) => {
-        if (!manga.latestChapter) return;
-        const src = getSource(manga);
-        const id = manga.url || manga.id;
-
-        // Clear both flags — user is now reading the new chapter
-        await AsyncStorage.removeItem(newChapterKey(id)).catch(() => {});
-        await AsyncStorage.removeItem(caughtUpKey(id)).catch(() => {});
-
-        if (src === 'mangapill') {
-            const mangapillUrl = id.includes('mangapill.com')
-                ? id
-                : `https://mangapill.com/manga/${id.replace('__', '/')}`;
-            router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(manga.latestChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
-        } else {
-            router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.latestChapter)}&source=${src}`);
         }
     };
 
