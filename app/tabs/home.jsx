@@ -36,12 +36,20 @@ const BATCH_SIZE = 5;
 const BATCH_GAP_MS = 1200;
 const STALE_AFTER_MS = 30 * 60 * 1000;
 
-// ── Key for persisting "new chapter arrived" sort bump ────────────────────────
-// Written when bg fetch finds a new chapter. Cleared when user reads that chapter.
-// loadFollowedManga uses this to keep the card at front even after app reopen.
-const newChapterKey = (mangaUrl) => `newchapter:${mangaUrl}`;
+// ── Storage key helpers ───────────────────────────────────────────────────────
+// newchapter:${key}  — timestamp written when bg fetch finds a new chapter
+//                      beyond where user was caught up. Cleared when user reads it.
+// caughtup:${key}    — written when user finishes all available chapters.
+//                      Cleared when user reads past it.
+const newChapterKey  = (k) => `newchapter:${k}`;
+const caughtUpKey    = (k) => `caughtup:${k}`;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Chapter number extraction ─────────────────────────────────────────────────
+function chapterNum(id) {
+    const s = String(id ?? '');
+    const m = s.match(/(\d+(\.\d+)?)/);
+    return m ? parseFloat(m[1]) : null;
+}
 
 function extractNewest(chapters) {
     if (!chapters?.length) return null;
@@ -54,6 +62,7 @@ function extractNewest(chapters) {
     return withNums[0]?.ch?.id ?? null;
 }
 
+// ── Background fetch ──────────────────────────────────────────────────────────
 async function fetchLatestChapterId(key, source) {
     try {
         if (source === 'mangapill') {
@@ -86,18 +95,44 @@ async function runBatched(tasks, batchSize, gapMs, cancelledRef) {
     }
 }
 
-function chapterNum(id) {
-    const s = String(id ?? '');
-    const m = s.match(/(\d+(\.\d+)?)/);
-    return m ? parseFloat(m[1]) : null;
-}
+// ── Card state logic ──────────────────────────────────────────────────────────
+//
+// Four possible card states:
+//
+//  1. CAUGHT_UP      — lastRead === latestChapter (numerically equal)
+//                      → green "Up to date" box, no button
+//
+//  2. NEW_CHAPTER    — user WAS caught up (caughtup flag set in storage)
+//                      AND latestChapter has advanced beyond lastRead
+//                      → green button with latestChapter number
+//
+//  3. IN_PROGRESS    — user is mid-series, never been caught up or
+//                      caughtup flag is absent
+//                      → purple button with lastReadChapter number
+//
+//  4. NO_DATA        — no latestChapter stored yet
+//                      → purple button with lastReadChapter (best we can do)
+//
+function resolveCardState(manga) {
+    const { lastReadChapter, latestChapter, wasCaughtUp } = manga;
 
-function isCaughtUp(manga) {
-    if (!manga.latestChapter || !manga.lastReadChapter) return false;
-    if (String(manga.lastReadChapter) === String(manga.latestChapter)) return true;
-    const read = chapterNum(manga.lastReadChapter);
-    const latest = chapterNum(manga.latestChapter);
-    return read !== null && latest !== null && read >= latest;
+    if (!lastReadChapter) return { state: 'IN_PROGRESS' };
+
+    const readNum   = chapterNum(lastReadChapter);
+    const latestNum = chapterNum(latestChapter);
+
+    // Exact string match (handles URL-based mangapill ids)
+    const exactMatch = latestChapter && String(lastReadChapter) === String(latestChapter);
+    // Numeric match
+    const numMatch   = readNum !== null && latestNum !== null && readNum >= latestNum;
+
+    if (exactMatch || numMatch) return { state: 'CAUGHT_UP' };
+
+    // User was previously caught up and a new chapter has arrived
+    if (wasCaughtUp && latestChapter) return { state: 'NEW_CHAPTER' };
+
+    // Mid-series or no latest data
+    return { state: 'IN_PROGRESS' };
 }
 
 export default function Home() {
@@ -140,14 +175,18 @@ export default function Home() {
 
                 const latestChapter = await getLatestChapter(key);
 
-                // Read the new-chapter bump timestamp — set when bg fetch finds a
-                // new chapter, cleared once the user reads it. While set, this
-                // value is used as the sort key instead of lastReadTimestamp so
-                // the card stays at front across app reopens.
+                // Read persisted sort bump (set when new chapter found by bg fetch)
                 let newChapterAt = null;
                 try {
                     const raw = await AsyncStorage.getItem(newChapterKey(key));
                     if (raw) newChapterAt = parseInt(raw);
+                } catch { /* ignore */ }
+
+                // Read whether user was ever caught up on this series
+                let wasCaughtUp = false;
+                try {
+                    const raw = await AsyncStorage.getItem(caughtUpKey(key));
+                    wasCaughtUp = raw === '1';
                 } catch { /* ignore */ }
 
                 return {
@@ -155,7 +194,7 @@ export default function Home() {
                     lastReadChapter: info.chapterUrl,
                     lastReadTimestamp: info.timestamp || 0,
                     latestChapter: latestChapter ?? null,
-                    // Sort priority: new-chapter bump wins over last-read timestamp
+                    wasCaughtUp,
                     sortPriority: newChapterAt ?? info.timestamp ?? 0,
                 };
             })
@@ -166,6 +205,16 @@ export default function Home() {
             .sort((a, b) => b.sortPriority - a.sortPriority);
 
         setFollowedManga(sorted);
+
+        // After rendering, write caughtup flag for any series that is now caught up
+        // so future new-chapter detections work correctly
+        sorted.forEach(async manga => {
+            const { state } = resolveCardState(manga);
+            if (state === 'CAUGHT_UP') {
+                await AsyncStorage.setItem(caughtUpKey(manga.url), '1').catch(() => {});
+            }
+        });
+
         return sorted;
     }, []);
 
@@ -192,18 +241,37 @@ export default function Home() {
             const stored = await getLatestChapter(key);
             if (latestId === String(stored ?? '')) return;
 
-            // New chapter found — persist latest chapter and the bump timestamp
-            await saveLatestChapter(key, latestId);
-            await AsyncStorage.setItem(newChapterKey(key), String(now)).catch(() => {});
+            // New chapter found — only bump to front if user was previously caught up
+            const wasCaughtUp = (await AsyncStorage.getItem(caughtUpKey(key)).catch(() => null)) === '1';
 
-            // Patch state: update chapter and move to front
-            setFollowedManga(prev => {
-                const idx = prev.findIndex(m => m.url === key);
-                if (idx < 0) return prev;
-                const patched = { ...prev[idx], latestChapter: latestId, sortPriority: now };
-                const rest = prev.filter((_, i) => i !== idx);
-                return [patched, ...rest];
-            });
+            await saveLatestChapter(key, latestId);
+
+            if (wasCaughtUp) {
+                // User was caught up — write new-chapter bump and move to front
+                await AsyncStorage.setItem(newChapterKey(key), String(now)).catch(() => {});
+
+                setFollowedManga(prev => {
+                    const idx = prev.findIndex(m => m.url === key);
+                    if (idx < 0) return prev;
+                    const patched = {
+                        ...prev[idx],
+                        latestChapter: latestId,
+                        wasCaughtUp: true,
+                        sortPriority: now,
+                    };
+                    return [patched, ...prev.filter((_, i) => i !== idx)];
+                });
+            } else {
+                // User is mid-series — just update the latest chapter silently,
+                // don't move the card or change the button (still shows their chapter)
+                setFollowedManga(prev => {
+                    const idx = prev.findIndex(m => m.url === key);
+                    if (idx < 0) return prev;
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], latestChapter: latestId };
+                    return updated;
+                });
+            }
         });
 
         await runBatched(tasks, BATCH_SIZE, BATCH_GAP_MS, bgCancelledRef);
@@ -311,7 +379,7 @@ export default function Home() {
         openManga(item);
     };
 
-    // Resume from last read chapter
+    // Resume from last read chapter (IN_PROGRESS state)
     const openLastRead = (manga) => {
         if (!manga.lastReadChapter) return;
         const src = getSource(manga);
@@ -326,14 +394,15 @@ export default function Home() {
         }
     };
 
-    // Jump to the newest available chapter and clear the new-chapter bump
+    // Jump to newest chapter (NEW_CHAPTER state) — clears bump flags
     const openLatest = async (manga) => {
         if (!manga.latestChapter) return;
         const src = getSource(manga);
         const id = manga.url || manga.id;
 
-        // Clear the bump so this card returns to normal timestamp sorting
+        // Clear both flags — user is now reading the new chapter
         await AsyncStorage.removeItem(newChapterKey(id)).catch(() => {});
+        await AsyncStorage.removeItem(caughtUpKey(id)).catch(() => {});
 
         if (src === 'mangapill') {
             const mangapillUrl = id.includes('mangapill.com')
@@ -410,13 +479,10 @@ export default function Home() {
                             {followedManga.map((manga, i) => {
                                 const img = getProxied(manga);
                                 const src = getSource(manga);
-                                const caught = isCaughtUp(manga);
-                                const hasNew = !caught && manga.latestChapter &&
-                                    String(manga.lastReadChapter) !== String(manga.latestChapter);
+                                const { state } = resolveCardState(manga);
 
                                 return (
                                     <View key={`${manga.url}-${i}`} style={S.contCard}>
-                                        {/* Cover → MangaDetails */}
                                         <Pressable
                                             style={({ pressed }) => [S.contCoverWrap, { opacity: pressed ? 0.75 : 1 }]}
                                             onPress={() => openManga(manga)}
@@ -439,23 +505,23 @@ export default function Home() {
                                             }]} />
                                         </Pressable>
 
-                                        {caught ? (
-                                            // Caught up — plain text box, no icon
+                                        {state === 'CAUGHT_UP' ? (
                                             <View style={S.caughtUpBox}>
                                                 <Text style={S.caughtUpText}>Up to date</Text>
                                             </View>
-                                        ) : hasNew ? (
-                                            // New chapter available — green button, no icon
+                                        ) : state === 'NEW_CHAPTER' ? (
+                                            // New chapter available — show where user left off (not latest)
+                                            // Green colour signals something new exists; tap resumes from their spot
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, S.contChBtnNew, { opacity: pressed ? 0.75 : 1 }]}
-                                                onPress={() => openLatest(manga)}
+                                                onPress={() => openLastRead(manga)}
                                             >
                                                 <Text style={S.contChText} numberOfLines={1}>
-                                                    {fmtCh(manga.latestChapter, src)}
+                                                    {fmtCh(manga.lastReadChapter, src)}
                                                 </Text>
                                             </Pressable>
                                         ) : (
-                                            // In progress — purple button, no icon
+                                            // Mid-series — show where they are
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, { opacity: pressed ? 0.75 : 1 }]}
                                                 onPress={() => openLastRead(manga)}
@@ -677,21 +743,18 @@ const S = StyleSheet.create({
     contGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 50, backgroundColor: 'rgba(7,7,10,0.65)' },
     srcDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' },
 
-    // In-progress button (purple)
     contChBtn: {
         alignItems: 'center', justifyContent: 'center',
         backgroundColor: C.accent,
         borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6, marginBottom: 7,
         shadowColor: C.accent, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6,
     },
-    // New chapter button (green)
     contChBtnNew: {
         backgroundColor: C.green,
         shadowColor: C.green,
     },
     contChText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
 
-    // Caught-up box — same height as buttons, plain text only
     caughtUpBox: {
         alignItems: 'center', justifyContent: 'center',
         borderWidth: 1, borderColor: C.greenBorder, backgroundColor: C.greenDim,
