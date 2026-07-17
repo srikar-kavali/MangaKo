@@ -100,15 +100,21 @@ async function runBatched(tasks, batchSize, gapMs, cancelledRef) {
 //  1. CAUGHT_UP     — lastRead === latestChapter (exact or numeric)
 //                     → "Up to date" box
 //
-//  2. NEW_CHAPTER   — latestChapter exists and is ahead of lastRead
-//                     → green button showing lastReadChapter (resume from here)
-//                       green colour signals something new is available
+//  2. NEW_CHAPTER   — a chapter newer than what the user has read was just
+//                     detected by the background fetch (hasNewChapterFlag)
+//                     → green button showing the NEW chapter (jump to it)
 //
-//  3. IN_PROGRESS   — no latestChapter data yet, or mid-series
-//                     → purple button showing lastReadChapter
+//  3. IN_PROGRESS   — mid-series with no fresh "new chapter" event, or no
+//                     latestChapter data yet
+//                     → purple button showing lastReadChapter (resume here)
 //
+// IMPORTANT: latestChapter being ahead of lastReadChapter is NOT enough to
+// trigger NEW_CHAPTER on its own — someone reading chapter 79 of an 85-chapter
+// backlog is just mid-series, not looking at a fresh release. Only the
+// hasNewChapterFlag (set when the bg fetch detects the latest chapter changed
+// since we last knew about it) means "a new chapter actually just dropped".
 function resolveCardState(manga) {
-    const { lastReadChapter, latestChapter } = manga;
+    const { lastReadChapter, latestChapter, hasNewChapterFlag } = manga;
 
     if (!lastReadChapter) return { state: 'IN_PROGRESS' };
 
@@ -120,10 +126,10 @@ function resolveCardState(manga) {
 
     if (exactMatch || numMatch) return { state: 'CAUGHT_UP' };
 
-    // latestChapter is ahead of lastRead — new chapter available
-    if (latestChapter) return { state: 'NEW_CHAPTER' };
+    // Ahead of lastRead AND flagged as a genuinely new release — show it
+    if (latestChapter && hasNewChapterFlag) return { state: 'NEW_CHAPTER' };
 
-    // No latest chapter data yet — just show progress
+    // Otherwise: just mid-series (or no latest data) — show actual position
     return { state: 'IN_PROGRESS' };
 }
 
@@ -179,6 +185,7 @@ export default function Home() {
                     lastReadChapter: info.chapterUrl,
                     lastReadTimestamp: info.timestamp || 0,
                     latestChapter: latestChapter ?? null,
+                    hasNewChapterFlag: newChapterAt != null,
                     sortPriority: newChapterAt ?? info.timestamp ?? 0,
                 };
             })
@@ -215,14 +222,27 @@ export default function Home() {
             const stored = await getLatestChapter(key);
             if (latestId === String(stored ?? '')) return;
 
-            // New chapter found — persist, write sort bump, move card to front
+            // The latest chapter changed since our last check. Only treat this as
+            // a genuinely NEW release if we already had a previously-known latest
+            // chapter to compare against — otherwise this is just the first time
+            // we've ever looked this series up (e.g. right after following it),
+            // and the user could be deep in a backlog, not looking at a fresh drop.
+            const isGenuinelyNew = !!stored;
+
             await saveLatestChapter(key, latestId);
-            await AsyncStorage.setItem(newChapterKey(key), String(now)).catch(() => {});
+            if (isGenuinelyNew) {
+                await AsyncStorage.setItem(newChapterKey(key), String(now)).catch(() => {});
+            }
 
             setFollowedManga(prev => {
                 const idx = prev.findIndex(m => m.url === key);
                 if (idx < 0) return prev;
-                const patched = { ...prev[idx], latestChapter: latestId, sortPriority: now };
+                const patched = {
+                    ...prev[idx],
+                    latestChapter: latestId,
+                    hasNewChapterFlag: isGenuinelyNew ? true : prev[idx].hasNewChapterFlag,
+                    sortPriority: isGenuinelyNew ? now : prev[idx].sortPriority,
+                };
                 return [patched, ...prev.filter((_, i) => i !== idx)];
             });
         });

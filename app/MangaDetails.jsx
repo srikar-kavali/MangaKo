@@ -201,13 +201,19 @@ const MangaDetails = () => {
     };
 
     const handleChapter = async (ch) => {
-        const cId = ch.id;
+        // MangaPill chapters from the backend often only have a `url`, not a
+        // stable `id` — using ch.id directly here was saving `undefined` as
+        // the last-read progress for MangaPill, which is why it looked like
+        // reading position (and by extension the favorite's title context)
+        // never saved. Fall back to the URL so this is always a real value,
+        // and keep it consistent with what ReadChapter is actually opened with.
+        const cId = ch.id ?? ch.url;
         if (storageKey) {
             await saveLastReadChapter(storageKey, cId);
             setLastRead(cId);
         }
         if (isMangapill) {
-            router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(ch.url)}&mangapillUrl=${encodeURIComponent(resolvedMangapillUrl)}&source=mangapill`);
+            router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(ch.url ?? cId)}&mangapillUrl=${encodeURIComponent(resolvedMangapillUrl)}&source=mangapill`);
         } else if (isAsura) {
             router.push(`/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(cId)}&source=asura`);
         } else if (isMgeko) {
@@ -402,7 +408,7 @@ const MangaDetails = () => {
                     )}
 
                     {paged.map((ch, i) => {
-                        const cId = ch.id;
+                        const cId = ch.id ?? ch.url;
                         const isLast = lastRead === cId;
                         return (
                             <Pressable
