@@ -43,21 +43,33 @@ const STALE_AFTER_MS = 30 * 60 * 1000;
 const newChapterKey = (k) => `newchapter:${k}`;
 
 // ── Chapter number extraction ─────────────────────────────────────────────────
+// For plain ids ("191") this just grabs the first number. For URL-based ids
+// (MangaPill, e.g. .../chapters/12345/one-piece-chapter-1012) we must only
+// look at the LAST path segment — otherwise an unrelated numeric id earlier
+// in the URL (like "12345") gets matched instead of the real chapter number.
 function chapterNum(id) {
     const s = String(id ?? '');
-    const m = s.match(/(\d+(\.\d+)?)/);
+    const slug = s.includes('/') ? (s.split('/').filter(Boolean).pop() || s) : s;
+    const m = slug.match(/(\d+(\.\d+)?)/);
     return m ? parseFloat(m[1]) : null;
 }
 
 function extractNewest(chapters) {
     if (!chapters?.length) return null;
     const withNums = chapters.map(ch => {
-        const s = String(ch?.id ?? ch?.url ?? '');
-        const m = s.match(/(\d+(\.\d+)?)/);
-        return { ch, num: m ? parseFloat(m[1]) : -1 };
+        // MangaPill chapters often have no `.id`, only `.url` — fall back so
+        // this doesn't silently produce -1 for every entry.
+        const key = ch?.id ?? ch?.url ?? '';
+        return { ch, num: chapterNum(key) ?? -1 };
     });
     withNums.sort((a, b) => b.num - a.num);
-    return withNums[0]?.ch?.id ?? null;
+    const best = withNums[0]?.ch;
+    // Same fallback on the way out: without this, MangaPill's missing `.id`
+    // made extractNewest always return null, which made runBackgroundFetch
+    // bail out immediately (`if (!latestId) return`) — so MangaPill titles
+    // never got a latestChapter at all, and the Continue Reading card could
+    // never show "Up to date" or a new-chapter button for them.
+    return best ? (best.id ?? best.url ?? null) : null;
 }
 
 // ── Background fetch ──────────────────────────────────────────────────────────
