@@ -50,7 +50,7 @@ const normalizeKey = (key) => {
 };
 
 const MangaDetails = () => {
-    const { seriesId, mangapillUrl, source } = useLocalSearchParams();
+    const { seriesId, mangapillUrl, source, title: titleParam } = useLocalSearchParams();
     const router = useRouter();
     const scrollRef = useRef(null);
 
@@ -166,7 +166,7 @@ const MangaDetails = () => {
         const freshCover = getCoverUrl();
         return {
             url: storageKey,
-            title: mangaData?.title || 'Manga',
+            title: mangaData?.title || mangaData?.name || titleParam || 'Manga',
             description: mangaData?.description || '',
             coverUrl: freshCover,
             cover: freshCover,
@@ -240,7 +240,7 @@ const MangaDetails = () => {
         </SafeAreaView>
     );
 
-    const title = mangaData?.title || 'Unknown';
+    const title = mangaData?.title || mangaData?.name || titleParam || 'Unknown';
     const cover = getCoverUrl();
     const isOngoing = mangaData?.status === 'Ongoing';
     const srcLabel = isMangapill ? 'MangaPill' : isMgeko ? 'MgEko' : 'AsuraScans';

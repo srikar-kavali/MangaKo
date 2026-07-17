@@ -316,13 +316,17 @@ export default function Home() {
     const openManga = (item) => {
         const src = item.source || getSource(item);
         const id = item.id || item.url;
+        // Pass along the title we already know from search/browse so MangaDetails
+        // has a reliable fallback if the detail-page scrape returns no title
+        // (this was the cause of MangaPill favorites saving without a title).
+        const titleParam = item.title ? `&title=${encodeURIComponent(item.title)}` : '';
         if (src === 'asura' || src === 'mgeko') {
-            router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}`);
+            router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}${titleParam}`);
         } else {
             const mangapillUrl = id.includes('mangapill.com')
                 ? id
                 : `https://mangapill.com/manga/${id.replace('__', '/')}`;
-            router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
+            router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill${titleParam}`);
         }
     };
 
@@ -332,20 +336,24 @@ export default function Home() {
         openManga(item);
     };
 
-    // Resume from last read chapter (IN_PROGRESS state)
-    const openLastRead = (manga) => {
-        if (!manga.lastReadChapter) return;
+    // Open any given chapter id for a manga (used for both "resume where I left off"
+    // and "jump to the newest chapter" — the two need different chapter ids).
+    const openChapter = (manga, chapterId) => {
+        if (!chapterId) return;
         const src = getSource(manga);
         const id = manga.url || manga.id;
         if (src === 'mangapill') {
             const mangapillUrl = id.includes('mangapill.com')
                 ? id
                 : `https://mangapill.com/manga/${id.replace('__', '/')}`;
-            router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(manga.lastReadChapter)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
+            router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(chapterId)}&mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill`);
         } else {
-            router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(manga.lastReadChapter)}&source=${src}`);
+            router.push(`/ReadChapter?seriesId=${encodeURIComponent(id)}&chapterId=${encodeURIComponent(chapterId)}&source=${src}`);
         }
     };
+
+    // Resume from last read chapter (IN_PROGRESS / CAUGHT_UP state)
+    const openLastRead = (manga) => openChapter(manga, manga.lastReadChapter);
 
     const fmtCh = (id, src) => {
         if (!id) return '';
@@ -443,14 +451,14 @@ export default function Home() {
                                                 <Text style={S.caughtUpText}>Up to date</Text>
                                             </View>
                                         ) : state === 'NEW_CHAPTER' ? (
-                                            // New chapter available — show where user left off (not latest)
-                                            // Green colour signals something new exists; tap resumes from their spot
+                                            // New chapter available — show and open the newest chapter
+                                            // (not where the user left off). Green signals something new exists.
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, S.contChBtnNew, { opacity: pressed ? 0.75 : 1 }]}
-                                                onPress={() => openLastRead(manga)}
+                                                onPress={() => openChapter(manga, manga.latestChapter)}
                                             >
                                                 <Text style={S.contChText} numberOfLines={1}>
-                                                    {fmtCh(manga.lastReadChapter, src)}
+                                                    {fmtCh(manga.latestChapter, src)}
                                                 </Text>
                                             </Pressable>
                                         ) : (
