@@ -180,13 +180,18 @@ export default function Home() {
                     if (raw) newChapterAt = parseInt(raw);
                 } catch { /* ignore */ }
 
+                // Card moves to the front of "Continue Reading" based on whichever
+                // happened most recently: the user reading a chapter (info.timestamp)
+                // or the background fetch discovering a new chapter (newChapterAt).
+                // Using ?? here would let a stale new-chapter flag permanently outrank
+                // a fresh read, so we take the max of the two instead.
                 return {
                     ...f,
                     lastReadChapter: info.chapterUrl,
                     lastReadTimestamp: info.timestamp || 0,
                     latestChapter: latestChapter ?? null,
                     hasNewChapterFlag: newChapterAt != null,
-                    sortPriority: newChapterAt ?? info.timestamp ?? 0,
+                    sortPriority: Math.max(newChapterAt ?? 0, info.timestamp ?? 0),
                 };
             })
         );
