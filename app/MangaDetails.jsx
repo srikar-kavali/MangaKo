@@ -11,7 +11,7 @@ import { getMangapillManga, proxied as proxiedMangapill } from '../manga_api/man
 import { proxied as proxiedMgeko } from '../manga_api/mgeko';
 import { getManhwaById } from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
-import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter } from "./searchStorage";
+import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed } from "./searchStorage";
 import { getCoverUrl as getStaticCover } from "../api/coverurls";
 
 const C = {
@@ -91,6 +91,10 @@ const MangaDetails = () => {
             getLastReadChapter(storageKey)
                 .then(val => setLastRead(val ?? null))
                 .catch(() => {});
+            // Opening this screen counts as a recent action too — not just
+            // finishing a chapter. Without this, tapping into a series and
+            // going back did nothing to its Continue Reading position.
+            touchLastViewed(storageKey).catch(() => {});
         }, [storageKey])
     );
 
@@ -211,6 +215,12 @@ const MangaDetails = () => {
         if (storageKey) {
             await saveLastReadChapter(storageKey, cId);
             setLastRead(cId);
+            // Reading a chapter clears any pending "new chapter" flag — without
+            // this, a one-time new-chapter event from the background fetch
+            // stays flagged forever, and the home screen keeps showing the
+            // latest chapter as the button even when the user is actually
+            // mid-series and nowhere near caught up (e.g. 22/35).
+            await clearNewChapterFlag(storageKey);
         }
         if (isMangapill) {
             router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(ch.url ?? cId)}&mangapillUrl=${encodeURIComponent(resolvedMangapillUrl)}&source=mangapill`);

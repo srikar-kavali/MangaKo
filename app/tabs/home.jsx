@@ -12,6 +12,7 @@ import { signOut } from '../../auth/cognito';
 import {
     getRecentSearches, saveRecentSearches, getFavorites,
     getLastReadChapterInfo, getLatestChapter, saveLatestChapter,
+    newChapterKey, getLastViewed,
 } from '../searchStorage';
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { searchMangapill, getMangapillManga, proxied as proxiedMangapill } from '../../manga_api/mangapill';
@@ -37,10 +38,9 @@ const BATCH_GAP_MS = 1200;
 const STALE_AFTER_MS = 30 * 60 * 1000;
 
 // ── Storage key helpers ───────────────────────────────────────────────────────
-// newchapter:${key}  — timestamp written when bg fetch finds a new chapter.
-//                      Used as sort priority so card stays at front after reopen.
-//                      Cleared when user reads that new chapter.
-const newChapterKey = (k) => `newchapter:${k}`;
+// newchapter:${key} is defined in searchStorage.js (newChapterKey) so both
+// home.jsx and MangaDetails.jsx agree on the same key — MangaDetails clears
+// it via clearNewChapterFlag() the moment the user actually reads a chapter.
 
 // ── Chapter number extraction ─────────────────────────────────────────────────
 // For plain ids ("191") this just grabs the first number. For URL-based ids
@@ -192,18 +192,23 @@ export default function Home() {
                     if (raw) newChapterAt = parseInt(raw);
                 } catch { /* ignore */ }
 
+                // Last time the user opened this series' details page — counts as
+                // a recent action too, not just finishing a chapter.
+                const lastViewedAt = await getLastViewed(key);
+
                 // Card moves to the front of "Continue Reading" based on whichever
-                // happened most recently: the user reading a chapter (info.timestamp)
-                // or the background fetch discovering a new chapter (newChapterAt).
+                // happened most recently: the user reading a chapter (info.timestamp),
+                // the user simply viewing the series again (lastViewedAt), or the
+                // background fetch discovering a new chapter (newChapterAt).
                 // Using ?? here would let a stale new-chapter flag permanently outrank
-                // a fresh read, so we take the max of the two instead.
+                // a fresh read/view, so we take the max of all three instead.
                 return {
                     ...f,
                     lastReadChapter: info.chapterUrl,
                     lastReadTimestamp: info.timestamp || 0,
                     latestChapter: latestChapter ?? null,
                     hasNewChapterFlag: newChapterAt != null,
-                    sortPriority: Math.max(newChapterAt ?? 0, info.timestamp ?? 0),
+                    sortPriority: Math.max(newChapterAt ?? 0, info.timestamp ?? 0, lastViewedAt ?? 0),
                 };
             })
         );

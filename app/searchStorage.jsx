@@ -5,6 +5,36 @@ const FAVORITES_KEY = 'favorites';
 const LAST_READ_KEY = 'lastReadChapters';
 const COMPLETED_KEY = 'completed_manga';
 
+const NEW_CHAPTER_PREFIX = 'newchapter:';
+export const newChapterKey = (mangaUrl) => `${NEW_CHAPTER_PREFIX}${mangaUrl}`;
+
+export async function clearNewChapterFlag(mangaUrl) {
+    try {
+        await AsyncStorage.removeItem(newChapterKey(mangaUrl));
+    } catch (e) {
+        console.error('Failed to clear new chapter flag', e);
+    }
+}
+
+const LAST_VIEWED_PREFIX = 'lastviewed:';
+
+export async function touchLastViewed(mangaUrl) {
+    try {
+        await AsyncStorage.setItem(`${LAST_VIEWED_PREFIX}${mangaUrl}`, String(Date.now()));
+    } catch (e) {
+        console.error('Failed to touch last viewed', e);
+    }
+}
+
+export async function getLastViewed(mangaUrl) {
+    try {
+        const v = await AsyncStorage.getItem(`${LAST_VIEWED_PREFIX}${mangaUrl}`);
+        return v ? parseInt(v, 10) : null;
+    } catch (e) {
+        return null;
+    }
+}
+
 // --- Recent Searches ---
 export async function getRecentSearches() {
     try {
