@@ -36,7 +36,7 @@ export const COVER_URLS = {
     "the-return-of-the-crazy-demon":                                "https://imgsrv4.com/avatar/288x412/media/manga_covers/hababababbaba.jpg",
     "the-shepherd-wizard":                                          "https://imgsrv4.com/avatar/288x412/media/manga_covers/01KJ5AER3RGKM5T6954QGC8TMB-optimized.webp",
     "the-world-after-the-end":                                      "https://imgsrv4.com/avatar/288x412/media/manga_covers/the-world-after-the-fall.jpeg",
-
+    "the-tale-of-cultivation-and-demon-extermination":              "https://imgsrv4.com/avatar/288x412/media/manga_covers/7y0rwJ.png",
 
 
 
@@ -72,7 +72,7 @@ export const COVER_URLS = {
     "mgeko__urek-s-ascent":                                         "https://imgsrv4.com/avatar/288x412/media/manga_covers/w7X8BX-m.jpg",
     "mgeko__wind-breaker":                                          "https://imgsrv4.com/avatar/288x412/media/manga_covers/kRx1Dy-m.jpg",
     "mgeko__yongbi-the-invincible":                                 "https://imgsrv4.com/avatar/288x412/media/manga_covers/yongbi-the-invincible.webp",
-    "The Tale of Cultivation and Demon Extermination":              "https://imgsrv4.com/avatar/288x412/media/manga_covers/7y0rwJ.png"
+
 };
 
 
