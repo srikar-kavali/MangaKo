@@ -543,7 +543,27 @@ export const manhwas = [
         description: "Yongbi is a quirky, highly unpredictable bounty hunter traveling with his absurdly intelligent horse. Beneath his greedy, comedic exterior lies a devastatingly powerful former military commander of the Black Spear Lancers.",
         genres: ["Action", "Adventure", "Comedy", "Martial Arts", "Murim", "Historical"],
         status: "Completed",
+    },
+    {
+        id: "the-tale-of-cultivation-and-demon-extermination",
+        title: "The Tale of Cultivation and Demon Extermination",
+        source: "asura",
+        description: "\"My revenge won’t end until every Demon in this world has been wiped out.”\n" +
+            "\n" +
+            "After brutally displaying the head of the Demon that murdered his parents, the boy Yise was shunned by his village as a monster.\n" +
+            "\n" +
+            "Having lost all attachment to life, Yise encountered Mongryeon—a dokkaebi who hunted Demons—and found a new purpose: to exterminate every Demon in existence.\n" +
+            "\n" +
+            "That was when his life alongside Mongryeon began. But as they traveled together, Mongryeon discovered that there was something extraordinary about Yise.\n" +
+            "\n" +
+            "For his sake, Mongryeon sent Yise to the Grand Martial Path, a cultivation sect known as the immortal realm’s executioners.\n" +
+            "\n" +
+            "And so began the tale of the boy who walked the path of cultivation to bring about the extinction of Demons.",
+        genres: ["Action", "Adventure", "Dark Fantasy", "Martial Arts", "Murim", "Demon", "Mystery", "Revenge"],
+        status: "Ongoing",
     }
+
+
 ];
 
 export function searchHardcodedManhwa(query) {
