@@ -561,9 +561,21 @@ export const manhwas = [
             "And so began the tale of the boy who walked the path of cultivation to bring about the extinction of Demons.",
         genres: ["Action", "Adventure", "Dark Fantasy", "Martial Arts", "Murim", "Demon", "Mystery", "Revenge"],
         status: "Ongoing",
+    },
+    {
+        id: "the-former-supreme",
+        title: "The Former Supreme",
+        source: "asura",
+        description: "Baek Socheon, once the unrivaled master of the Jianghu, has been reduced to a mere administrative post in name only.\n" +
+            "\n" +
+            "Though he has lost both his martial arts and his honor, his spirit remains unbroken...\n" +
+            "\n" +
+            "Starting once more from rock bottom, the former supreme sets out to reclaim the power he lost and the time he left behind.\n" +
+            "\n" +
+            "Thus begins the second martial legend of the man who was once the strongest.",
+        genres: ["Action", "Adventure", "Martial Arts", "Murim"],
+        status: "Ongoing",
     }
-
-
 ];
 
 export function searchHardcodedManhwa(query) {

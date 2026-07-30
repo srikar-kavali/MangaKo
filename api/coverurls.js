@@ -37,7 +37,7 @@ export const COVER_URLS = {
     "the-shepherd-wizard":                                          "https://imgsrv4.com/avatar/288x412/media/manga_covers/01KJ5AER3RGKM5T6954QGC8TMB-optimized.webp",
     "the-world-after-the-end":                                      "https://imgsrv4.com/avatar/288x412/media/manga_covers/the-world-after-the-fall.jpeg",
     "the-tale-of-cultivation-and-demon-extermination":              "https://imgsrv4.com/avatar/288x412/media/manga_covers/7y0rwJ.png",
-
+    "the-former-supreme":                                           "",
 
 
     "mgeko__a-returner-s-magic-should-be-special-mg1-njfia":        "https://imgsrv4.com/avatar/288x412/media/manga_covers/a-returner-s-magic-should-be-speci.png",
