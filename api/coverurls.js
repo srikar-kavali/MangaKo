@@ -72,6 +72,8 @@ export const COVER_URLS = {
     "mgeko__urek-s-ascent":                                         "https://imgsrv4.com/avatar/288x412/media/manga_covers/w7X8BX-m.jpg",
     "mgeko__wind-breaker":                                          "https://imgsrv4.com/avatar/288x412/media/manga_covers/kRx1Dy-m.jpg",
     "mgeko__yongbi-the-invincible":                                 "https://imgsrv4.com/avatar/288x412/media/manga_covers/yongbi-the-invincible.webp",
+    "mgeko__death-god":                                             "https://imgsrv4.com/avatar/288x412/media/manga_covers/death-god-1.jpg" ,
+    "mgeko__heavenly-moon":                                         "https://imgsrv4.com/avatar/288x412/media/manga_covers/heavenly-moon.webp",
 
 };
 

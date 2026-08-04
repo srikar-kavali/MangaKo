@@ -575,7 +575,24 @@ export const manhwas = [
             "Thus begins the second martial legend of the man who was once the strongest.",
         genres: ["Action", "Adventure", "Martial Arts", "Murim"],
         status: "Ongoing",
-    }
+    },
+    {
+        id: "mgeko__heavenly-moon",
+        title: "Heavenly Moon",
+        source: "Mgeko",
+        description: "\n" +
+            "The Murim Warring States period, is where only the strong survives. This is the war slave Cheong Gwang and Myeong-Wol's Murim Survival Story.",
+        genres: ["Murim", "Martial Arts", "Swordsman",],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__death-god",
+        title: "Death God",
+        source: "Mgeko",
+        description: "Jongli Chu, a warrior of the Death Heavenly Sect who killed Hwang Jung to avenge his older brother. In order to avoid the pursuit of Death Heavenly Sect, he looked to an assassin of the Death Soul Agency, Crimson Assassin, for help and got swept into a huge mess known as the Obliteration. In order to escape the shadow of the Obliteration, he had no choice but to become a legendary Death God! Can Jong Lichu become a Death God and find freedom in the stifling rules created by the orthodox sects?\n",
+        genres: ["Action", "Fantasy",  "Revenge", "Murim",],
+        status: "Ongoing",
+    },
 ];
 
 export function searchHardcodedManhwa(query) {

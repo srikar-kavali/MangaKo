@@ -177,16 +177,15 @@ def get_chapter_pages(driver, chapter):
     pages = []
     seen = set()
 
-    # Chapter page images always live at this specific CDN path, e.g.:
-    #   https://imgsrv4.com/mg2/cdn_mangaraw/reader/chapter-182/0.jpg
-    # Just checking "imgsrv" in the src (the old approach) also matches the
-    # comments widget below the reader, which is served from the same CDN
-    # domain (avatars, attached images, the loading spinner, etc). Scrolling
-    # the full page — which full_scroll() above does to trigger lazy-loaded
-    # images — is exactly what causes that widget to load in the first
-    # place, so this pattern match is the real fix, not just the scroll
-    # range.
-    CHAPTER_IMG_RE = re.compile(r'/cdn_mangaraw/reader/chapter-[^/]+/\d+\.\w+', re.IGNORECASE)
+    # Chapter page images always end in this pattern: /chapter-N/{page}.{ext}
+    # e.g. .../mg2/cdn_mangaraw/reader/chapter-182/0.jpg
+    #      .../sv2/comic/manga-q1113/chapter-412/0.jpg
+    # The CDN subpath and manga slug BEFORE "chapter-N" vary per series/scan
+    # group (confirmed: different manga use different imgsrv subpaths), so we
+    # can't match on a fixed prefix — only the tail is universal. This still
+    # reliably excludes comment-section images (avatars, attachments, the
+    # loading spinner), which don't follow a "/chapter-N/index.ext" path.
+    CHAPTER_IMG_RE = re.compile(r'/chapter-[^/]+/\d+\.\w+(?:\?.*)?$', re.IGNORECASE)
 
     for img in driver.find_elements(By.TAG_NAME, "img"):
         src = img.get_attribute("src") or ""
