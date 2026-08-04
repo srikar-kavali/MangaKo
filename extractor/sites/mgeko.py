@@ -177,14 +177,29 @@ def get_chapter_pages(driver, chapter):
     pages = []
     seen = set()
 
+    # Chapter page images always live at this specific CDN path, e.g.:
+    #   https://imgsrv4.com/mg2/cdn_mangaraw/reader/chapter-182/0.jpg
+    # Just checking "imgsrv" in the src (the old approach) also matches the
+    # comments widget below the reader, which is served from the same CDN
+    # domain (avatars, attached images, the loading spinner, etc). Scrolling
+    # the full page — which full_scroll() above does to trigger lazy-loaded
+    # images — is exactly what causes that widget to load in the first
+    # place, so this pattern match is the real fix, not just the scroll
+    # range.
+    CHAPTER_IMG_RE = re.compile(r'/cdn_mangaraw/reader/chapter-[^/]+/\d+\.\w+', re.IGNORECASE)
+
     for img in driver.find_elements(By.TAG_NAME, "img"):
         src = img.get_attribute("src") or ""
 
         if not src:
             continue
 
-        # mgeko serves all chapter images from imgsrv*.com
+        # mgeko serves all chapter images from imgsrv*.com, but so does other
+        # page chrome (comments, etc) — the path pattern is what actually
+        # identifies a real chapter page.
         if "imgsrv" not in src:
+            continue
+        if not CHAPTER_IMG_RE.search(src):
             continue
 
         if src not in seen:
