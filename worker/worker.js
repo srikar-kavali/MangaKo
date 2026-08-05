@@ -24,7 +24,11 @@ export default {
 
         try {
             const targetUrl = new URL(targetUrlStr);
-            const host = targetUrl.netloc || targetUrl.hostname;
+            // NOTE: JS URL objects don't have .netloc (that's a Python/urllib
+            // concept) — this was always falling through to .hostname via the
+            // || anyway, but writing it directly avoids the confusing dead
+            // reference.
+            const host = targetUrl.hostname;
 
             // 2. Mirror your exact working Python proxy headers
             const headers = new Headers({
@@ -47,7 +51,14 @@ export default {
                 headers.set("sec-ch-ua-mobile", "?0");
                 headers.set("sec-ch-ua-platform", '"Windows"');
             } else if (host.includes("imgsrv4.com") || host.includes("mgeko")) {
-                headers.set("Referer", "https://mgeko.cc/");
+                // Real mgeko URLs are all under www.mgeko.cc — a bare
+                // "mgeko.cc" Referer is a different origin as far as most
+                // hotlink checks go. Fixed to match the working Python
+                // proxy. (This alone won't resolve the 525 you're seeing —
+                // that fails before headers are ever read — but it's still
+                // wrong and worth having correct.)
+                headers.set("Referer", "https://www.mgeko.cc/");
+                headers.set("Origin", "https://www.mgeko.cc");
             } else {
                 headers.set("Referer", `https://${host.replace('cdn.', '')}/`);
             }

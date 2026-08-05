@@ -8,5 +8,5 @@ const API_BASE = cleanBase(BASE);
 
 export function proxied(src) {
     if (!src) return "";
-    return `https://manga-image-proxy.mangako.workers.dev/?url=${encodeURIComponent(src)}`;
+    return `${API_BASE}/api/image_proxy?url=${encodeURIComponent(src)}`;
 }
