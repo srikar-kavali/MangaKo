@@ -177,15 +177,18 @@ def get_chapter_pages(driver, chapter):
     pages = []
     seen = set()
 
-    # Chapter page images always end in this pattern: /chapter-N/{page}.{ext}
-    # e.g. .../mg2/cdn_mangaraw/reader/chapter-182/0.jpg
-    #      .../sv2/comic/manga-q1113/chapter-412/0.jpg
-    # The CDN subpath and manga slug BEFORE "chapter-N" vary per series/scan
-    # group (confirmed: different manga use different imgsrv subpaths), so we
-    # can't match on a fixed prefix — only the tail is universal. This still
-    # reliably excludes comment-section images (avatars, attachments, the
-    # loading spinner), which don't follow a "/chapter-N/index.ext" path.
-    CHAPTER_IMG_RE = re.compile(r'/chapter-[^/]+/\d+\.\w+(?:\?.*)?$', re.IGNORECASE)
+    # Chapter page images always sit under a "/chapter-N/" path segment, e.g.:
+    #   .../mg2/cdn_mangaraw/reader/chapter-182/0.jpg
+    #   .../sv2/comic/manga-q1113/chapter-412/0.jpg
+    #   .../mg2/cdn_mangaraw/death-g/chapter-8/01.1_warnig_png_11zon.jpg
+    # The CDN subpath/slug before "chapter-N" varies per series, AND the
+    # filename after it isn't always a plain sequential number — some
+    # chapters (re-edited/re-uploaded scans) use filenames like "01-6.jpg" or
+    # "01.1_warnig_png_11zon.jpg". So we only require SOME filename under a
+    # "/chapter-N/" segment, not a purely numeric one. This still reliably
+    # excludes comment-section images (avatars, attachments, loading spinner,
+    # the mgeko credits watermark), none of which live under a chapter path.
+    CHAPTER_IMG_RE = re.compile(r'/chapter-[^/]+/[^/]+\.\w+(?:\?.*)?$', re.IGNORECASE)
 
     for img in driver.find_elements(By.TAG_NAME, "img"):
         src = img.get_attribute("src") or ""
