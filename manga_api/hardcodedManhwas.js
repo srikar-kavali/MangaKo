@@ -579,7 +579,7 @@ export const manhwas = [
     {
         id: "mgeko__heavenly-moon",
         title: "Heavenly Moon",
-        source: "Mgeko",
+        source: "mgeko",
         description: "\n" +
             "The Murim Warring States period, is where only the strong survives. This is the war slave Cheong Gwang and Myeong-Wol's Murim Survival Story.",
         genres: ["Murim", "Martial Arts", "Swordsman",],
@@ -588,7 +588,7 @@ export const manhwas = [
     {
         id: "mgeko__death-god",
         title: "Death God",
-        source: "Mgeko",
+        source: "mgeko",
         description: "Jongli Chu, a warrior of the Death Heavenly Sect who killed Hwang Jung to avenge his older brother. In order to avoid the pursuit of Death Heavenly Sect, he looked to an assassin of the Death Soul Agency, Crimson Assassin, for help and got swept into a huge mess known as the Obliteration. In order to escape the shadow of the Obliteration, he had no choice but to become a legendary Death God! Can Jong Lichu become a Death God and find freedom in the stifling rules created by the orthodox sects?\n",
         genres: ["Action", "Fantasy",  "Revenge", "Murim",],
         status: "Ongoing",
