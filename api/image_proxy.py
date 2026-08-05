@@ -40,7 +40,19 @@ def get_headers(url: str) -> dict:
         }
 
     if "imgsrv4.com" in host or "mgeko" in host:
-        return {**base, "Referer": "https://mgeko.cc/", "Host": host}
+        # NOTE: every real mgeko URL we've observed is under www.mgeko.cc —
+        # "https://mgeko.cc/" (no www) is a different origin as far as most
+        # hotlink-protection checks are concerned, even though it happens to
+        # redirect fine for a normal browser visit. Referer checks are
+        # typically a strict prefix/string match, not a "does this resolve
+        # to the same site" check, so this mismatch was likely causing
+        # imgsrv4.com to silently reject every proxied image request.
+        return {
+            **base,
+            "Referer": "https://www.mgeko.cc/",
+            "Origin": "https://www.mgeko.cc",
+            "Host": host
+        }
 
     return {
         **base,
