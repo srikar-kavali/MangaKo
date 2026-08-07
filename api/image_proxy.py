@@ -6,9 +6,21 @@ import httpx
 
 
 IMGSRV_HOST_RE = re.compile(r'^imgsrv(\d+)\.com$', re.IGNORECASE)
+# How many numbered imgsrv hosts to try as fallbacks. Kept small deliberately:
+# each attempt can take up to FALLBACK_TIMEOUT seconds, and a page can load
+# dozens of images concurrently — too many fallbacks * too long a timeout is
+# what caused mass 502s (the serverless function itself timing out) the first
+# time this was tried with 8 fallbacks at 15s each.
 IMGSRV_FALLBACK_COUNT = 8
+IMGSRV_FALLBACK_ATTEMPTS = 2  # only try this many alternate hosts, nearest first
+FALLBACK_TIMEOUT = 6.0        # shorter per-attempt timeout for fallback candidates
+
 
 def imgsrv_fallback_urls(url: str) -> list:
+    """If url's host looks like imgsrvN.com, return the same path on up to
+    IMGSRV_FALLBACK_ATTEMPTS other numbered hosts, nearest-number-first
+    (reshuffles are usually to an adjacent shard). Returns [] for any
+    non-imgsrv host."""
     parsed = urlparse(url)
     m = IMGSRV_HOST_RE.match(parsed.netloc)
     if not m:
@@ -17,7 +29,7 @@ def imgsrv_fallback_urls(url: str) -> list:
     candidates = sorted(
         (n for n in range(1, IMGSRV_FALLBACK_COUNT + 1) if n != original_n),
         key=lambda n: abs(n - original_n)
-    )
+    )[:IMGSRV_FALLBACK_ATTEMPTS]
     return [
         parsed._replace(netloc=f"imgsrv{n}.com").geturl()
         for n in candidates
@@ -102,41 +114,53 @@ class handler(BaseHTTPRequestHandler):
             return
 
         # Old scraped imgsrv{N}.com links can go stale if mgeko has since
-        # reshuffled that chapter's images onto a different numbered host.
+        # reshuffled that chapter's images onto a different numbered host —
+        # sometimes the old host still responds (403/404), sometimes it's
+        # gone entirely and the request fails to connect/resolve at all.
         candidate_urls = [url] + imgsrv_fallback_urls(url)
 
         try:
             last_error = None
-            with httpx.Client(timeout=15.0, follow_redirects=True) as client:
-                for candidate in candidate_urls:
-                    try:
+            for i, candidate in enumerate(candidate_urls):
+                # First attempt (the originally stored URL) gets a normal
+                # timeout; fallback attempts use a shorter one so a run of
+                # dead hosts can't stack up into a serverless-function
+                # timeout when a page is loading many images concurrently.
+                timeout = 15.0 if i == 0 else FALLBACK_TIMEOUT
+                try:
+                    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
                         r = client.get(candidate, headers=get_headers(candidate))
                         r.raise_for_status()
 
-                        content_type = r.headers.get('content-type', 'image/jpeg')
-                        if not content_type.startswith('image/'):
-                            content_type = 'image/jpeg'
+                    content_type = r.headers.get('content-type', 'image/jpeg')
+                    if not content_type.startswith('image/'):
+                        content_type = 'image/jpeg'
 
-                        self.send_response(200)
-                        self.send_header('Content-Type', content_type)
-                        self.send_header('Cache-Control', 'public, max-age=31536000, immutable')
-                        self.send_header('Access-Control-Allow-Origin', '*')
-                        self.send_header('Content-Length', str(len(r.content)))
-                        if candidate != url:
-                            # Surface which fallback actually worked, useful for
-                            # debugging/monitoring which hosts are currently stale.
-                            self.send_header('X-Proxy-Fallback-Host', urlparse(candidate).netloc)
-                        self.end_headers()
-                        self.wfile.write(r.content)
-                        return
+                    self.send_response(200)
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Cache-Control', 'public, max-age=31536000, immutable')
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Content-Length', str(len(r.content)))
+                    if candidate != url:
+                        # Surface which fallback actually worked, useful for
+                        # debugging/monitoring which hosts are currently stale.
+                        self.send_header('X-Proxy-Fallback-Host', urlparse(candidate).netloc)
+                    self.end_headers()
+                    self.wfile.write(r.content)
+                    return
 
-                    except httpx.HTTPStatusError as e:
-                        last_error = e
-                        # Only worth trying other hosts for client-side rejection
-                        # (dead/moved link, blocked referer, etc) — a 5xx from a
-                        # given host means try the next candidate too, so we
-                        # just fall through and keep looping either way.
-                        continue
+                except httpx.HTTPError as e:
+                    # Catches HTTPStatusError (bad status, e.g. 403/404) AND
+                    # RequestError/ConnectError/TimeoutException (host down,
+                    # DNS failure, connection refused, etc — including the
+                    # AWS-Lambda-specific quirk where a DNS resolution
+                    # failure surfaces as OSError: [Errno 16] Device or
+                    # resource busy instead of a normal connection error).
+                    # The earlier version of this code only caught
+                    # HTTPStatusError, so a fully-dead host never even tried
+                    # the fallback candidates — it just failed immediately.
+                    last_error = e
+                    continue
 
             # Every candidate host failed
             raise last_error
