@@ -1,7 +1,27 @@
 # api/image_proxy.py
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, unquote
+import re
 import httpx
+
+
+IMGSRV_HOST_RE = re.compile(r'^imgsrv(\d+)\.com$', re.IGNORECASE)
+IMGSRV_FALLBACK_COUNT = 8
+
+def imgsrv_fallback_urls(url: str) -> list:
+    parsed = urlparse(url)
+    m = IMGSRV_HOST_RE.match(parsed.netloc)
+    if not m:
+        return []
+    original_n = int(m.group(1))
+    candidates = sorted(
+        (n for n in range(1, IMGSRV_FALLBACK_COUNT + 1) if n != original_n),
+        key=lambda n: abs(n - original_n)
+    )
+    return [
+        parsed._replace(netloc=f"imgsrv{n}.com").geturl()
+        for n in candidates
+    ]
 
 
 def get_headers(url: str) -> dict:
@@ -81,24 +101,45 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(b'{"error":"Invalid URL"}')
             return
 
-        headers = get_headers(url)
+        # Old scraped imgsrv{N}.com links can go stale if mgeko has since
+        # reshuffled that chapter's images onto a different numbered host.
+        candidate_urls = [url] + imgsrv_fallback_urls(url)
 
         try:
+            last_error = None
             with httpx.Client(timeout=15.0, follow_redirects=True) as client:
-                r = client.get(url, headers=headers)
-                r.raise_for_status()
+                for candidate in candidate_urls:
+                    try:
+                        r = client.get(candidate, headers=get_headers(candidate))
+                        r.raise_for_status()
 
-                content_type = r.headers.get('content-type', 'image/jpeg')
-                if not content_type.startswith('image/'):
-                    content_type = 'image/jpeg'
+                        content_type = r.headers.get('content-type', 'image/jpeg')
+                        if not content_type.startswith('image/'):
+                            content_type = 'image/jpeg'
 
-                self.send_response(200)
-                self.send_header('Content-Type', content_type)
-                self.send_header('Cache-Control', 'public, max-age=31536000, immutable')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.send_header('Content-Length', str(len(r.content)))
-                self.end_headers()
-                self.wfile.write(r.content)
+                        self.send_response(200)
+                        self.send_header('Content-Type', content_type)
+                        self.send_header('Cache-Control', 'public, max-age=31536000, immutable')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.send_header('Content-Length', str(len(r.content)))
+                        if candidate != url:
+                            # Surface which fallback actually worked, useful for
+                            # debugging/monitoring which hosts are currently stale.
+                            self.send_header('X-Proxy-Fallback-Host', urlparse(candidate).netloc)
+                        self.end_headers()
+                        self.wfile.write(r.content)
+                        return
+
+                    except httpx.HTTPStatusError as e:
+                        last_error = e
+                        # Only worth trying other hosts for client-side rejection
+                        # (dead/moved link, blocked referer, etc) — a 5xx from a
+                        # given host means try the next candidate too, so we
+                        # just fall through and keep looping either way.
+                        continue
+
+            # Every candidate host failed
+            raise last_error
 
         except httpx.TimeoutException:
             self.send_response(504)
