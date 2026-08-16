@@ -12,6 +12,22 @@ DELAY_BETWEEN_CHAPTERS = (3, 6)
 MAX_RETRIES = 3
 RETRY_BACKOFF = 30
 
+# Signals that Chrome itself crashed/closed, as opposed to a normal request
+# error — worth a driver restart + retry rather than treating as a hard
+# failure. Shared between the series-page load and the per-chapter fetch
+# loop so both get the same crash recovery.
+CRASH_SIGNALS = [
+    "no such window",
+    "target window already closed",
+    "web view not found",
+    "invalid session id",
+    "chrome not reachable",
+]
+
+
+def is_crash_error(err_str):
+    return any(msg in err_str for msg in CRASH_SIGNALS)
+
 
 def get_series_id(url):
     match = re.search(r'/(?:series|comics)/([^/?#]+)', url)
@@ -131,7 +147,36 @@ def scrape(series_url, data):
 
     driver = make_driver(headless=True)
     try:
-        all_chapters = get_all_chapters(driver, series_url)
+        all_chapters = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                if not is_driver_alive(driver):
+                    print(f"  ⚠ Driver not alive before series page load — restarting...")
+                    safe_quit(driver)
+                    time.sleep(5)
+                    driver = make_driver(headless=True)
+
+                all_chapters = get_all_chapters(driver, series_url)
+                break
+
+            except Exception as e:
+                err_str = str(e)
+                if is_crash_error(err_str):
+                    print(f"  ⚠ Chrome crashed loading series page (attempt {attempt}/{MAX_RETRIES}) — restarting driver...")
+                    safe_quit(driver)
+                    time.sleep(random.uniform(8, 15))
+                    driver = make_driver(headless=True)
+                    # Don't count this as a used attempt — retry immediately
+                    continue
+                else:
+                    print(f"  ✗ Error loading series page (attempt {attempt}/{MAX_RETRIES}): {e}")
+                    if attempt < MAX_RETRIES:
+                        time.sleep(5)
+
+        if all_chapters is None:
+            print(f"  ✗ Could not load series page after {MAX_RETRIES} attempts — skipping series")
+            return
+
         new_chapters = [ch for ch in all_chapters if ch["id"] not in existing]
         print(f"  Total on site: {len(all_chapters)} | New to fetch: {len(new_chapters)}")
 
@@ -168,13 +213,7 @@ def scrape(series_url, data):
                 except Exception as e:
                     err_str = str(e)
                     # Catch window/session closed errors specifically
-                    if any(msg in err_str for msg in [
-                        "no such window",
-                        "target window already closed",
-                        "web view not found",
-                        "invalid session id",
-                        "chrome not reachable",
-                    ]):
+                    if is_crash_error(err_str):
                         print(f"\n    ⚠ Chrome window crashed — restarting driver...")
                         safe_quit(driver)
                         time.sleep(random.uniform(8, 15))
