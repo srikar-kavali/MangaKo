@@ -17,6 +17,10 @@ import {
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { searchMangapill, getMangapillManga, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
+import {
+    searchMangadex, getMangadexManga, proxied as proxiedMangadex,
+    toMangadexChapterKey,
+} from '../../manga_api/mangadex';
 import { getCoverUrl } from "../../api/coverurls";
 
 const C = {
@@ -26,7 +30,7 @@ const C = {
     accent:'#7c6af5', accentBright:'#9d8fff',
     accentDim:'rgba(124,106,245,0.14)', accentBorder:'rgba(124,106,245,0.28)',
     green:'#34d399', greenDim:'rgba(52,211,153,0.10)', greenBorder:'rgba(52,211,153,0.25)',
-    asuraBg:'rgba(124,106,245,0.82)', mpBg:'rgba(56,189,248,0.78)',
+    asuraBg:'rgba(124,106,245,0.82)', mpBg:'rgba(56,189,248,0.78)', mdBg:'rgba(251,146,60,0.82)',
 };
 
 const LIVE_DELAY_MS = 300;
@@ -37,16 +41,6 @@ const BATCH_SIZE = 5;
 const BATCH_GAP_MS = 1200;
 const STALE_AFTER_MS = 30 * 60 * 1000;
 
-// ── Storage key helpers ───────────────────────────────────────────────────────
-// newchapter:${key} is defined in searchStorage.js (newChapterKey) so both
-// home.jsx and MangaDetails.jsx agree on the same key — MangaDetails clears
-// it via clearNewChapterFlag() the moment the user actually reads a chapter.
-
-// ── Chapter number extraction ─────────────────────────────────────────────────
-// For plain ids ("191") this just grabs the first number. For URL-based ids
-// (MangaPill, e.g. .../chapters/12345/one-piece-chapter-1012) we must only
-// look at the LAST path segment — otherwise an unrelated numeric id earlier
-// in the URL (like "12345") gets matched instead of the real chapter number.
 function chapterNum(id) {
     const s = String(id ?? '');
     const slug = s.includes('/') ? (s.split('/').filter(Boolean).pop() || s) : s;
@@ -57,22 +51,14 @@ function chapterNum(id) {
 function extractNewest(chapters) {
     if (!chapters?.length) return null;
     const withNums = chapters.map(ch => {
-        // MangaPill chapters often have no `.id`, only `.url` — fall back so
-        // this doesn't silently produce -1 for every entry.
         const key = ch?.id ?? ch?.url ?? '';
         return { ch, num: chapterNum(key) ?? -1 };
     });
     withNums.sort((a, b) => b.num - a.num);
     const best = withNums[0]?.ch;
-    // Same fallback on the way out: without this, MangaPill's missing `.id`
-    // made extractNewest always return null, which made runBackgroundFetch
-    // bail out immediately (`if (!latestId) return`) — so MangaPill titles
-    // never got a latestChapter at all, and the Continue Reading card could
-    // never show "Up to date" or a new-chapter button for them.
     return best ? (best.id ?? best.url ?? null) : null;
 }
 
-// ── Background fetch ──────────────────────────────────────────────────────────
 async function fetchLatestChapterId(key, source) {
     try {
         if (source === 'mangapill') {
@@ -81,6 +67,13 @@ async function fetchLatestChapterId(key, source) {
                 : `https://mangapill.com/manga/${key.replace('__', '/')}`;
             const data = await getMangapillManga(mangapillUrl);
             return extractNewest(data?.chapters);
+        }
+        if (source === 'mangadex') {
+            const data = await getMangadexManga(key);
+            const chs = data?.chapters || [];
+            if (!chs.length) return null;
+            const newest = chs[chs.length - 1];
+            return toMangadexChapterKey(newest.chapter, newest.id);
         }
         const endpoint = source === 'mgeko' ? 'mgeko-chapters' : 'asura-chapters';
         const res = await fetch(
@@ -105,26 +98,6 @@ async function runBatched(tasks, batchSize, gapMs, cancelledRef) {
     }
 }
 
-// ── Card state logic ──────────────────────────────────────────────────────────
-//
-// Three possible card states:
-//
-//  1. CAUGHT_UP     — lastRead === latestChapter (exact or numeric)
-//                     → "Up to date" box
-//
-//  2. NEW_CHAPTER   — a chapter newer than what the user has read was just
-//                     detected by the background fetch (hasNewChapterFlag)
-//                     → green button showing the NEW chapter (jump to it)
-//
-//  3. IN_PROGRESS   — mid-series with no fresh "new chapter" event, or no
-//                     latestChapter data yet
-//                     → purple button showing lastReadChapter (resume here)
-//
-// IMPORTANT: latestChapter being ahead of lastReadChapter is NOT enough to
-// trigger NEW_CHAPTER on its own — someone reading chapter 79 of an 85-chapter
-// backlog is just mid-series, not looking at a fresh release. Only the
-// hasNewChapterFlag (set when the bg fetch detects the latest chapter changed
-// since we last knew about it) means "a new chapter actually just dropped".
 function resolveCardState(manga) {
     const { lastReadChapter, latestChapter, hasNewChapterFlag } = manga;
 
@@ -138,10 +111,8 @@ function resolveCardState(manga) {
 
     if (exactMatch || numMatch) return { state: 'CAUGHT_UP' };
 
-    // Ahead of lastRead AND flagged as a genuinely new release — show it
     if (latestChapter && hasNewChapterFlag) return { state: 'NEW_CHAPTER' };
 
-    // Otherwise: just mid-series (or no latest data) — show actual position
     return { state: 'IN_PROGRESS' };
 }
 
@@ -167,6 +138,7 @@ export default function Home() {
     const getSource = (m) => {
         if (m.source) return m.source;
         const id = String(m.url || m.id || '');
+        if (id.startsWith('mangadex__')) return 'mangadex';
         if (id.startsWith('mgeko__')) return 'mgeko';
         if (/^\d+__/.test(id)) return 'mangapill';
         if (id.includes('mangapill.com')) return 'mangapill';
@@ -185,23 +157,14 @@ export default function Home() {
 
                 const latestChapter = await getLatestChapter(key);
 
-                // Read persisted sort bump (set when new chapter found by bg fetch)
                 let newChapterAt = null;
                 try {
                     const raw = await AsyncStorage.getItem(newChapterKey(key));
                     if (raw) newChapterAt = parseInt(raw);
                 } catch { /* ignore */ }
 
-                // Last time the user opened this series' details page — counts as
-                // a recent action too, not just finishing a chapter.
                 const lastViewedAt = await getLastViewed(key);
 
-                // Card moves to the front of "Continue Reading" based on whichever
-                // happened most recently: the user reading a chapter (info.timestamp),
-                // the user simply viewing the series again (lastViewedAt), or the
-                // background fetch discovering a new chapter (newChapterAt).
-                // Using ?? here would let a stale new-chapter flag permanently outrank
-                // a fresh read/view, so we take the max of all three instead.
                 return {
                     ...f,
                     lastReadChapter: info.chapterUrl,
@@ -244,11 +207,6 @@ export default function Home() {
             const stored = await getLatestChapter(key);
             if (latestId === String(stored ?? '')) return;
 
-            // The latest chapter changed since our last check. Only treat this as
-            // a genuinely NEW release if we already had a previously-known latest
-            // chapter to compare against — otherwise this is just the first time
-            // we've ever looked this series up (e.g. right after following it),
-            // and the user could be deep in a backlog, not looking at a fresh drop.
             const isGenuinelyNew = !!stored;
 
             await saveLatestChapter(key, latestId);
@@ -310,9 +268,10 @@ export default function Home() {
             const ctrl = new AbortController(); abortRef.current = ctrl;
             setIsSearching(true);
             try {
-                const [ar, mr] = await Promise.all([
+                const [ar, mr, dr] = await Promise.all([
                     Promise.resolve(searchHardcodedManhwa(q)),
                     searchMangapill(q, 15).catch(() => []),
+                    searchMangadex(q, 15).catch(() => []),
                 ]);
                 const score = i => {
                     const t = (i.title || '').toLowerCase();
@@ -321,6 +280,7 @@ export default function Home() {
                 const all = [
                     ...(ar || []).map(i => ({ ...i, source: i.source || 'asura' })),
                     ...(mr || []).map(i => ({ ...i, source: 'mangapill', id: i.url })),
+                    ...(dr || []).map(i => ({ ...i, source: 'mangadex' })),
                 ].map(i => ({ ...i, score: score(i) })).sort((a, b) => b.score - a.score);
                 if (!ctrl.signal.aborted) { cacheRef.current.set(key, all); setSearchResults(all); }
             } catch (e) {
@@ -352,17 +312,15 @@ export default function Home() {
         const url = getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl;
         if (!url) return null;
         if (item.source === 'mangapill') return proxiedMangapill(url);
+        if (item.source === 'mangadex') return proxiedMangadex(url);
         return proxiedAsura(url);
     };
 
     const openManga = (item) => {
         const src = item.source || getSource(item);
         const id = item.id || item.url;
-        // Pass along the title we already know from search/browse so MangaDetails
-        // has a reliable fallback if the detail-page scrape returns no title
-        // (this was the cause of MangaPill favorites saving without a title).
         const titleParam = item.title ? `&title=${encodeURIComponent(item.title)}` : '';
-        if (src === 'asura' || src === 'mgeko') {
+        if (src === 'asura' || src === 'mgeko' || src === 'mangadex') {
             router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}${titleParam}`);
         } else {
             const mangapillUrl = id.includes('mangapill.com')
@@ -378,8 +336,6 @@ export default function Home() {
         openManga(item);
     };
 
-    // Open any given chapter id for a manga (used for both "resume where I left off"
-    // and "jump to the newest chapter" — the two need different chapter ids).
     const openChapter = (manga, chapterId) => {
         if (!chapterId) return;
         const src = getSource(manga);
@@ -394,7 +350,6 @@ export default function Home() {
         }
     };
 
-    // Resume from last read chapter (IN_PROGRESS / CAUGHT_UP state)
     const openLastRead = (manga) => openChapter(manga, manga.lastReadChapter);
 
     const fmtCh = (id, src) => {
@@ -484,7 +439,8 @@ export default function Home() {
                                             <View style={[S.srcDot, {
                                                 backgroundColor: src === 'asura' ? C.asuraBg
                                                     : src === 'mgeko' ? 'rgba(52,211,153,0.82)'
-                                                        : C.mpBg,
+                                                        : src === 'mangadex' ? C.mdBg
+                                                            : C.mpBg,
                                             }]} />
                                         </Pressable>
 
@@ -566,10 +522,11 @@ export default function Home() {
                                             <View style={[S.gridBadge, {
                                                 backgroundColor: isAS ? C.asuraBg
                                                     : manga.source === 'mgeko' ? 'rgba(52,211,153,0.80)'
-                                                        : C.mpBg,
+                                                        : manga.source === 'mangadex' ? C.mdBg
+                                                            : C.mpBg,
                                             }]}>
                                                 <Text style={S.gridBadgeText}>
-                                                    {isAS ? 'AS' : manga.source === 'mgeko' ? 'MG' : 'MP'}
+                                                    {isAS ? 'AS' : manga.source === 'mgeko' ? 'MG' : manga.source === 'mangadex' ? 'MD' : 'MP'}
                                                 </Text>
                                             </View>
                                         </View>
@@ -626,6 +583,10 @@ export default function Home() {
                                     renderItem={({ item }) => {
                                         const cover = getProxied(item);
                                         const isAS = item.source === 'asura';
+                                        const isMD = item.source === 'mangadex';
+                                        const badgeColor = isAS ? C.accentDim : isMD ? 'rgba(251,146,60,0.14)' : 'rgba(56,189,248,0.12)';
+                                        const badgeTextColor = isAS ? C.accentBright : isMD ? '#fb923c' : '#7dd3fc';
+                                        const badgeLabel = isAS ? 'AsuraScans' : isMD ? 'MangaDex' : 'MangaPill';
                                         return (
                                             <Pressable
                                                 onPress={() => openResult(item)}
@@ -639,9 +600,9 @@ export default function Home() {
                                                 }
                                                 <View style={S.resInfo}>
                                                     <Text style={S.resTitle} numberOfLines={2}>{item.title}</Text>
-                                                    <View style={[S.resBadge, { backgroundColor: isAS ? C.accentDim : 'rgba(56,189,248,0.12)' }]}>
-                                                        <Text style={[S.resBadgeText, { color: isAS ? C.accentBright : '#7dd3fc' }]}>
-                                                            {isAS ? 'AsuraScans' : 'MangaPill'}
+                                                    <View style={[S.resBadge, { backgroundColor: badgeColor }]}>
+                                                        <Text style={[S.resBadgeText, { color: badgeTextColor }]}>
+                                                            {badgeLabel}
                                                         </Text>
                                                     </View>
                                                 </View>

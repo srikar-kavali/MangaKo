@@ -1,137 +1,67 @@
-const BASE_URL = "https://api.mangadex.org";
+const BASE = process.env.EXPO_PUBLIC_CHAPTERS_API;
 
-// Content ratings to allow all types (including erotica/hentai if needed)
-const CONTENT_RATINGS = [
-    "safe",
-    "suggestive",
-    "erotica",
-    "pornographic"
-];
-
-export const searchMangaDex = async (title) => {
-    try {
-        const params = new URLSearchParams();
-        params.append("title", title);
-        params.append("limit", "100");
-
-        // Include cover art and authors
-        params.append("includes[]", "cover_art");
-        params.append("includes[]", "author");
-        params.append("includes[]", "artist");
-
-        // English only
-        params.append("originalLanguage[]", "ja");
-        params.append("availableTranslatedLanguage[]", "en");
-
-        // Add all content ratings
-        CONTENT_RATINGS.forEach(rating => {
-            params.append("contentRating[]", rating);
-        });
-
-        const url = `${BASE_URL}/manga?${params.toString()}`;
-        const response = await fetch(url);
-        const json = await response.json();
-        return json?.data || [];
-    } catch (error) {
-        console.error("❌ searchManga failed:", error);
-        return [];
-    }
-};
-
-export const getMangaDexDetails = async (mangaId) => {
-    try {
-        const url = `${BASE_URL}/manga/${mangaId}?includes[]=cover_art&includes[]=author&includes[]=artist`;
-        const response = await fetch(url);
-        const json = await response.json();
-        return json?.data || null;
-    } catch (error) {
-        console.error("❌ getMangaDetails failed:", error);
-        return null;
-    }
-};
-
-export const getMangaDexChapters = async (mangaId, offset = 0, limit = 100) => {
-    try {
-        const params = new URLSearchParams();
-        params.append("manga", mangaId);
-        params.append("translatedLanguage[]", "en");
-        params.append("limit", limit.toString());
-        params.append("offset", offset.toString());
-        params.append("order[chapter]", "desc");
-
-        const url = `${BASE_URL}/chapter?${params.toString()}`;
-        const response = await fetch(url);
-        const json = await response.json();
-        return json?.data || [];
-    } catch (error) {
-        console.error("❌ getChapters failed:", error);
-        return [];
-    }
-};
-
-export const getMangaDexChapterPages = async (chapterId) => {
-    try {
-        const url = `${BASE_URL}/at-home/server/${chapterId}`;
-        const response = await fetch(url);
-        const json = await response.json();
-        const baseUrl = json?.baseUrl;
-        const hash = json?.chapter?.hash;
-        const data = json?.chapter?.data;
-
-        if (!baseUrl || !hash || !data) return [];
-
-        return data.map(filename => `${baseUrl}/data/${hash}/${filename}`);
-    } catch (error) {
-        console.error("❌ getChapterPages failed:", error);
-        return [];
-    }
-};
-
-// --- Helpers for clean MD data ---
-function pickEn(obj) {
-    if (!obj) return "";
-    if (typeof obj === "string") return obj;
-    return obj.en ?? Object.values(obj)[0] ?? "";
+function cleanBase(base) {
+    return base?.endsWith("/") ? base.slice(0, -1) : base;
 }
 
-function buildCoverUrl(mangaId, fileName, size = 512) {
-    if (!mangaId || !fileName) return null;
-    return `https://uploads.mangadex.org/covers/${mangaId}/${fileName}.${size}.jpg`;
+const API_BASE = cleanBase(BASE);
+
+const MANGADEX_PREFIX = 'mangadex__';
+export function toMangadexKey(rawId) {
+    if (!rawId) return rawId;
+    return rawId.startsWith(MANGADEX_PREFIX) ? rawId : `${MANGADEX_PREFIX}${rawId}`;
+}
+export function fromMangadexKey(key) {
+    if (!key) return key;
+    return key.startsWith(MANGADEX_PREFIX) ? key.slice(MANGADEX_PREFIX.length) : key;
 }
 
-export function normalizeMangaDex(mdData) {
-    if (!mdData) return null;
-    const attrs = mdData.attributes || {};
-    const title = pickEn(attrs.title);
-    const description = pickEn(attrs.description);
+export function toMangadexChapterKey(chapterNumber, uuid) {
+    const num = (chapterNumber === null || chapterNumber === undefined) ? '0' : String(chapterNumber);
+    return `${num}__${uuid}`;
+}
+export function splitMangadexChapterKey(composite) {
+    if (!composite) return { number: null, uuid: null };
+    const idx = String(composite).indexOf('__');
+    if (idx < 0) return { number: null, uuid: composite }; // fallback: bare uuid was stored
+    return { number: composite.slice(0, idx), uuid: composite.slice(idx + 2) };
+}
 
-    const relationships = Array.isArray(mdData.relationships) ? mdData.relationships : [];
+export function proxied(src) {
+    if (!src) return "";
+    return src;
+}
 
-    const authors = relationships
-        .filter(r => r.type === "author")
-        .map(r => r.attributes?.name)
-        .filter(Boolean);
+export async function searchMangadex(title, limit = 20) {
+    const url = `${API_BASE}/api/mangadex/search?q=${encodeURIComponent(title)}&limit=${limit}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+        const text = await r.text();
+        throw new Error(`mangadex search failed: ${r.status} - ${text}`);
+    }
+    const json = await r.json();
+    const results = json.results || [];
+    return results.map(item => ({ ...item, id: toMangadexKey(item.id) }));
+}
 
-    const artists = relationships
-        .filter(r => r.type === "artist")
-        .map(r => r.attributes?.name)
-        .filter(Boolean);
+export async function getMangadexManga(mangaKeyOrId) {
+    const rawId = fromMangadexKey(mangaKeyOrId);
+    const url = `${API_BASE}/api/mangadex/manga?id=${encodeURIComponent(rawId)}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+        const text = await r.text();
+        throw new Error(`mangadex manga failed: ${r.status} - ${text}`);
+    }
+    return r.json();
+}
 
-    const coverRel = relationships.find(r => r.type === "cover_art");
-    const coverFile = coverRel?.attributes?.fileName;
-    const coverUrl = buildCoverUrl(mdData.id, coverFile, 512);
-
-    const tags = (attrs.tags || [])
-        .map(t => pickEn(t.attributes?.name))
-        .filter(Boolean);
-
-    return {
-        id: mdData.id,
-        title,
-        description,
-        authors,
-        artists,
-        tags,
-        coverUrl,
-    };
+export async function getChapterPagesMangadex(chapterId, quality = 'data') {
+    const url = `${API_BASE}/api/mangadex/chapter-pages?chapterId=${encodeURIComponent(chapterId)}&quality=${quality}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+        const text = await r.text();
+        throw new Error(`mangadex chapter pages failed: ${r.status} - ${text}`);
+    }
+    const json = await r.json();
+    return json.pages || [];
 }

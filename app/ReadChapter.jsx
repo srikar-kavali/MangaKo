@@ -8,6 +8,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { getMangapillManga, getChapterPagesMangapill, proxied as proxiedMangapill } from "../manga_api/mangapill";
 import { proxied as proxiedMgeko } from "../manga_api/mgeko";
+import {
+    getMangadexManga, getChapterPagesMangadex, proxied as proxiedMangadex,
+    splitMangadexChapterKey, toMangadexChapterKey,
+} from "../manga_api/mangadex";
 import { updateLastRead } from "./searchStorage";
 import { Ionicons } from '@expo/vector-icons';
 
@@ -20,13 +24,6 @@ const C = {
 const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API;
 const getW = () => Platform.OS === 'web' ? window.innerWidth : Dimensions.get('window').width;
 
-// ── Must exactly match normalizeKey() in MangaDetails ────────────────────────
-// MangaDetails saves favorites with url = normalizeKey(seriesId | mangapillUrl)
-// ReadChapter must write progress under the same key or home.jsx won't find it.
-//
-// normalizeKey: "https://mangapill.com/manga/5460/dandadan" → "5460__dandadan"
-//               "solo-leveling" (asura)                     → "solo-leveling"
-//               "mgeko__player-mg1"                         → "mgeko__player-mg1"
 const normalizeKey = (key) => {
     if (!key) return '';
     if (key.includes('mangapill.com')) {
@@ -53,6 +50,7 @@ const ReadChapter = () => {
     const isAsura     = source === 'asura';
     const isMgeko     = source === 'mgeko';
     const isMangapill = source === 'mangapill' || !!mangapillUrl;
+    const isMangadex  = source === 'mangadex';
 
     const [selectedCh, setSelectedCh] = useState(chapterId || chapterUrl || null);
     const [pages, setPages] = useState([]);
@@ -69,11 +67,6 @@ const ReadChapter = () => {
         return () => window.removeEventListener('resize', h);
     }, []);
 
-    // ── Save read progress ────────────────────────────────────────────────────
-    // trackingKey must match what MangaDetails stored in favorites as f.url,
-    // which is normalizeKey(seriesId | mangapillUrl).
-    // For asura/mgeko seriesId is already the bare key ("solo-leveling", "mgeko__player-mg1").
-    // For mangapill mangapillUrl is the full URL → normalize it here.
     useEffect(() => {
         if (!selectedCh) return;
 
@@ -88,7 +81,6 @@ const ReadChapter = () => {
         });
     }, [selectedCh, seriesId, mangapillUrl]);
 
-    // Fetch pages for the current chapter
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -108,6 +100,12 @@ const ReadChapter = () => {
                 } else if (isMangapill) {
                     const raw = await getChapterPagesMangapill(selectedCh);
                     urls = (Array.isArray(raw) ? raw : []).map(u => proxiedMangapill(u));
+                } else if (isMangadex && selectedCh) {
+                    const { uuid } = splitMangadexChapterKey(selectedCh);
+                    if (uuid) {
+                        const raw = await getChapterPagesMangadex(uuid);
+                        urls = (Array.isArray(raw) ? raw : []).map(u => proxiedMangadex(u));
+                    }
                 }
                 if (!cancelled) {
                     setPages(urls);
@@ -123,7 +121,6 @@ const ReadChapter = () => {
         return () => { cancelled = true; };
     }, [selectedCh]);
 
-    // Fetch full chapter list for navigation + picker
     useEffect(() => {
         let cancelled = false;
         (async () => {
@@ -153,6 +150,13 @@ const ReadChapter = () => {
                         const m = slug.match(/(\d+(\.\d+)?)/);
                         return { id: ch.url, title: `Ch. ${m ? m[1] : '–'}`, number: m ? parseFloat(m[1]) : 0 };
                     });
+                } else if (isMangadex && seriesId) {
+                    const data = await getMangadexManga(seriesId);
+                    chapters = (data.chapters || []).map(ch => ({
+                        id: toMangadexChapterKey(ch.chapter, ch.id),
+                        title: ch.title || (ch.chapter != null ? `Chapter ${ch.chapter}` : 'Chapter'),
+                        number: ch.number ?? 0,
+                    }));
                 }
                 chapters.sort((a, b) => a.number - b.number);
                 if (!cancelled) {

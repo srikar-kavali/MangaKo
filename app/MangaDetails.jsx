@@ -9,6 +9,10 @@ import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { proxied as proxiedAsura } from '../manga_api/asurascans';
 import { getMangapillManga, proxied as proxiedMangapill } from '../manga_api/mangapill';
 import { proxied as proxiedMgeko } from '../manga_api/mgeko';
+import {
+    getMangadexManga, proxied as proxiedMangadex,
+    toMangadexChapterKey,
+} from '../manga_api/mangadex';
 import { getManhwaById } from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed } from "./searchStorage";
@@ -29,11 +33,16 @@ const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API;
 const STATUS_OPTIONS = ['Reading', 'Completed', 'On Hold', 'Dropped', 'Plan to Read', 'Unfollow'];
 
 function extractNum(ch) {
+    if (typeof ch?.number === 'number' && !isNaN(ch.number)) return ch.number;
     const s = ch?.id ?? ch?.title ?? ch?.url ?? '';
     const m = String(s).match(/(\d+(\.\d+)?)/);
     return m ? parseFloat(m[1]) : NaN;
 }
-function displayTitle(ch) { return ch?.title || ch?.name || 'Chapter'; }
+function displayTitle(ch) {
+    if (ch?.title) return ch.title;
+    if (ch?.chapter != null) return `Chapter ${ch.chapter}`;
+    return ch?.name || 'Chapter';
+}
 
 const normalizeKey = (key) => {
     if (!key) return '';
@@ -65,8 +74,9 @@ const MangaDetails = () => {
     const [status, setStatus] = useState(null);
 
     const isMgeko = source === 'mgeko' || String(seriesId).startsWith('mgeko__');
-    const isAsura = source === 'asura' && !isMgeko;
-    const isMangapill = !isMgeko && (source === 'mangapill' || !!mangapillUrl || String(seriesId).includes('__'));
+    const isMangadex = source === 'mangadex' || String(seriesId).startsWith('mangadex__');
+    const isAsura = source === 'asura' && !isMgeko && !isMangadex;
+    const isMangapill = !isMgeko && !isMangadex && (source === 'mangapill' || !!mangapillUrl || String(seriesId).includes('__'));
 
     const storageKey = useMemo(() => normalizeKey(seriesId || mangapillUrl), [seriesId, mangapillUrl]);
 
@@ -80,20 +90,12 @@ const MangaDetails = () => {
         return raw;
     }, [mangapillUrl, seriesId, isMangapill]);
 
-    // ── Reload lastRead on every focus ────────────────────────────────────────
-    // Previously this was a plain useEffect([storageKey]) which only ran on mount.
-    // When the user reads a chapter in ReadChapter and navigates back here,
-    // the progress written by ReadChapter wasn't reflected because MangaDetails
-    // never re-read it. useFocusEffect fixes this for all sources including mangapill.
     useFocusEffect(
         useCallback(() => {
             if (!storageKey) return;
             getLastReadChapter(storageKey)
                 .then(val => setLastRead(val ?? null))
                 .catch(() => {});
-            // Opening this screen counts as a recent action too — not just
-            // finishing a chapter. Without this, tapping into a series and
-            // going back did nothing to its Continue Reading position.
             touchLastViewed(storageKey).catch(() => {});
         }, [storageKey])
     );
@@ -145,6 +147,23 @@ const MangaDetails = () => {
                             }
                         }
                     }
+                } else if (isMangadex && seriesId) {
+                    const data = await getMangadexManga(seriesId);
+                    if (!cancelled) {
+                        setMangaData(data);
+                        setChapters(data.chapters || []);
+                        if (data.chapters?.length) {
+                            await AsyncStorage.setItem(`chapterCount:${storageKey}`, String(data.chapters.length)).catch(() => {});
+                            await AsyncStorage.setItem(`updatedAt:${storageKey}`, String(Date.now())).catch(() => {});
+                            const newest = data.chapters[data.chapters.length - 1];
+                            if (newest?.id) {
+                                await AsyncStorage.setItem(
+                                    `latestChapter:${storageKey}`,
+                                    toMangadexChapterKey(newest.chapter, newest.id)
+                                ).catch(() => {});
+                            }
+                        }
+                    }
                 }
             } catch(e) {
                 console.error('MangaDetails fetch error:', e);
@@ -154,7 +173,7 @@ const MangaDetails = () => {
             }
         })();
         return () => { cancelled = true; };
-    }, [seriesId, resolvedMangapillUrl, source, isMangapill]);
+    }, [seriesId, resolvedMangapillUrl, source, isMangapill, isMangadex]);
 
     const getCoverUrl = () => {
         const staticUrl = getStaticCover(storageKey);
@@ -163,6 +182,7 @@ const MangaDetails = () => {
         if (!url) return null;
         if (isAsura) return proxiedAsura(url);
         if (isMgeko) return proxiedMgeko(url);
+        if (isMangadex) return proxiedMangadex(url);
         return proxiedMangapill(url);
     };
 
@@ -174,7 +194,7 @@ const MangaDetails = () => {
             description: mangaData?.description || '',
             coverUrl: freshCover,
             cover: freshCover,
-            source: isMangapill ? 'mangapill' : isMgeko ? 'mgeko' : 'asura',
+            source: isMangadex ? 'mangadex' : isMangapill ? 'mangapill' : isMgeko ? 'mgeko' : 'asura',
         };
     };
 
@@ -205,21 +225,10 @@ const MangaDetails = () => {
     };
 
     const handleChapter = async (ch) => {
-        // MangaPill chapters from the backend often only have a `url`, not a
-        // stable `id` — using ch.id directly here was saving `undefined` as
-        // the last-read progress for MangaPill, which is why it looked like
-        // reading position (and by extension the favorite's title context)
-        // never saved. Fall back to the URL so this is always a real value,
-        // and keep it consistent with what ReadChapter is actually opened with.
-        const cId = ch.id ?? ch.url;
+        const cId = isMangadex ? toMangadexChapterKey(ch.chapter, ch.id) : (ch.id ?? ch.url);
         if (storageKey) {
             await saveLastReadChapter(storageKey, cId);
             setLastRead(cId);
-            // Reading a chapter clears any pending "new chapter" flag — without
-            // this, a one-time new-chapter event from the background fetch
-            // stays flagged forever, and the home screen keeps showing the
-            // latest chapter as the button even when the user is actually
-            // mid-series and nowhere near caught up (e.g. 22/35).
             await clearNewChapterFlag(storageKey);
         }
         if (isMangapill) {
@@ -228,6 +237,8 @@ const MangaDetails = () => {
             router.push(`/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(cId)}&source=asura`);
         } else if (isMgeko) {
             router.push(`/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(cId)}&source=mgeko`);
+        } else if (isMangadex) {
+            router.push(`/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(cId)}&source=mangadex`);
         }
     };
 
@@ -259,8 +270,8 @@ const MangaDetails = () => {
     const title = mangaData?.title || mangaData?.name || titleParam || 'Unknown';
     const cover = getCoverUrl();
     const isOngoing = mangaData?.status === 'Ongoing';
-    const srcLabel = isMangapill ? 'MangaPill' : isMgeko ? 'MgEko' : 'AsuraScans';
-    const srcColor = isMangapill ? '#38bdf8' : isMgeko ? '#10b981' : C.accent;
+    const srcLabel = isMangadex ? 'MangaDex' : isMangapill ? 'MangaPill' : isMgeko ? 'MgEko' : 'AsuraScans';
+    const srcColor = isMangadex ? '#fb923c' : isMangapill ? '#38bdf8' : isMgeko ? '#10b981' : C.accent;
 
     return (
         <SafeAreaView style={S.safe}>
@@ -321,6 +332,7 @@ const MangaDetails = () => {
                                 if (isMangapill) router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(lastRead)}&mangapillUrl=${encodeURIComponent(resolvedMangapillUrl)}&source=mangapill`);
                                 else if (isAsura) router.push(`/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(lastRead)}&source=asura`);
                                 else if (isMgeko) router.push(`/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(lastRead)}&source=mgeko`);
+                                else if (isMangadex) router.push(`/ReadChapter?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(lastRead)}&source=mangadex`);
                             } else if (sorted.length > 0) handleChapter(sorted[sorted.length - 1]);
                         }}
                     >
@@ -418,7 +430,7 @@ const MangaDetails = () => {
                     )}
 
                     {paged.map((ch, i) => {
-                        const cId = ch.id ?? ch.url;
+                        const cId = isMangadex ? toMangadexChapterKey(ch.chapter, ch.id) : (ch.id ?? ch.url);
                         const isLast = lastRead === cId;
                         return (
                             <Pressable
@@ -523,7 +535,6 @@ const S = StyleSheet.create({
     warnBox: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 16, padding: 12, borderRadius: 10, backgroundColor: 'rgba(251,191,36,0.07)', borderWidth: 1, borderColor: 'rgba(251,191,36,0.18)' },
     warnText: { flex: 1, fontSize: 12, color: C.star },
     noCh: { padding: 20, textAlign: 'center', fontSize: 14, color: C.text3 },
-    // Legacy styles kept to avoid any reference errors
     statusBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4CAF50', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
     statusBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });
