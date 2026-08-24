@@ -593,6 +593,46 @@ export const manhwas = [
         genres: ["Action", "Fantasy",  "Revenge", "Murim",],
         status: "Ongoing",
     },
+    {
+        id: "mgeko__sha-money-ism",
+        title: "Sha-MONEY-ism",
+        source: "mgeko",
+        description: "“True first-class shamans play in Yeouido.” In Korea’s financial district of Yeouido, investment firms rake in billions by employing real shamans who can foresee stock movements. These firms have become the stage for elite spiritual power brokers. Chun Ji-seung, a poor boy, is scouted as a shaman who can curse stock prices using dark rituals. His unique ability propels him into the cutthroat world of high finance, where money and mysticism collide. This is the story of his rise through the bizarre world of corporate exorcism and stock market sorcery.",
+        genres: ["Action", "Drama"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__the-tales-of-heaven-and-earth",
+        title: "The Tales of Heaven And Earth",
+        source: "mgeko",
+        description: "The Tales of Heaven And Earth, 건곤불이기 The Divine Sword and the Demonic Blade. Two Experts who rule over the martial world. The lineage of the Demonic Blade is passed down to a seemingly ordinary child named Tongmi. He once resented his father, who was merely diligent and hardworking. But comes to realize just how extraordinary his father’s life truly was. It is at that moment that the power of Tongmi’s Demonic Blade begins to shine.",
+        genres: ["Action", "Fantasy", "Drama", "Adventure"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__dao-of-the-bizarre-immortal",
+        title: "Dao of the Bizarre Immortal",
+        source: "mgeko",
+        description: "Li Huowang, a high school student, possesses the ability to enter a bizarre world of cultivation with just a blink of an eye. In this strange realm, the person who calls him “Master” captures him, intending to use him as a human ingredient for pill refining. Meanwhile, in the real world, Li Huowang is a mentally unstable patient, residing in a psychiatric hospital, unable to continue his education. The doctors claim that the bizarre cultivation world is merely a hallucination. Now, trapped between truth and illusion, Li Huowang breaks down, crying out: “I really can’t tell what’s real!”",
+        genres: ["Action", "Cultivation", "Adventure", "Fantasy", "Murim"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__the-gray-mark",
+        title: "The Gray Mark",
+        source: "mgeko",
+        description: "The ruthless criminal “Great,” exiled to space for his countless crimes, is banished to the past alongside the King of the Universe, “Rohollah,” after their encounter in space. Great attempts to right the numerous wrongs he committed in the past to try and rewrite a better future…",
+        genres: ["Action", "Adventure", "Fantasy"],
+        status: "Ongoing",
+    },
+    {
+        id: "",
+        title: "",
+        source: "",
+        description: "",
+        genres: "",
+        status: "",
+    },
 ];
 
 export function searchHardcodedManhwa(query) {

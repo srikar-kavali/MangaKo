@@ -74,6 +74,11 @@ export const COVER_URLS = {
     "mgeko__yongbi-the-invincible":                                 "https://imgsrv4.com/avatar/288x412/media/manga_covers/yongbi-the-invincible.webp",
     "mgeko__death-god":                                             "https://imgsrv4.com/avatar/288x412/media/manga_covers/death-god-1.jpg" ,
     "mgeko__heavenly-moon":                                         "https://imgsrv4.com/avatar/288x412/media/manga_covers/heavenly-moon.webp",
+    "mgeko__sha-money-ism":                                         "https://imgsrv5.com/avatar/288x412/media/manga_covers/brB6oe-m.jpg",
+    "mgeko__the-tales-of-heaven-and-earth":                         "https://imgsrv5.com/avatar/288x412/media/manga_covers/the-tales-of-heaven-and-earth-2.png",
+    "mgeko__dao-of-the-bizarre-immortal":                           "https://imgsrv5.com/avatar/288x412/media/manga_covers/dao-of-the-bizarre-immortal.jpg",
+    "mgeko__the-gray-mark":                                         "https://imgsrv5.com/avatar/288x412/media/manga_covers/the-gray-mark.webp",
+
 
 };
 
