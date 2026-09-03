@@ -34,8 +34,12 @@ const STATUS_OPTIONS = ['Reading', 'Completed', 'On Hold', 'Dropped', 'Plan to R
 
 function extractNum(ch) {
     if (typeof ch?.number === 'number' && !isNaN(ch.number)) return ch.number;
-    const s = ch?.id ?? ch?.title ?? ch?.url ?? '';
-    const m = String(s).match(/(\d+(\.\d+)?)/);
+    const raw = ch?.id ?? ch?.url ?? ch?.title ?? '';
+    const s = String(raw);
+    const slug = s.includes('/') ? (s.split('/').filter(Boolean).pop() || s) : s;
+    const chMatch = slug.match(/chapter[-_]?(\d+(\.\d+)?)/i);
+    if (chMatch) return parseFloat(chMatch[1]);
+    const m = slug.match(/(\d+(\.\d+)?)(?!.*\d)/); // trailing number in slug
     return m ? parseFloat(m[1]) : NaN;
 }
 function displayTitle(ch) {

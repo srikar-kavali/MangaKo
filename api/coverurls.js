@@ -78,7 +78,7 @@ export const COVER_URLS = {
     "mgeko__the-tales-of-heaven-and-earth":                         "https://imgsrv5.com/avatar/288x412/media/manga_covers/the-tales-of-heaven-and-earth-2.png",
     "mgeko__dao-of-the-bizarre-immortal":                           "https://imgsrv5.com/avatar/288x412/media/manga_covers/dao-of-the-bizarre-immortal.jpg",
     "mgeko__the-gray-mark":                                         "https://imgsrv5.com/avatar/288x412/media/manga_covers/the-gray-mark.webp",
-
+    "mgeko__my-bias-gets-on-the-last-train":                        "https://imgsrv5.com/avatar/288x412/media/manga_covers/my-bias-gets-on-the-last-train.jpg",
 
 };
 

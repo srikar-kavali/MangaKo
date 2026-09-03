@@ -626,12 +626,12 @@ export const manhwas = [
         status: "Ongoing",
     },
     {
-        id: "",
-        title: "",
-        source: "",
-        description: "",
-        genres: "",
-        status: "",
+        id: "mgeko__my-bias-gets-on-the-last-train",
+        title: "My Bias Gets On The Last Train",
+        source: "mgeko",
+        description: "“Meeting her on the last train again today, if only I could talk to her!” College student Lee Yeowoon works late and takes the last train every night. Each time, he runs into Shin Haein, a woman carrying a guitar. As if by chance, as if by fate, the two keep meeting and discover that their favorite artist is the indie musician “Long Afternoon.” They gradually grow closer and so the story began.",
+        genres: ["Drama", "Romance",],
+        status: "Ongoing",
     },
 ];
 

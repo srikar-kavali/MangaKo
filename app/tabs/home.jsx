@@ -17,6 +17,7 @@ import {
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { searchMangapill, getMangapillManga, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
+import { proxied as proxiedMgeko } from '../../manga_api/mgeko';
 import {
     searchMangadex, getMangadexManga, proxied as proxiedMangadex,
     toMangadexChapterKey,
@@ -136,10 +137,15 @@ export default function Home() {
     const bgCancelledRef = useRef(false);
 
     const getSource = (m) => {
-        if (m.source) return m.source;
         const id = String(m.url || m.id || '');
+        // Id-prefix checks are authoritative and go first — they can't be
+        // stale, unlike a stored `source` field that may have been written
+        // before mgeko/mangadex support existed (or mis-defaulted to
+        // 'mangapill' by an older heuristic). This lets legacy favorites
+        // self-heal on next render instead of needing a data migration.
         if (id.startsWith('mangadex__')) return 'mangadex';
         if (id.startsWith('mgeko__')) return 'mgeko';
+        if (m.source) return m.source;
         if (/^\d+__/.test(id)) return 'mangapill';
         if (id.includes('mangapill.com')) return 'mangapill';
         if (id.includes('/') || id.includes('http')) return 'mangapill';
@@ -311,8 +317,10 @@ export default function Home() {
     const getProxied = (item) => {
         const url = getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl;
         if (!url) return null;
-        if (item.source === 'mangapill') return proxiedMangapill(url);
-        if (item.source === 'mangadex') return proxiedMangadex(url);
+        const src = item.source || getSource(item);
+        if (src === 'mangapill') return proxiedMangapill(url);
+        if (src === 'mangadex') return proxiedMangadex(url);
+        if (src === 'mgeko') return proxiedMgeko(url);
         return proxiedAsura(url);
     };
 
@@ -449,14 +457,12 @@ export default function Home() {
                                                 <Text style={S.caughtUpText}>Up to date</Text>
                                             </View>
                                         ) : state === 'NEW_CHAPTER' ? (
-                                            // New chapter available — show and open the newest chapter
-                                            // (not where the user left off). Green signals something new exists.
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, S.contChBtnNew, { opacity: pressed ? 0.75 : 1 }]}
-                                                onPress={() => openChapter(manga, manga.latestChapter)}
+                                                onPress={() => openLastRead(manga)}   // <-- still opens where they left off
                                             >
                                                 <Text style={S.contChText} numberOfLines={1}>
-                                                    {fmtCh(manga.latestChapter, src)}
+                                                    {fmtCh(manga.lastReadChapter, src)}   {/* <-- still shows ch. 2, not latest */}
                                                 </Text>
                                             </Pressable>
                                         ) : (

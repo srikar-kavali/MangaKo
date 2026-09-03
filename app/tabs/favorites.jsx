@@ -8,6 +8,10 @@ import { useRouter } from "expo-router";
 import { getFavorites, getLastReadChapterInfo, removeFavorite } from "../searchStorage";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { proxied as proxiedAsura } from '../../manga_api/asurascans';
+import { proxied as proxiedMangapill } from '../../manga_api/mangapill';
+import { proxied as proxiedMgeko } from '../../manga_api/mgeko';
+import { proxied as proxiedMangadex, splitMangadexChapterKey } from '../../manga_api/mangadex';
 import { getCoverUrl as getStaticCover } from "../../api/coverurls";
 
 const C = {
@@ -18,6 +22,7 @@ const C = {
     accentDim:'rgba(124,106,245,0.14)', accentBorder:'rgba(124,106,245,0.28)',
     green:'#34d399', greenDim:'rgba(52,211,153,0.10)', greenBorder:'rgba(52,211,153,0.25)',
     asuraBg:'rgba(124,106,245,0.82)', mpBg:'rgba(56,189,248,0.78)',
+    mgekoBg:'rgba(52,211,153,0.82)', mdBg:'rgba(251,146,60,0.82)',
     danger:'#f87171',
     yellow:'#fbbf24',
 };
@@ -100,25 +105,59 @@ export default function Favorites() {
     };
 
     const getSource = (item) => {
-        if (item.source) return item.source;
-        const urlStr = String(item.url);
+        const urlStr = String(item.url || '');
+        // Id-prefix checks are authoritative and go first — they can't be
+        // stale, unlike a stored `source` field that may have been written
+        // before mgeko/mangadex support existed (or mis-defaulted to
+        // 'mangapill' by an older heuristic). This lets legacy favorites
+        // self-heal on next render instead of needing a data migration.
+        if (urlStr.startsWith('mangadex__')) return 'mangadex';
         if (urlStr.startsWith('mgeko__')) return 'mgeko';
+        if (item.source) return item.source;
         if (urlStr.includes('mangapill') || urlStr.includes('/') || urlStr.includes('http')) return 'mangapill';
         if (/^\d+__/.test(urlStr)) return 'mangapill';  // catches "5460__dandadan"
         return 'asura';
+    };
+
+    // Covers must be routed through the correct source-specific proxy —
+    // these CDNs (imgsrv4.com, mangapill's, etc) reject direct browser
+    // requests without the right headers. This screen previously rendered
+    // getStaticCover()/item.coverUrl directly with no proxying at all,
+    // which is why covers failed outright (net::ERR_SSL_VERSION_OR_CIPHER_MISMATCH
+    // for mgeko covers, similar failures for MangaPill) — home.jsx and
+    // MangaDetails.jsx never had this problem because they always proxy.
+    const getProxiedCover = (item) => {
+        const url = getStaticCover(item.url) || item.coverUrl || item.cover;
+        if (!url) return null;
+        const src = getSource(item);
+        if (src === 'mangapill') return proxiedMangapill(url);
+        if (src === 'mgeko') return proxiedMgeko(url);
+        if (src === 'mangadex') return proxiedMangadex(url);
+        return proxiedAsura(url);
     };
 
     // Parse chapter number from a chapter id/url
     const parseChNum = (chUrl, src) => {
         if (!chUrl) return null;
         if (src === 'asura') { const n = parseFloat(chUrl); return isNaN(n) ? null : n; }
+        if (src === 'mangadex') {
+            // Composite "<chapterNumber>__<uuid>" key — see toMangadexChapterKey.
+            const { number } = splitMangadexChapterKey(chUrl);
+            const n = parseFloat(number);
+            return isNaN(n) ? null : n;
+        }
         const slug = String(chUrl).split('/').filter(Boolean).pop() || '';
         const m = slug.match(/(\d+(\.\d+)?)/); return m ? parseFloat(m[1]) : null;
     };
 
     const fmtCh = (url, item) => {
         if (!url) return '—';
-        if (getSource(item) === 'asura') return `Ch. ${url}`;
+        const src = getSource(item);
+        if (src === 'asura') return `Ch. ${url}`;
+        if (src === 'mangadex') {
+            const { number } = splitMangadexChapterKey(url);
+            return number ? `Ch. ${number}` : 'Continue';
+        }
         const slug = String(url).split('/').filter(Boolean).pop() || '';
         const m = slug.match(/(\d+(\.\d+)?)$/); return m ? `Ch. ${m[1]}` : 'Continue';
     };
@@ -149,16 +188,25 @@ export default function Favorites() {
 
     const renderItem = ({ item }) => {
         const lr = lastReadInfo[item.url];
-        const isAS = getSource(item) === 'asura';
+        const src = getSource(item);
+        const isAS = src === 'asura';
+        const badgeColor = src === 'asura' ? C.asuraBg
+            : src === 'mgeko' ? C.mgekoBg
+                : src === 'mangadex' ? C.mdBg
+                    : C.mpBg;
+        const badgeLabel = src === 'asura' ? 'AS'
+            : src === 'mgeko' ? 'MG'
+                : src === 'mangadex' ? 'MD'
+                    : 'MP';
         const status = statusMap[item.url] || 'Reading';
         const cfg = STATUS_CONFIG[status] || STATUS_CONFIG['Reading'];
         const isCompleted = status === 'Completed';
 
         // Chapter progress
-        const src = getSource(item);
         const readChNum = lr ? parseChNum(lr.chapterUrl, src) : null;
         const totalCh = chapterCounts[item.url] || null;
         const hasProgress = readChNum !== null;
+        const cover = getProxiedCover(item);
 
         return (
             <Pressable
@@ -168,11 +216,11 @@ export default function Favorites() {
                 {/* Left accent bar — color = status color */}
                 <View style={[S.cardBar, { backgroundColor: cfg.color }]} />
 
-                {/* Cover — always use fresh URL from coverUrls.js, fall back to stored */}
+                {/* Cover — proxied through the correct source-specific proxy */}
                 <View style={S.coverWrap}>
-                    {(getStaticCover(item.url) || item.coverUrl) ? (
+                    {cover ? (
                         <Image
-                            source={{ uri: getStaticCover(item.url) || item.coverUrl }}
+                            source={{ uri: cover }}
                             style={[S.cover, isCompleted && S.coverCompleted]}
                             resizeMode="cover"
                         />
@@ -181,8 +229,8 @@ export default function Favorites() {
                             <Ionicons name="book-outline" size={20} color={C.text3} />
                         </View>
                     )}
-                    <View style={[S.srcBadge, { backgroundColor: isAS ? C.asuraBg : C.mpBg }]}>
-                        <Text style={S.srcText}>{isAS ? 'AS' : 'MP'}</Text>
+                    <View style={[S.srcBadge, { backgroundColor: badgeColor }]}>
+                        <Text style={S.srcText}>{badgeLabel}</Text>
                     </View>
                     {isCompleted && (
                         <View style={S.completedOverlay}>
