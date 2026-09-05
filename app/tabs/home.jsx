@@ -100,7 +100,7 @@ async function runBatched(tasks, batchSize, gapMs, cancelledRef) {
 }
 
 function resolveCardState(manga) {
-    const { lastReadChapter, latestChapter, hasNewChapterFlag } = manga;
+    const { lastReadChapter, latestChapter, hasNewChapterFlag, wasCaughtUpWhenNew } = manga;
 
     if (!lastReadChapter) return { state: 'IN_PROGRESS' };
 
@@ -112,7 +112,14 @@ function resolveCardState(manga) {
 
     if (exactMatch || numMatch) return { state: 'CAUGHT_UP' };
 
-    if (latestChapter && hasNewChapterFlag) return { state: 'NEW_CHAPTER' };
+    if (latestChapter && hasNewChapterFlag) {
+        // Only safe to point the reader at the newest chapter if they were
+        // fully caught up at the moment it dropped — otherwise "newest"
+        // could skip past chapters they haven't read yet. If they still
+        // had a backlog, keep the target on their real progress and just
+        // hint (border only) that something new also came in.
+        return wasCaughtUpWhenNew ? { state: 'NEW_CHAPTER' } : { state: 'UPDATING' };
+    }
 
     return { state: 'IN_PROGRESS' };
 }
@@ -164,9 +171,23 @@ export default function Home() {
                 const latestChapter = await getLatestChapter(key);
 
                 let newChapterAt = null;
+                let wasCaughtUpWhenNew = false;
                 try {
                     const raw = await AsyncStorage.getItem(newChapterKey(key));
-                    if (raw) newChapterAt = parseInt(raw);
+                    if (raw) {
+                        try {
+                            // Current format: JSON payload with catch-up context.
+                            const parsed = JSON.parse(raw);
+                            newChapterAt = parsed?.ts ?? null;
+                            wasCaughtUpWhenNew = !!parsed?.wasCaughtUp;
+                        } catch {
+                            // Legacy format: a bare timestamp string. We don't know
+                            // the catch-up context for these, so default to the
+                            // conservative option (don't jump the target ahead).
+                            newChapterAt = parseInt(raw);
+                            wasCaughtUpWhenNew = false;
+                        }
+                    }
                 } catch { /* ignore */ }
 
                 const lastViewedAt = await getLastViewed(key);
@@ -177,6 +198,7 @@ export default function Home() {
                     lastReadTimestamp: info.timestamp || 0,
                     latestChapter: latestChapter ?? null,
                     hasNewChapterFlag: newChapterAt != null,
+                    wasCaughtUpWhenNew,
                     sortPriority: Math.max(newChapterAt ?? 0, info.timestamp ?? 0, lastViewedAt ?? 0),
                 };
             })
@@ -215,9 +237,20 @@ export default function Home() {
 
             const isGenuinelyNew = !!stored;
 
+            // Was the reader caught up to the *old* latest chapter right before
+            // this new one appeared? Only then is it safe to point the
+            // "continue" button at the newest chapter — otherwise they'd skip
+            // past whatever backlog they still had.
+            const oldLatestNum = chapterNum(stored);
+            const readNum = chapterNum(manga.lastReadChapter);
+            const wasCaughtUp = oldLatestNum !== null && readNum !== null && readNum >= oldLatestNum;
+
             await saveLatestChapter(key, latestId);
             if (isGenuinelyNew) {
-                await AsyncStorage.setItem(newChapterKey(key), String(now)).catch(() => {});
+                await AsyncStorage.setItem(
+                    newChapterKey(key),
+                    JSON.stringify({ ts: now, wasCaughtUp })
+                ).catch(() => {});
             }
 
             setFollowedManga(prev => {
@@ -227,6 +260,7 @@ export default function Home() {
                     ...prev[idx],
                     latestChapter: latestId,
                     hasNewChapterFlag: isGenuinelyNew ? true : prev[idx].hasNewChapterFlag,
+                    wasCaughtUpWhenNew: isGenuinelyNew ? wasCaughtUp : prev[idx].wasCaughtUpWhenNew,
                     sortPriority: isGenuinelyNew ? now : prev[idx].sortPriority,
                 };
                 return [patched, ...prev.filter((_, i) => i !== idx)];
@@ -457,16 +491,30 @@ export default function Home() {
                                                 <Text style={S.caughtUpText}>Up to date</Text>
                                             </View>
                                         ) : state === 'NEW_CHAPTER' ? (
+                                            // Reader was fully caught up right before this chapter
+                                            // dropped — safe to send them straight to it.
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, S.contChBtnNew, { opacity: pressed ? 0.75 : 1 }]}
-                                                onPress={() => openLastRead(manga)}   // <-- still opens where they left off
+                                                onPress={() => openChapter(manga, manga.latestChapter)}
                                             >
                                                 <Text style={S.contChText} numberOfLines={1}>
-                                                    {fmtCh(manga.lastReadChapter, src)}   {/* <-- still shows ch. 2, not latest */}
+                                                    {fmtCh(manga.latestChapter, src)}
+                                                </Text>
+                                            </Pressable>
+                                        ) : state === 'UPDATING' ? (
+                                            // Reader still has a backlog when the new chapter landed —
+                                            // keep the target on their real progress, just hint with a
+                                            // green border that something new also came in.
+                                            <Pressable
+                                                style={({ pressed }) => [S.contChBtn, S.contChBtnUpdating, { opacity: pressed ? 0.75 : 1 }]}
+                                                onPress={() => openLastRead(manga)}
+                                            >
+                                                <Text style={S.contChText} numberOfLines={1}>
+                                                    {fmtCh(manga.lastReadChapter, src)}
                                                 </Text>
                                             </Pressable>
                                         ) : (
-                                            // Mid-series — show where they are
+                                            // Mid-series, no new content — show where they are
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, { opacity: pressed ? 0.75 : 1 }]}
                                                 onPress={() => openLastRead(manga)}
@@ -702,6 +750,10 @@ const S = StyleSheet.create({
     contChBtnNew: {
         backgroundColor: C.green,
         shadowColor: C.green,
+    },
+    contChBtnUpdating: {
+        borderWidth: 1.5,
+        borderColor: C.green,
     },
     contChText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
 
