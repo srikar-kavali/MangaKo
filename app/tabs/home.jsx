@@ -112,13 +112,13 @@ function resolveCardState(manga) {
 
     if (exactMatch || numMatch) return { state: 'CAUGHT_UP' };
 
-    if (latestChapter && hasNewChapterFlag) {
-        // Only safe to point the reader at the newest chapter if they were
-        // fully caught up at the moment it dropped — otherwise "newest"
-        // could skip past chapters they haven't read yet. If they still
-        // had a backlog, keep the target on their real progress and just
-        // hint (border only) that something new also came in.
-        return wasCaughtUpWhenNew ? { state: 'NEW_CHAPTER' } : { state: 'UPDATING' };
+    if (latestChapter && hasNewChapterFlag && wasCaughtUpWhenNew) {
+        // Only jump the "continue" target ahead — and show the green "new"
+        // treatment — if the reader was fully caught up at the moment this
+        // chapter dropped. Otherwise it's visually and functionally
+        // identical to normal IN_PROGRESS: purple, pointed at their real
+        // last-read chapter.
+        return { state: 'NEW_CHAPTER' };
     }
 
     return { state: 'IN_PROGRESS' };
@@ -492,7 +492,7 @@ export default function Home() {
                                             </View>
                                         ) : state === 'NEW_CHAPTER' ? (
                                             // Reader was fully caught up right before this chapter
-                                            // dropped — safe to send them straight to it.
+                                            // dropped — green box, jump straight to it.
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, S.contChBtnNew, { opacity: pressed ? 0.75 : 1 }]}
                                                 onPress={() => openChapter(manga, manga.latestChapter)}
@@ -501,20 +501,9 @@ export default function Home() {
                                                     {fmtCh(manga.latestChapter, src)}
                                                 </Text>
                                             </Pressable>
-                                        ) : state === 'UPDATING' ? (
-                                            // Reader still has a backlog when the new chapter landed —
-                                            // keep the target on their real progress, just hint with a
-                                            // green border that something new also came in.
-                                            <Pressable
-                                                style={({ pressed }) => [S.contChBtn, S.contChBtnUpdating, { opacity: pressed ? 0.75 : 1 }]}
-                                                onPress={() => openLastRead(manga)}
-                                            >
-                                                <Text style={S.contChText} numberOfLines={1}>
-                                                    {fmtCh(manga.lastReadChapter, src)}
-                                                </Text>
-                                            </Pressable>
                                         ) : (
-                                            // Mid-series, no new content — show where they are
+                                            // Still has a backlog (whether or not something new also
+                                            // dropped) — plain purple, points at their real progress.
                                             <Pressable
                                                 style={({ pressed }) => [S.contChBtn, { opacity: pressed ? 0.75 : 1 }]}
                                                 onPress={() => openLastRead(manga)}
@@ -750,10 +739,6 @@ const S = StyleSheet.create({
     contChBtnNew: {
         backgroundColor: C.green,
         shadowColor: C.green,
-    },
-    contChBtnUpdating: {
-        borderWidth: 1.5,
-        borderColor: C.green,
     },
     contChText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
 
