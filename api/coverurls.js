@@ -38,7 +38,9 @@ export const COVER_URLS = {
     "the-world-after-the-end":                                      "https://imgsrv4.com/avatar/288x412/media/manga_covers/the-world-after-the-fall.jpeg",
     "the-tale-of-cultivation-and-demon-extermination":              "https://imgsrv4.com/avatar/288x412/media/manga_covers/7y0rwJ.png",
     "the-former-supreme":                                           "https://imgsrv4.com/avatar/288x412/media/manga_covers/X8YyDJ.jpg",
-
+    "terminally-ill-genius-dark-knight":                            "https://imgsrv5.com/avatar/288x412/media/manga_covers/terminally-ill-genius-dark-knight.png",
+    "the-demon-kings-friend":                                       "https://imgsrv5.com/avatar/288x412/media/manga_covers/mnxB8o.jpg",
+    "whispers-of-a-scheming-demon":                                 "https://cdn.asurascans.com/asura-images/covers/my-demonhood-s-genesis.d8e1b3-400.webp",
 
     "mgeko__a-returner-s-magic-should-be-special-mg1-njfia":        "https://imgsrv4.com/avatar/288x412/media/manga_covers/a-returner-s-magic-should-be-speci.png",
     "mgeko__absolute-dominion":                                     "https://imgsrv4.com/avatar/288x412/media/manga_covers/Absolute-Dominion-193x278.webp",
@@ -79,7 +81,21 @@ export const COVER_URLS = {
     "mgeko__dao-of-the-bizarre-immortal":                           "https://imgsrv5.com/avatar/288x412/media/manga_covers/dao-of-the-bizarre-immortal.jpg",
     "mgeko__the-gray-mark":                                         "https://imgsrv5.com/avatar/288x412/media/manga_covers/the-gray-mark.webp",
     "mgeko__my-bias-gets-on-the-last-train":                        "https://imgsrv5.com/avatar/288x412/media/manga_covers/my-bias-gets-on-the-last-train.jpg",
-
+    "mgeko__black-serpent":                                         "https://imgsrv5.com/avatar/288x412/media/manga_covers/black-serpent.webp",
+    "mgeko__hero-killer-mg1":                                       "https://imgsrv5.com/avatar/288x412/media/manga_covers/a5FmFSVfub8SAXn6DePo6qX9Eswej96EWk5LsD6c.png",
+    "mgeko__the-knight-of-embers-mg1":                              "https://imgsrv5.com/avatar/288x412/media/manga_covers/The-Kinght-of-Embers_compress36.jpg",
+    "mgeko__lantern-of-the-dawn":                                   "https://imgsrv5.com/avatar/288x412/media/manga_covers/lantern-of-the-dawn.jpg",
+    "mgeko__mage-again":                                            "https://imgsrv5.com/avatar/288x412/media/manga_covers/mage-again.jpg",
+    "mgeko__a-regressors-tale-of-cultivation":                      "https://imgsrv5.com/avatar/288x412/media/manga_covers/01JXK3JBMKD1VVNSMV4Y6PE58X-optimized.webp",
+    "mgeko__the-evil-ring":                                         "https://imgsrv5.com/avatar/288x412/media/manga_covers/the-evil-ring-manhua.webp",
+    "mgeko__warrior-cariel":                                        "https://imgsrv5.com/avatar/288x412/media/manga_covers/qYZJ2M-s.jpg",
+    "mgeko__heavenly-demon-cultivation-simulation-mg1":             "https://imgsrv5.com/avatar/288x412/media/manga_covers/heavenly-demon-cultivation-simulation.jpg",
+    "mgeko__hardcore-leveling-warrior":                             "https://imgsrv5.com/avatar/288x412/media/manga_covers/10898b6da3e8af.png",
+    "mgeko__burning-effect-mg1":                                    "https://imgsrv5.com/avatar/288x412/media/manga_covers/burning-fff-reup.png",
+    "mgeko__terror-man":                                            "https://imgsrv5.com/avatar/288x412/media/manga_covers/jpg_large.jpg",
+    "mgeko__zomgan":                                                "https://imgsrv5.com/avatar/288x412/media/manga_covers/zomgan.jpg",
+    "mgeko__song-of-the-sky-walkers":                               "https://imgsrv5.com/avatar/288x412/media/manga_covers/song-of-the-sky-walkers-41292.jpg",
+    "mgeko__moshin-hunter-mg1":                                     "https://imgsrv5.com/avatar/288x412/media/manga_covers/asdas-little-s.png",
 };
 
 

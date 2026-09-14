@@ -633,6 +633,180 @@ export const manhwas = [
         genres: ["Drama", "Romance",],
         status: "Ongoing",
     },
+    {
+        id: "mgeko__black-serpent",
+        title: "Black Serpent",
+        source: "mgeko",
+        description: "In the final battle against the Demon Cult, the Black Serpent leader Jeonghwa was betrayed by the Murim Alliance, losing all her comrades. Barely surviving, she swears to eliminate both the Demon Cult and the Murim Alliance who drove her comrades to their deaths. “Heavens! If justice truly exists… grant me the opportunity to avenge my fallen comrades!”",
+        genres: ["Action", "Drama", "Historical", "Martial Arts", "seinen", "Tragedy"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__hero-killer-mg1",
+        title: "Hero Killer",
+        source: "mgeko",
+        description: "The world is in constant turmoil, with constant wars breaking out between Heroes and Villains. Gifted with supernatural abilities, one lone girl sets out on a bloody path for revenge against the injustices of the world she lives in. With the constant clashes between titans, no one is safe. If no one is willing to protect the innocent, who are the real heroes, and who are the real villains? What truly separates one from the other?",
+        genres: ["Action", "Drama"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__the-knight-of-embers-mg1",
+        title: "The Knight of Embers",
+        source: "mgeko",
+        description: "His only family, his younger twin, has been murdered. He isn’t as talented as his late genius brother, but in order to get his revenge, he will become “strong”. Will I be able to get my revenge?",
+        genres: ["Action", "Adventure", "Fantasy", "Martial Arts", "Manhwa"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__lantern-of-the-dawn",
+        title: "Lantern Of The Dawn",
+        source: "mgeko",
+        description: "“Bucky,” a sergeant belonging to the “Empire of the Sun’s” war heroes. He is admired by the soldiers of the empire for his unwavering loyalty to the emperor and his exceptional martial arts skills. However, his ultimate goal is to overthrow the empire and seek revenge against the emperor. Can Bucky succeed in exacting his revenge against the mighty empire?",
+        genres: ["Action", "Drama", "Manhwa"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__mage-again",
+        title: "Mage Again",
+        source: "mgeko",
+        description: "Rangderkessel, the greatest mage of the land, sacrifices his life to seal the king of destruction, Persiadis, in six sacred relics. The relics are distributed among six different hands to be kept safe, and once again, peace is restored. However, when someone begins to collect the relics to resurrect the demon, Rangderkessel awakens from a 600-year slumber as the boy “Ranghae.”\n",
+        genres: ["Action", "Adventure", "Drama", "Fantasy", "Romance", "Shounen", "Manwha"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__a-regressors-tale-of-cultivation",
+        title: "A Regressor's Tale of Cultivation",
+        source: "mgeko",
+        description: "There were seven individuals who fell into a world of immortals. Each seemed to flourish in said realm with their own blessed gifts... ...except for Seo Eunhyun, the only one among the seven who hasn't manifested a power. In truth, he did have an ability of infinite regression—but this was no blessing. It was a curse. Thus begins the story of Seo Eunhyun and his desperate struggle in escaping his never-ending regression.\n",
+        genres: ["Action", "Adventure", "Cultivation", "Fantasy", "Martial Arts", "Murim", "Tragedy", "Manhwa"],
+        status: "Ongoing",
+    },{
+        id: "mgeko__the-evil-ring",
+        title: "The Evil Ring",
+        source: "mgeko",
+        description: "18 years ago, a prophecy emerged that a boy with a black ring, deemed inferior, would rewrite the survival rules of the world of the gifted. The only remaining descendant of the “Divine-Tier” status, Shannon, wears a black ring and lives as an inferior being in the filthy exile zone. However, his peaceful life is shattered when his identity is exposed, and the top-tier forces, seeing him as a threat, send out an assassination squad to kill Shannon. Five gifted individuals, who have existed since childhood to protect Shannon, are summoned at the same time. They rush to the exile zone to protect the last descendant of the “Divine-Tier” status, and a battle among the “rings” is about to ignite!",
+        genres: ["Action", "Drama", "Fantasy"],
+        status: "Ongoing",
+    },{
+        id: "mgeko__warrior-cariel",
+        title: "Warrior Kariel",
+        source: "mgeko",
+        description: "In a world where warriors are chosen to wield a holy sword and defeat the Demon Lord every hundred years, Kariel is only a guide, bound to support others from the sidelines. He dreams of rising beyond his rank, but the Demon Lord of this era has already been slain. Despite this, the world begins to unravel instead of heal. Monsters grow unpredictable, a mysterious knight hunts champions, and secret organizations move in the shadows. Traveling with his childhood friend Reina, Kariel is drawn into a dangerous mystery that may determine the fate of the world.",
+        genres: ["Action", "Adventure", "Fantasy"],
+        status: "Ongoing",
+    },{
+        id: "mgeko__heavenly-demon-cultivation-simulation-mg1",
+        title: "Heavenly Demon Cultivation Simulation",
+        source: "mgeko",
+        description: "A group of scouts have been assigned to the area of the Mount Hua Sect by their great leader, ‘The Mantis.’ The protagonist ‘Seol Hwi’ faces the Hua Sect Master ‘Goo Jong Myung,’ and falls in mortal danger. A status windows then pops up and made him return to the time before he accepted the scouting mission. Once he receives the same scouting mission that left him dead, Seol Hui struggles to change the unavoidable reality. A status window that appears every crisis. Choices with uncertain future. The story of Seol Hwi as he tries to find the best decision in his world mingled with life and death.",
+        genres: ["Action", "Martial Arts", "Fantasy"],
+        status: "Ongoing",
+    },{
+        id: "mgeko__hardcore-leveling-warrior",
+        title: "Hardcore Leveling Warrior",
+        source: "mgeko",
+        description: "When you go from level 99 to level 1 and start all over again.\n" +
+            "“Those who clear quests, shall receive everything.” An RPG adventure with HCLW and his allies, set in a lucid reality.",
+        genres: ["Action", "Comedy", "Drama", "Fantasy"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__burning-effect-mg1",
+        title: "Burning Effect",
+        source: "mgeko",
+        description: "This story is about the fierce struggle between law enforcement and those who want to upset the world. In the Cᵗʰ century, the central bureau of the municipality, Graymark, sentence anyone to death, regardless of the severity of the offense in order to reduce the crime rate and population in proportion to the increased life expectancy due to medical advances.\n" +
+            "This is a conflict between the Central Bureau and the Revolutionary Army trying to overturn this system.\n",
+        genres: ["Action", "Crime", "Supernatural"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__terror-man",
+        title: "Terror Man",
+        source: "mgeko",
+        description: "Min Jung Woo uses his ability to spot unfortunate events and tries to stop them, which leads to him becoming a terrorist feared by the people.",
+        genres: ["Action", "Drama", "Psychological"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__zomgan",
+        title: "Zomgan",
+        source: "mgeko",
+        description: "In a world where everyone struggles to live, Onmirae, the only boy who wants death. One day, a death squad appeared in front of him and offered him a proposal. ‘I’ll kill you, let’s rebuild human society together’ To die, you have to save everyone.",
+        genres: ["Action", "Manhwa", "Shounen"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__song-of-the-sky-walkers",
+        title: "Song Of The Sky Walkers",
+        source: "mgeko",
+        description: "In the vision of the heavens, the emperor’s family gave birth to a special pair of twins—the male born with a forehead mole the color of cinnabar and the female born with six fingers. However, this brother and sister pair connected by blood is cruelly separated by fate! One was taken away by Penglai Xianchang and embarked on the long road of Xiu Xian. The other was abandoned in the reeds, followed by the old swordsman in the red dust… The fated day approaches, how will the two fight destiny? In what way will it be repeated?",
+        genres: ["Action", "Adventure", "Drama", "Fantasy", "Martial Arts", "Shoujo"],
+        status: "Ongoing",
+    },
+    {
+        id: "mgeko__moshin-hunter-mg1",
+        title: "Moshin Hunter",
+        source: "mgeko",
+        description: "Moshins, spirits that dwell on land and sea, may be good in nature, or may have intentions to hurt humans. In a world with such creatures, a warrior travels across the lands with his mysterious dark sword, and hunts all moshins, whether good or bad.",
+        genres: ["Action", "Adventure"],
+        status: "Ongoing",
+    },
+    {
+        id: "terminally-ill-genius-dark-knight",
+        title: "Terminally-Ill Genius Dark Knight",
+        source: "asura",
+        description: "Inner Lunatic is a fantasy RPG infamous for its brutal difficulty.\n" +
+            "\n" +
+            "For Yoo Chan, a young man diagnosed with a terminal illness, the game was his entire world—until it suddenly became his reality.\n" +
+            "\n" +
+            "Reincarnated as Nox von Reinharber, the ultimate villain of Act 1, Yoo Chan must use his ultimate game knowledge to rewrite his tragic fate. Can he survive the story and reach the end alive?",
+        genres: ["Action", "Adventure", "Fantasy", "Game"],
+        status: "Ongoing",
+    },
+    {
+        id: "whispers-of-a-scheming-demon",
+        title: "Whispers of a Scheming Demon",
+        source: "asura",
+        description: "The story takes place in the world of \"Human-Demon Chronicles,\" where angels and demons wage an endless war.\n" +
+            "\n" +
+            "In an age when the balance of the world was hanging by a thread, Johann was reincarnated as a half-human, half-demon born from a human.\n" +
+            "\n" +
+            "He must sometimes suppress his emerging demonic instincts and sometimes make use of them, manipulating the characters of the novel and punishing its villains... as a demon should.\n" +
+            "\n" +
+            "The whispers of demons are harbingers of doom. If you heed their words long enough, you may one day find yourself standing on the brink of ruin.\n" +
+            "\n" +
+            "However, there's one whisper that's different...\n" +
+            "\n" +
+            "Johann’s.",
+        genres: ["Action", "Demon", "Fantasy"],
+        status: "Ongoing",
+    },
+    {
+        id: "the-demon-kings-friend",
+        title: "The Demon King's Friend",
+        source: "asura",
+        description: "“Today, every demon in the world will vanish.”\n" +
+            "\n" +
+            "For a hundred years, humanity has waged war against the demon race. Now, its last hope of bringing that war to an end lies with the Continental Demon-Sealing Formation.\n" +
+            "\n" +
+            "To complete this final mission, the hero Parte and the Imperial Mage Noah are dispatched to the formation’s last destination. There, they meet Roro, a young shepherd boy, and together, they finally stand on the verge of completing humanity’s grand plan.\n" +
+            "\n" +
+            "Then, on that fateful day, everything changed.",
+        genres: ["Action", "Adventure", "Fantasy"],
+        status: "Ongoing",
+    },
+
+    /*
+    {
+        id: "",
+        title: "",
+        source: "",
+        description: "",
+        genres: [],
+        status: "",
+    },
+     */
+
 ];
 
 export function searchHardcodedManhwa(query) {
