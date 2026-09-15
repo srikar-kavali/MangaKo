@@ -795,7 +795,14 @@ export const manhwas = [
         genres: ["Action", "Adventure", "Fantasy"],
         status: "Ongoing",
     },
-
+    {
+        id: "children-of-the-rune",
+        title: "Children of the Rune",
+        source: "asura",
+        description: "Oh, young boy, make sure you survive! After his uncle caused the downfall of his family, the only thing the young Boris had left was the family sword, \"Winterer.\" But who would've thought this treasure would soon become the cause of another crisis? Every time people targeted \"Winterer,\" Boris's heart grew colder and drearier, like winter itself... Boris's journey then began. To survive. To protect the family sword. What awaits at the end of this journey? What secrets does the winter sword \"Winterer\" hold?",
+        genres: ["Action", "Adventure", "Fantasy", "Shounen"],
+        status: "Ongoing",
+    },
     /*
     {
         id: "",

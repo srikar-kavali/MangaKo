@@ -26,6 +26,8 @@ SLUG_OVERRIDES = {
     "eternal-force": "the-breaker-eternal-force",
     "the-breaker22": "the-breaker",
     "the-story-of-a-low-rank-soldier-becoming-a-monarch-mg1": "the-story-of-a-low-rank-soldier-becoming-a-monarch",
+    "manga-mm990169": "mage-again",
+    "manga-1089": "hardcore-leveling-warrior"
 
 }
 
