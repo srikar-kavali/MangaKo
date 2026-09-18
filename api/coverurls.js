@@ -42,6 +42,7 @@ export const COVER_URLS = {
     "the-demon-kings-friend":                                       "https://imgsrv5.com/avatar/288x412/media/manga_covers/mnxB8o.jpg",
     "whispers-of-a-scheming-demon":                                 "https://cdn.asurascans.com/asura-images/covers/my-demonhood-s-genesis.d8e1b3-400.webp",
     "children-of-the-rune":                                         "https://cdn.asurascans.com/asura-images/covers/children-of-the-rune.fa7285.webp",
+
     "mgeko__a-returner-s-magic-should-be-special-mg1-njfia":        "https://imgsrv4.com/avatar/288x412/media/manga_covers/a-returner-s-magic-should-be-speci.png",
     "mgeko__absolute-dominion":                                     "https://imgsrv4.com/avatar/288x412/media/manga_covers/Absolute-Dominion-193x278.webp",
     "mgeko__bowblade-spirit-mg12":                                  "https://imgsrv4.com/avatar/288x412/media/manga_covers/bowblade-spirit.jpeg",

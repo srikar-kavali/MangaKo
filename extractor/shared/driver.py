@@ -2,7 +2,7 @@ import os
 import time
 import undetected_chromedriver as uc
 
-CHROME_VERSION = 151
+CHROME_VERSION = 153
 
 def make_driver(headless=True):
     options = uc.ChromeOptions()
