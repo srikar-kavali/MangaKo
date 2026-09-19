@@ -11,6 +11,13 @@ DELAY_BETWEEN_CHAPTERS = (3, 6)
 MAX_RETRIES = 3
 RETRY_BACKOFF = 30
 
+CRASH_SIGNALS = [
+    "no such window",
+    "target window already closed",
+    "web view not found",
+    "invalid session id",
+    "chrome not reachable",
+]
 
 SLUG_OVERRIDES = {
     "manga-pl822": "noblesse",
@@ -28,8 +35,12 @@ SLUG_OVERRIDES = {
     "the-story-of-a-low-rank-soldier-becoming-a-monarch-mg1": "the-story-of-a-low-rank-soldier-becoming-a-monarch",
     "manga-mm990169": "mage-again",
     "manga-1089": "hardcore-leveling-warrior"
-
 }
+
+
+def is_crash_error(err_str):
+    return any(msg in err_str for msg in CRASH_SIGNALS)
+
 
 def get_series_id(url):
     match = re.search(r'/manga/([^/?#]+)', url)
@@ -41,7 +52,6 @@ def get_series_id(url):
 
 
 def is_driver_alive(driver):
-    """Check if the Chrome session is still alive."""
     try:
         _ = driver.window_handles
         return True
@@ -50,7 +60,6 @@ def is_driver_alive(driver):
 
 
 def safe_quit(driver):
-    """Quit driver without raising."""
     try:
         driver.quit()
     except Exception:
@@ -63,44 +72,33 @@ def get_all_chapters(driver, series_url):
     time.sleep(3)
 
     if is_blocked(driver):
-        print(f"  ⚠ Blocked on series page (title: {driver.title}) — Cloudflare challenge")
+        print(f"  ⚠ Blocked on series page — Cloudflare challenge")
         return []
 
-    # Navigate directly to the all-chapters page
     series_slug = re.search(r'/manga/([^/?#]+)', series_url).group(1).rstrip('/')
     all_chapters_url = f"https://www.mgeko.cc/manga/{series_slug}/all-chapters/"
     print(f"  Loading all-chapters page...")
     driver.get(all_chapters_url)
 
-    # Wait for page to fully render
     try:
         WebDriverWait(driver, 20).until(
             lambda d: d.execute_script("return document.readyState") == "complete"
         )
-    except:
+    except Exception:
         pass
     time.sleep(4)
 
     if is_blocked(driver):
-        print(f"  ⚠ Blocked on all-chapters page (title: {driver.title})")
+        print(f"  ⚠ Blocked on all-chapters page")
         return []
 
-    # Wait for chapter links on the all-chapters page
     try:
         WebDriverWait(driver, 30).until(
             lambda d: len(d.find_elements(By.XPATH, "//a[contains(@href,'/reader/')]")) > 2
         )
-    except:
+    except Exception:
         print("  ⚠ Timed out waiting for chapter links")
 
-    # Debug: check JS-visible link count
-    js_count = driver.execute_script(
-        "return document.querySelectorAll('a[href*=\"/reader/\"]').length"
-    )
-    reader_links = driver.find_elements(By.XPATH, "//a[contains(@href,'/reader/')]")
-    print(f"  Found {len(reader_links)} /reader/ links (JS sees {js_count})")
-
-    # Scroll in case the all-chapters page also lazy-loads
     try:
         container = driver.find_element(By.CSS_SELECTOR, "ul.chapter-list")
         last_count = 0
@@ -112,14 +110,12 @@ def get_all_chapters(driver, series_url):
             current_count = len(set(
                 a.get_attribute("href") for a in links if a.get_attribute("href")
             ))
-            print(f"  Scrolling chapter list... {current_count} links found", end="\r")
             if current_count == last_count:
                 stall += 1
             else:
                 stall = 0
             last_count = current_count
-        print()
-    except:
+    except Exception:
         full_scroll(driver, step=800, pause=0.3, settle=1.0)
 
     chapter_links = []
@@ -129,7 +125,6 @@ def get_all_chapters(driver, series_url):
         href = a.get_attribute("href") or ""
         if "/reader/en/" not in href or "mgeko.cc" not in href:
             continue
-        # Extract chapter number from URL: /reader/en/gosu-chapter-233-eng-li/
         match = re.search(r'-chapter-(\d+(?:\.\d+)?)-eng', href)
         if match and href not in seen:
             num = float(match.group(1))
@@ -143,26 +138,16 @@ def get_all_chapters(driver, series_url):
             })
 
     chapter_links.sort(key=lambda x: x["number"])
-
-    if not chapter_links:
-        print("  ⚠ No chapters found. Sample hrefs:")
-        for a in driver.find_elements(By.TAG_NAME, "a")[:15]:
-            href = a.get_attribute("href") or ""
-            if href:
-                print(f"    {href}")
-
     return chapter_links
 
 
 def get_chapter_pages(driver, chapter):
     driver.get(chapter["url"])
-
     time.sleep(2)
 
     if is_blocked(driver):
         raise ConnectionError(f"Blocked on chapter {chapter['id']} (title: {driver.title})")
 
-    # Wait for at least one chapter image to load
     try:
         WebDriverWait(driver, 20).until(
             lambda d: any(
@@ -170,42 +155,19 @@ def get_chapter_pages(driver, chapter):
                 for img in d.find_elements(By.TAG_NAME, "img")
             )
         )
-    except:
-        print(f"\n  ⚠ Timed out waiting for images on chapter {chapter['id']}, proceeding anyway")
+    except Exception:
+        pass
 
-    # Scroll to trigger any remaining images
     full_scroll(driver, step=800, pause=0.2, settle=1.0)
 
     pages = []
     seen = set()
-
-    # Chapter page images always sit under a "/chapter-N/" path segment, e.g.:
-    #   .../mg2/cdn_mangaraw/reader/chapter-182/0.jpg
-    #   .../sv2/comic/manga-q1113/chapter-412/0.jpg
-    #   .../mg2/cdn_mangaraw/death-g/chapter-8/01.1_warnig_png_11zon.jpg
-    # The CDN subpath/slug before "chapter-N" varies per series, AND the
-    # filename after it isn't always a plain sequential number — some
-    # chapters (re-edited/re-uploaded scans) use filenames like "01-6.jpg" or
-    # "01.1_warnig_png_11zon.jpg". So we only require SOME filename under a
-    # "/chapter-N/" segment, not a purely numeric one. This still reliably
-    # excludes comment-section images (avatars, attachments, loading spinner,
-    # the mgeko credits watermark), none of which live under a chapter path.
     CHAPTER_IMG_RE = re.compile(r'/chapter-[^/]+/[^/]+\.\w+(?:\?.*)?$', re.IGNORECASE)
 
     for img in driver.find_elements(By.TAG_NAME, "img"):
         src = img.get_attribute("src") or ""
-
-        if not src:
+        if not src or "imgsrv" not in src or not CHAPTER_IMG_RE.search(src):
             continue
-
-        # mgeko serves all chapter images from imgsrv*.com, but so does other
-        # page chrome (comments, etc) — the path pattern is what actually
-        # identifies a real chapter page.
-        if "imgsrv" not in src:
-            continue
-        if not CHAPTER_IMG_RE.search(src):
-            continue
-
         if src not in seen:
             seen.add(src)
             pages.append(src)
@@ -228,16 +190,38 @@ def scrape(series_url, data):
     existing = set(data[series_id]["chapters"].keys())
     print(f"  Cached chapters: {len(existing)}")
 
-    # Kept headless=False here to respect your original mgeko initialization setup
+    # Always enforce GUI mode (headless=False) for mgeko
     driver = make_driver(headless=False)
     try:
-        all_chapters = get_all_chapters(driver, series_url)
+        all_chapters = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                if not is_driver_alive(driver):
+                    print(f"  ⚠ Driver not alive before series page load — restarting...")
+                    safe_quit(driver)
+                    time.sleep(5)
+                    driver = make_driver(headless=False)
 
-        # If Cloudflare blocked the series page, wait and retry once
-        if not all_chapters:
-            print("  ⚠ No chapters found — waiting 15s and retrying...")
-            time.sleep(15)
-            all_chapters = get_all_chapters(driver, series_url)
+                all_chapters = get_all_chapters(driver, series_url)
+                break
+
+            except Exception as e:
+                err_str = str(e)
+                if is_crash_error(err_str):
+                    print(f"  ⚠ Chrome crashed loading series page (attempt {attempt}/{MAX_RETRIES}) — restarting driver...")
+                    safe_quit(driver)
+                    time.sleep(random.uniform(8, 15))
+                    driver = make_driver(headless=False)
+                    continue
+                else:
+                    print(f"  ✗ Error loading series page (attempt {attempt}/{MAX_RETRIES}): {e}")
+                    if attempt < MAX_RETRIES:
+                        time.sleep(5)
+
+        if all_chapters is None:
+            print(f"  ✗ Could not load series page after {MAX_RETRIES} attempts — skipping series")
+            return
+
         new_chapters = [ch for ch in all_chapters if ch["id"] not in existing]
         print(f"  Total on site: {len(all_chapters)} | New to fetch: {len(new_chapters)}")
 
@@ -249,10 +233,16 @@ def scrape(series_url, data):
         for i, ch in enumerate(new_chapters):
             print(f"  Fetching Ch.{ch['id']} ({i+1}/{len(new_chapters)})...", end=" ", flush=True)
 
+            # Recycling driver every 30 chapters to clear GUI memory leak
+            if i > 0 and i % 30 == 0:
+                print(f"\n  🔄 Recycling Chrome GUI instance (30-chapter threshold)...")
+                safe_quit(driver)
+                time.sleep(3)
+                driver = make_driver(headless=False)
+
             pages = None
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
-                    # Check if driver is still alive before using it
                     if not is_driver_alive(driver):
                         print(f"\n    ⚠ Driver window closed — restarting...")
                         safe_quit(driver)
@@ -275,19 +265,11 @@ def scrape(series_url, data):
 
                 except Exception as e:
                     err_str = str(e)
-                    # Catch window/session closed errors specifically
-                    if any(msg in err_str for msg in [
-                        "no such window",
-                        "target window already closed",
-                        "web view not found",
-                        "invalid session id",
-                        "chrome not reachable",
-                    ]):
+                    if is_crash_error(err_str):
                         print(f"\n    ⚠ Chrome window crashed — restarting driver...")
                         safe_quit(driver)
                         time.sleep(random.uniform(8, 15))
                         driver = make_driver(headless=False)
-                        # Don't count this as an attempt — retry immediately
                         continue
                     else:
                         print(f"\n    ✗ Attempt {attempt}/{MAX_RETRIES} error: {e}")
@@ -306,7 +288,6 @@ def scrape(series_url, data):
 
             if i < len(new_chapters) - 1:
                 delay = random.uniform(*DELAY_BETWEEN_CHAPTERS)
-                # Extra cooldown every 50 chapters to prevent Chrome overload
                 if (i + 1) % 50 == 0:
                     print(f"  💤 Cooldown after {i+1} chapters (30s)...")
                     time.sleep(30)
