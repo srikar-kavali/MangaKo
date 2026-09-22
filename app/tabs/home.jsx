@@ -40,7 +40,7 @@ const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API;
 
 const BATCH_SIZE = 5;
 const BATCH_GAP_MS = 1200;
-const STALE_AFTER_MS = 30 * 60 * 1000;
+const STALE_AFTER_MS = 15 * 1000;
 
 function chapterNum(id) {
     const s = String(id ?? '');

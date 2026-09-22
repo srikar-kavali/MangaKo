@@ -1,8 +1,16 @@
 import os
 import time
+import signal
 import undetected_chromedriver as uc
 
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
+
 CHROME_VERSION = 153
+
 
 def make_driver(headless=True):
     options = uc.ChromeOptions()
@@ -10,11 +18,14 @@ def make_driver(headless=True):
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
 
-    # Stability & memory flags
-    options.add_argument("--disable-gpu")
-    options.add_argument("--disable-crash-reporter")
-    options.add_argument("--disable-in-process-stack-traces")
-    options.add_argument("--js-flags=--max-old-space-size=512")
+    # --- Anti-Crash & Cloudflare Stability Flags ---
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+    options.add_argument("--disable-renderer-backgrounding")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-background-timer-throttling")
+    options.add_argument("--disable-ipc-flooding-protection")
+    options.add_argument("--disable-client-side-phishing-detection")
 
     if headless:
         options.add_argument("--headless=new")
@@ -27,19 +38,53 @@ def make_driver(headless=True):
 
     return driver
 
-def safe_quit(driver):
-    if driver:
+
+def _kill_process_tree(pid):
+    if not pid:
+        return
+    if HAS_PSUTIL:
         try:
-            driver.quit()
+            parent = psutil.Process(pid)
+            for child in parent.children(recursive=True):
+                try:
+                    child.kill()
+                except psutil.NoSuchProcess:
+                    pass
+            parent.kill()
+        except psutil.NoSuchProcess:
+            pass
         except Exception:
             pass
+    else:
+        try:
+            os.kill(pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+        except Exception:
+            pass
+
+
+def safe_quit(driver):
+    if driver is None:
+        return
+
+    browser_pid = getattr(driver, "browser_pid", None)
+    service_process = getattr(getattr(driver, "service", None), "process", None)
+    service_pid = getattr(service_process, "pid", None)
+
+    try:
+        driver.quit()
+    except Exception:
+        pass
+
+    time.sleep(0.5)
+    _kill_process_tree(browser_pid)
+    _kill_process_tree(service_pid)
+
 
 def is_blocked(driver):
     try:
         title = driver.title.lower()
         source = driver.page_source.lower()
     except Exception:
-        # If driver window closed unexpectedly, treat as blocked/failed
         return True
 
     blocked_signals = [

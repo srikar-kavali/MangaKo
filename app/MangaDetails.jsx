@@ -15,7 +15,7 @@ import {
 } from '../manga_api/mangadex';
 import { getManhwaById } from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
-import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed } from "./searchStorage";
+import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed, newChapterKey } from "./searchStorage";
 import { getCoverUrl as getStaticCover } from "../api/coverurls";
 
 const C = {
@@ -145,9 +145,37 @@ const MangaDetails = () => {
                         if (json.total) {
                             await AsyncStorage.setItem(`chapterCount:${storageKey}`, String(json.total)).catch(() => {});
                             await AsyncStorage.setItem(`updatedAt:${storageKey}`, String(Date.now())).catch(() => {});
-                            const newest = [...json.chapters].sort((a, b) => extractNum(b) - extractNum(a))[0];
+                            const newest = [...json.chapters]
+                                .sort((a, b) => extractNum(b) - extractNum(a))[0];
+
                             if (newest?.id) {
-                                await AsyncStorage.setItem(`latestChapter:${storageKey}`, newest.id).catch(() => {});
+                                const latestKey = `latestChapter:${storageKey}`;
+                                const newFlagKey = newChapterKey(storageKey);
+
+                                const oldLatest = await AsyncStorage.getItem(latestKey);
+
+                                if (oldLatest && oldLatest !== String(newest.id)) {
+                                    const oldLatestNum = extractNum({ id: oldLatest });
+                                    const lastReadNum = extractNum({ id: lastRead });
+
+                                    const wasCaughtUp =
+                                        !isNaN(oldLatestNum) &&
+                                        !isNaN(lastReadNum) &&
+                                        lastReadNum >= oldLatestNum;
+
+                                    await AsyncStorage.setItem(
+                                        newFlagKey,
+                                        JSON.stringify({
+                                            ts: Date.now(),
+                                            wasCaughtUp,
+                                        })
+                                    );
+                                }
+
+                                await AsyncStorage.setItem(
+                                    latestKey,
+                                    String(newest.id)
+                                );
                             }
                         }
                     }

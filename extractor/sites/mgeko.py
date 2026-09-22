@@ -4,7 +4,7 @@ import random
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from shared.driver import make_driver, is_blocked
+from shared.driver import make_driver, is_blocked, safe_quit
 from shared.scroll import full_scroll
 
 DELAY_BETWEEN_CHAPTERS = (3, 6)
@@ -17,6 +17,10 @@ CRASH_SIGNALS = [
     "web view not found",
     "invalid session id",
     "chrome not reachable",
+    "tab crashed",
+    "session deleted because of page crash",
+    "not connected to devtools",
+    "disconnected",
 ]
 
 SLUG_OVERRIDES = {
@@ -39,6 +43,7 @@ SLUG_OVERRIDES = {
 
 
 def is_crash_error(err_str):
+    err_str = str(err_str).lower()
     return any(msg in err_str for msg in CRASH_SIGNALS)
 
 
@@ -52,22 +57,28 @@ def get_series_id(url):
 
 
 def is_driver_alive(driver):
+    if driver is None:
+        return False
     try:
-        _ = driver.window_handles
+        handles = driver.window_handles
+        if not handles:
+            return False
+        driver.switch_to.window(handles[0])
+        _ = driver.current_url
         return True
     except Exception:
         return False
 
 
-def safe_quit(driver):
-    try:
-        driver.quit()
-    except Exception:
-        pass
+def restart_driver(driver, delay=(5, 8)):
+    safe_quit(driver)
+    time.sleep(random.uniform(*delay))
+    return make_driver(headless=False)
 
 
 def get_all_chapters(driver, series_url):
     print(f"  Loading series page...")
+    time.sleep(1)
     driver.get(series_url)
     time.sleep(3)
 
@@ -142,6 +153,7 @@ def get_all_chapters(driver, series_url):
 
 
 def get_chapter_pages(driver, chapter):
+    time.sleep(1)
     driver.get(chapter["url"])
     time.sleep(2)
 
@@ -190,7 +202,6 @@ def scrape(series_url, data):
     existing = set(data[series_id]["chapters"].keys())
     print(f"  Cached chapters: {len(existing)}")
 
-    # Always enforce GUI mode (headless=False) for mgeko
     driver = make_driver(headless=False)
     try:
         all_chapters = None
@@ -198,9 +209,7 @@ def scrape(series_url, data):
             try:
                 if not is_driver_alive(driver):
                     print(f"  ⚠ Driver not alive before series page load — restarting...")
-                    safe_quit(driver)
-                    time.sleep(5)
-                    driver = make_driver(headless=False)
+                    driver = restart_driver(driver)
 
                 all_chapters = get_all_chapters(driver, series_url)
                 break
@@ -209,9 +218,7 @@ def scrape(series_url, data):
                 err_str = str(e)
                 if is_crash_error(err_str):
                     print(f"  ⚠ Chrome crashed loading series page (attempt {attempt}/{MAX_RETRIES}) — restarting driver...")
-                    safe_quit(driver)
-                    time.sleep(random.uniform(8, 15))
-                    driver = make_driver(headless=False)
+                    driver = restart_driver(driver, (8, 15))
                     continue
                 else:
                     print(f"  ✗ Error loading series page (attempt {attempt}/{MAX_RETRIES}): {e}")
@@ -233,21 +240,16 @@ def scrape(series_url, data):
         for i, ch in enumerate(new_chapters):
             print(f"  Fetching Ch.{ch['id']} ({i+1}/{len(new_chapters)})...", end=" ", flush=True)
 
-            # Recycling driver every 30 chapters to clear GUI memory leak
             if i > 0 and i % 30 == 0:
                 print(f"\n  🔄 Recycling Chrome GUI instance (30-chapter threshold)...")
-                safe_quit(driver)
-                time.sleep(3)
-                driver = make_driver(headless=False)
+                driver = restart_driver(driver, (3, 5))
 
             pages = None
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
                     if not is_driver_alive(driver):
                         print(f"\n    ⚠ Driver window closed — restarting...")
-                        safe_quit(driver)
-                        time.sleep(5)
-                        driver = make_driver(headless=False)
+                        driver = restart_driver(driver)
 
                     pages = get_chapter_pages(driver, ch)
                     if not pages:
@@ -267,9 +269,7 @@ def scrape(series_url, data):
                     err_str = str(e)
                     if is_crash_error(err_str):
                         print(f"\n    ⚠ Chrome window crashed — restarting driver...")
-                        safe_quit(driver)
-                        time.sleep(random.uniform(8, 15))
-                        driver = make_driver(headless=False)
+                        driver = restart_driver(driver, (8, 15))
                         continue
                     else:
                         print(f"\n    ✗ Attempt {attempt}/{MAX_RETRIES} error: {e}")
