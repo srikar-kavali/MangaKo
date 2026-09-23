@@ -803,6 +803,14 @@ export const manhwas = [
         genres: ["Action", "Adventure", "Fantasy", "Shounen"],
         status: "Ongoing",
     },
+    {
+        id: "infinite-mage",
+        title: "Infinite Mage",
+        source: "asura",
+        description: "Abandoned at birth in a stable, Shirone was raised by commoners.As a child, he had gifted Insight and had learned how to read. After visiting the city, he finally saw the workings of magic, which he was immensely curious about.This inspired Shirone's dream of becoming a mage. However, the city was a place with a cruel and rigid social hierarchy. Here, Shirone discovered the hidden side of the world before he even reached adulthood...Will Shirone be able to achieve his dream of becoming a mage in this twisted world?     ",
+        genres: ['Action', 'Adventure', 'Fantasy', 'Genius MC', 'Shounen'],
+        status: "Ongoing",
+    },
     /*
     {
         id: "",
