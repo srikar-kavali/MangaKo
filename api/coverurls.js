@@ -28,7 +28,7 @@ export const COVER_URLS = {
     "star-embracing-swordmaster":                                   "https://cdn.asurascans.com/asura-images/covers/star-embracing-swordmaster.6b1222-400.webp",
     "surviving-as-a-genius-on-borrowed-time":                       "https://imgsrv4.com/avatar/288x412/media/manga_covers/01J8XKNNRNH3JG7YXXDS776164-optimized.webp",
     "swordmasters-youngest-son":                                    "https://imgsrv4.com/avatar/288x412/media/manga_covers/swordmasters-youngest-son.jpg",
-    "the-divine-demons-grand-ascension":                            "",
+    "the-divine-demons-grand-ascension":                            "https://cdn.asurascans.com/asura-images/covers/the-divine-demons-grand-ascension.306205.webp",
     "the-extras-academy-survival-guide":                            "https://imgsrv4.com/avatar/288x412/media/manga_covers/zuski.jpg",
     "the-greatest-estate-developer":                                "https://m.media-amazon.com/images/S/compressed.photo.goodreads.com/books/1725185056i/218343539.jpg",
     "the-regressed-mercenarys-machinations":                        "https://imgsrv4.com/avatar/288x412/media/manga_covers/01J8FFNN5BR0T6NF6PVTRKJ29M-optimized.webp",
@@ -43,6 +43,8 @@ export const COVER_URLS = {
     "whispers-of-a-scheming-demon":                                 "https://cdn.asurascans.com/asura-images/covers/my-demonhood-s-genesis.d8e1b3-400.webp",
     "children-of-the-rune":                                         "https://cdn.asurascans.com/asura-images/covers/children-of-the-rune.fa7285.webp",
     "infinite-mage":                                                "https://cdn.asurascans.com/asura-images/covers/infinite-mage.e79aed-400.webp",
+    "solo-swordmaster":                                             "https://cdn.asurascans.com/asura-images/covers/solo-swordmaster.467196-400.webp",
+    "30-years-since-the-prologue":                                  "https://cdn.asurascans.com/asura-images/covers/30-years-since-the-prologue.fc1a93-400.webp",
 
     "mgeko__a-returner-s-magic-should-be-special-mg1-njfia":        "https://imgsrv4.com/avatar/288x412/media/manga_covers/a-returner-s-magic-should-be-speci.png",
     "mgeko__absolute-dominion":                                     "https://imgsrv4.com/avatar/288x412/media/manga_covers/Absolute-Dominion-193x278.webp",

@@ -811,6 +811,40 @@ export const manhwas = [
         genres: ['Action', 'Adventure', 'Fantasy', 'Genius MC', 'Shounen'],
         status: "Ongoing",
     },
+    {
+        id: "solo-swordmaster",
+        title: "Solo Swordmaster",
+        source: "asura",
+        description: "In an age when everyone draws upon the power of Constellations, there is but one man who believes in the sword.\n" +
+            "\n" +
+            "In a world where skills have become the measure of strength, one man reached the pinnacle with nothing but his sword—\n" +
+            "\n" +
+            "The Last Swordmaster, Limón Asphelder.\n" +
+            "\n" +
+            "Even if the world has forgotten him, his sword has yet to reach its end.\n" +
+            "\n" +
+            "\"Skills? I don’t need them. All I need is my sword.\"",
+        genres: ['Action', 'Adventure', 'Fantasy', 'Supernatural'],
+        status: "Ongoing",
+    },
+    {
+        id: "30-years-since-the-prologue",
+        title: "30 Years Since the Prologue",
+        source: "asura",
+        description: "I \"transmigrated\" into a world I'd never seen before.\n" +
+            "\n" +
+            "For thirty years, I believed I was living in a classic fantasy RPG.\n" +
+            "\n" +
+            "I became a war hero, retired, and thought I was finally about to see the ending.\n" +
+            "\n" +
+            "But...\n" +
+            "\n" +
+            "Those thirty years were only the prologue.\n" +
+            "\n" +
+            "It turns out the real story is about an academy?",
+        genres: ["Action", "Adventure", "Comedy", "Fantasy", "Mystery", "School Life"],
+        status: "Ongoing",
+    },
     /*
     {
         id: "",
