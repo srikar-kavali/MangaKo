@@ -45,6 +45,9 @@ export const COVER_URLS = {
     "infinite-mage":                                                "https://cdn.asurascans.com/asura-images/covers/infinite-mage.e79aed-400.webp",
     "solo-swordmaster":                                             "https://cdn.asurascans.com/asura-images/covers/solo-swordmaster.467196-400.webp",
     "30-years-since-the-prologue":                                  "https://cdn.asurascans.com/asura-images/covers/30-years-since-the-prologue.fc1a93-400.webp",
+    "war-of-extinction":                                            "https://cdn.asurascans.com/asura-images/covers/war-of-extinction.f60b25-400.webp",
+    "ode-of-the-brave":                                             "https://cdn.asurascans.com/asura-images/covers/ode-of-the-brave.a46ec2-400.webp",
+    "dungeon-odyssey":                                              "https://cdn.asurascans.com/asura-images/covers/dungeon-odyssey.f39586-400.webp",
 
     "mgeko__a-returner-s-magic-should-be-special-mg1-njfia":        "https://imgsrv4.com/avatar/288x412/media/manga_covers/a-returner-s-magic-should-be-speci.png",
     "mgeko__absolute-dominion":                                     "https://imgsrv4.com/avatar/288x412/media/manga_covers/Absolute-Dominion-193x278.webp",

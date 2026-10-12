@@ -845,6 +845,52 @@ export const manhwas = [
         genres: ["Action", "Adventure", "Comedy", "Fantasy", "Mystery", "School Life"],
         status: "Ongoing",
     },
+    {
+        id: "war-of-extinction",
+        title: "War of Extinction",
+        source: "asura",
+        description: "Heavenly Demons. Hunters. Giant robots. Demon Kings. Superhumans.\n" +
+            "\n" +
+            "The strongest warriors from across the multiverse have gathered in a single arena, each fighting with their entire world on the line. In this battle for survival, defeat means annihilation. Among them are the representatives of the “Ordinary World”—the only world without powers.\n" +
+            "\n" +
+            "Just as they are about to be crushed by monsters far beyond anything they have ever known, an unexpected weapon is granted to them.\n" +
+            "\n" +
+            "[Game Character Abilities Synchronized.]\n" +
+            "\n" +
+            "With the power of video-games at their command, can Shin Jahyeon and the team from the Ordinary World overcome the strongest fighters in the multiverse...\n" +
+            "\n" +
+            "...and save their world from destruction?",
+        genres: ["Action", "Adventure", "Fantasy"],
+        status: "Ongoing",
+    },
+    {
+        id: "ode-of-the-brave",
+        title: "Ode of the Brave",
+        source: "asura",
+        description: "Ten years as a shepherd. Ten years on the battlefield. Ten years as one of history’s most infamous killers.\n" +
+            "\n" +
+            "This is Riki, a man who began as a shepherd on the plains of Heiden and died a Sword Master—the Steel Reaper who brought death wherever he went.\n" +
+            "\n" +
+            "After a life filled with nothing but fire and steel, blood, the stench of death, and screams, he meets a lonely end in an open field.\n" +
+            "\n" +
+            "A hundred years later, he is reborn as the third son of a noble family in a world where the war has ended.\n" +
+            "\n" +
+            "Was there any worth in the war that turned him into a reaper? At the academy,\n" +
+            "\n" +
+            "Riki sets out to become an Adventurer and seek meaning in life and war.\n" +
+            "\n" +
+            "A spine-tingling drama showcasing a boy’s overwhelming strength. A powerful return to classic dark medieval fantasy!",
+        genres: ["Action", "Adventure", "Fantasy", "Reincarnation", "Tragedy"],
+        status: "Ongoing",
+    },
+    {
+        id: "dungeon-odyssey",
+        title: "Dungeon Odyssey",
+        source: "asura",
+        description: "The descendants of mankind, born in the labyrinth and raised on the milk of monsters, possessed special strength and strong bodies. When they returned to earth, mankind referred to them as dungeon babies. Among them, Kim Jinwoo was born in the deepest labyrinth.\"I never tried to become strong, I just wanted to live.\"From the lowliest excavator to the king of the labyrinth, his life story is now unfolding.",
+        genres: ["Action", "Adventure", "Fantasy", "Shounen"],
+        status: "Ongoing",
+    },
     /*
     {
         id: "",
