@@ -297,6 +297,7 @@ export default function Home() {
             try {
                 const titles = await discoverCatalog({ limit: 24 });
                 if (active) {
+                    console.info('Home catalog loaded', { count: titles.length, mangadex: titles.filter(item => item.source === 'mangadex').length });
                     setBrowseManga(titles);
                     setBrowseOffset(24);
                     setBrowseHasMore(titles.filter(item => item.source === 'mangadex').length >= 24);
@@ -304,7 +305,7 @@ export default function Home() {
             } catch (error) {
                 if (active) {
                     setBrowseManga(searchHardcodedManhwa(''));
-                    setBrowseError('Live discovery is temporarily unavailable.');
+                    setBrowseError(`Live discovery failed: ${error?.message || 'unknown error'}`);
                 }
             } finally {
                 if (active) setLoadingBrowse(false);
@@ -632,6 +633,14 @@ export default function Home() {
                                     </Pressable>
                                 );
                             })}
+                        </View>
+                    )}
+                    {!loadingBrowse && browseManga.length === 0 && (
+                        <View style={{ marginHorizontal: 18, padding: 20, backgroundColor: C.bg2, borderRadius: 12 }}>
+                            <Text style={{ color: C.text1, fontWeight: '700', marginBottom: 6 }}>No titles loaded</Text>
+                            <Text style={{ color: C.text2, lineHeight: 19 }}>
+                                Check EXPO_PUBLIC_CHAPTERS_API and the MangaDex API response in your browser's Network tab.
+                            </Text>
                         </View>
                     )}
                     {!!browseError && (
