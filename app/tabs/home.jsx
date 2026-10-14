@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
     SafeAreaView, View, Text, StyleSheet, Image, Pressable,
     TextInput, FlatList, ActivityIndicator, ScrollView,
-    Animated, StatusBar,
+    Animated, StatusBar, useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
@@ -128,6 +128,12 @@ function resolveCardState(manga) {
 }
 
 export default function Home() {
+    const { width: viewportWidth } = useWindowDimensions();
+    const contentWidth = Math.min(viewportWidth, 1280);
+    const gridPadding = viewportWidth >= 700 ? 32 : 18;
+    const gridGap = viewportWidth >= 700 ? 18 : 12;
+    const columns = Math.max(2, Math.min(7, Math.floor((contentWidth - gridPadding * 2 + gridGap) / 166)));
+    const tileWidth = Math.max(0, (contentWidth - gridPadding * 2 - gridGap * (columns - 1)) / columns);
     const [query, setQuery] = useState('');
     const [searchActive, setSearchActive] = useState(false);
     const [recentSearches, setRecentSearches] = useState([]);
@@ -505,7 +511,18 @@ export default function Home() {
                 </>
             )}
 
-            <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 36 }}>
+            <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={S.scrollContent}>
+                <View style={S.hero}>
+                    <View style={S.heroGlow} />
+                    <Text style={S.heroEyebrow}>YOUR LIBRARY, YOUR NEXT ADVENTURE</Text>
+                    <Text style={S.heroTitle}>Discover something{`\n`}worth reading.</Text>
+                    <Text style={S.heroDescription}>Explore manga and manhwa, keep your place, and pick up right where you left off.</Text>
+                    <Pressable style={S.heroAction} onPress={openSearch} accessibilityRole="button" accessibilityLabel="Search manga and manhwa">
+                        <Ionicons name="search-outline" size={17} color="#fff" />
+                        <Text style={S.heroActionText}>Find a story</Text>
+                        <Ionicons name="arrow-forward" size={16} color="#fff" />
+                    </Pressable>
+                </View>
 
                 {/* CONTINUE READING */}
                 {followedManga.length > 0 && (
@@ -605,9 +622,9 @@ export default function Home() {
                         </View>
                     </View>
                     {loadingBrowse ? (
-                        <View style={S.grid}>
-                            {[...Array(6)].map((_, i) => (
-                                <View key={i} style={S.skelCard}>
+                        <View style={[S.grid, { paddingHorizontal: gridPadding, columnGap: gridGap }]}>
+                            {[...Array(columns * 2)].map((_, i) => (
+                                <View key={i} style={[S.skelCard, { width: tileWidth }]}>
                                     <View style={S.skelCover} />
                                     <View style={S.skelLine} />
                                     <View style={[S.skelLine, { width: '55%' }]} />
@@ -615,14 +632,14 @@ export default function Home() {
                             ))}
                         </View>
                     ) : (
-                        <View style={S.grid}>
+                        <View style={[S.grid, { paddingHorizontal: gridPadding, columnGap: gridGap }]}>
                             {browseManga.map((manga, i) => {
                                 const img = getProxied(manga);
                                 const isAS = manga.source === 'asura';
                                 return (
                                     <Pressable
                                         key={`${manga.id}-${i}`}
-                                        style={({ pressed }) => [S.gridCard, { opacity: pressed ? 0.72 : 1 }]}
+                                        style={({ pressed }) => [S.gridCard, { width: tileWidth, opacity: pressed ? 0.76 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }]}
                                         onPress={() => openManga(manga)}
                                     >
                                         <View style={S.gridCoverWrap}>
@@ -803,7 +820,15 @@ const S = StyleSheet.create({
     ddLine: { height: 1, backgroundColor: C.border, marginHorizontal: 12 },
 
     scroll: { flex: 1 },
-    section: { paddingTop: 24 },
+    scrollContent: { paddingBottom: 52, maxWidth: 1280, width: '100%', alignSelf: 'center' },
+    hero: { marginHorizontal: 18, marginTop: 22, paddingHorizontal: 25, paddingVertical: 30, backgroundColor: '#1b1731', borderColor: 'rgba(157,143,255,0.19)', borderWidth: 1, borderRadius: 20, overflow: 'hidden', gap: 10 },
+    heroGlow: { position: 'absolute', top: -110, right: -120, width: 340, height: 340, borderRadius: 170, backgroundColor: 'rgba(124,106,245,0.23)' },
+    heroEyebrow: { color: '#afa4ff', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
+    heroTitle: { color: '#faf9ff', fontSize: 30, fontWeight: '800', letterSpacing: -1, lineHeight: 35, maxWidth: 500 },
+    heroDescription: { color: '#b4afc6', fontSize: 13, lineHeight: 20, maxWidth: 470 },
+    heroAction: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10, backgroundColor: '#735bf0', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12 },
+    heroActionText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+    section: { paddingTop: 32 },
     sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, marginBottom: 14 },
     sectionTitle: { fontSize: 19, fontWeight: '800', color: C.text1, letterSpacing: -0.4 },
     sectionSubtitle: { fontSize: 12, color: C.text2 },
@@ -853,10 +878,10 @@ const S = StyleSheet.create({
 
     contTitle: { fontSize: 11, fontWeight: '600', color: C.text2, lineHeight: 15 },
 
-    grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 18, gap: 14 },
-    gridCard: { width: '30.5%', marginBottom: 14 },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 21 },
+    gridCard: { minWidth: 0, marginBottom: 2 },
     gridCoverWrap: {
-        width: '100%', aspectRatio: 0.68, borderRadius: 9, overflow: 'hidden',
+        width: '100%', aspectRatio: 0.68, borderRadius: 13, overflow: 'hidden',
         backgroundColor: C.bg3, marginBottom: 7,
         shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 7,
     },
@@ -865,9 +890,9 @@ const S = StyleSheet.create({
     gridGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 36, backgroundColor: 'rgba(7,7,10,0.5)' },
     gridBadge: { position: 'absolute', top: 6, right: 6, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
     gridBadgeText: { color: '#fff', fontSize: 8, fontWeight: '800' },
-    gridTitle: { fontSize: 11, fontWeight: '600', color: C.text2, lineHeight: 15 },
+    gridTitle: { fontSize: 12, fontWeight: '700', color: '#dedce7', lineHeight: 17, marginTop: 4 },
 
-    skelCard: { width: '30.5%', marginBottom: 14 },
+    skelCard: { marginBottom: 14 },
     skelCover: { width: '100%', aspectRatio: 0.68, borderRadius: 9, backgroundColor: C.bg3 },
     skelLine: { height: 9, borderRadius: 4, backgroundColor: C.bg3, marginTop: 7, width: '80%' },
 
