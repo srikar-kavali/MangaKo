@@ -12,6 +12,7 @@ import { signOut } from '../../auth/cognito';
 import {
     getRecentSearches, saveRecentSearches, getFavorites,
     getLastReadChapterInfo, getLatestChapter, saveLatestChapter,
+    getHiddenContinueReading, hideFromContinueReading,
     newChapterKey, getLastViewed,
 } from '../searchStorage';
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
@@ -160,13 +161,14 @@ export default function Home() {
     };
 
     const loadFollowedManga = useCallback(async () => {
-        const favs = await getFavorites();
+        const [favs, hiddenCards] = await Promise.all([getFavorites(), getHiddenContinueReading()]);
 
         const withProgress = await Promise.all(
             favs.map(async f => {
                 const key = f.url;
                 const info = await getLastReadChapterInfo(key);
                 if (!info?.chapterUrl) return null;
+                if (hiddenCards[key] && Number(hiddenCards[key]) >= (info.timestamp || 0)) return null;
 
                 const latestChapter = await getLatestChapter(key);
 
@@ -394,6 +396,16 @@ export default function Home() {
 
     const openLastRead = (manga) => openChapter(manga, manga.lastReadChapter);
 
+    const dismissContinueCard = async (manga) => {
+        if (!manga?.url) return;
+        try {
+            await hideFromContinueReading(manga.url);
+            setFollowedManga(current => current.filter(item => item.url !== manga.url));
+        } catch (error) {
+            console.warn('Failed to hide Continue Reading title', error);
+        }
+    };
+
     const fmtCh = (id, src) => {
         if (!id) return '';
         if (src === 'asura' || src === 'mgeko') return `Ch.${id}`;
@@ -450,11 +462,12 @@ export default function Home() {
                     <View style={S.section}>
                         <View style={S.sectionHead}>
                             <Text style={S.sectionTitle}>Continue Reading</Text>
-                            <Pressable onPress={() => router.push('/tabs/library')} style={S.seeAllBtn}>
+                            <Pressable onPress={() => router.push('/tabs/favorites')} style={S.seeAllBtn}>
                                 <Text style={S.seeAllText}>See All</Text>
                                 <Ionicons name="chevron-forward" size={12} color={C.accentBright} />
                             </Pressable>
                         </View>
+                        <Text style={S.sectionHint}>Hide finished titles with ×. Your progress stays saved.</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.hList}>
                             {followedManga.map((manga, i) => {
                                 const img = getProxied(manga);
@@ -484,6 +497,16 @@ export default function Home() {
                                                         : src === 'mangadex' ? C.mdBg
                                                             : C.mpBg,
                                             }]} />
+                                        </Pressable>
+
+                                        <Pressable
+                                            style={S.hideCardButton}
+                                            onPress={() => dismissContinueCard(manga)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`Hide ${manga.title} from Continue Reading`}
+                                            hitSlop={8}
+                                        >
+                                            <Ionicons name="close" size={15} color={C.text1} />
                                         </Pressable>
 
                                         {state === 'CAUGHT_UP' ? (
@@ -717,6 +740,8 @@ const S = StyleSheet.create({
     liveText: { fontSize: 9, fontWeight: '800', color: C.accentBright, letterSpacing: 1 },
 
     hList: { paddingHorizontal: 18, gap: 11, paddingRight: 24 },
+    sectionHint: { color: C.text2, fontSize: 11, marginHorizontal: 18, marginBottom: 12 },
+    hideCardButton: { position: 'absolute', top: 7, left: 7, zIndex: 2, width: 25, height: 25, borderRadius: 13, backgroundColor: 'rgba(7,7,10,0.88)', borderWidth: 1, borderColor: C.borderMid, alignItems: 'center', justifyContent: 'center' },
     contCard: { width: 108 },
     contCoverWrap: {
         width: 108, height: 154, borderRadius: 10, overflow: 'hidden',
