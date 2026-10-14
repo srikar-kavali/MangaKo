@@ -635,6 +635,21 @@ export default function Home() {
                             })}
                         </View>
                     )}
+                    {!!browseError && (
+                        <Text style={{ color: C.text2, marginHorizontal: 18, marginTop: 12 }}>{browseError}</Text>
+                    )}
+                    {browseHasMore && !loadingBrowse && (
+                        <Pressable
+                            onPress={loadMoreCatalog}
+                            disabled={loadingMoreBrowse}
+                            accessibilityRole="button"
+                            accessibilityLabel="Load more manga and manhwa titles"
+                            style={S.loadMoreBtn}
+                        >
+                            {loadingMoreBrowse && <ActivityIndicator size="small" color={C.accentBright} />}
+                            <Text style={S.loadMoreText}>{loadingMoreBrowse ? 'Loading titles…' : 'Load More Titles'}</Text>
+                        </Pressable>
+                    )}
                 </View>
             </ScrollView>
 
@@ -772,6 +787,8 @@ const S = StyleSheet.create({
     liveDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: C.accent },
     liveText: { fontSize: 9, fontWeight: '800', color: C.accentBright, letterSpacing: 1 },
 
+    loadMoreBtn: { alignSelf: 'center', marginVertical: 20, paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, backgroundColor: C.bg3, borderWidth: 1, borderColor: C.borderMid },
+    loadMoreText: { color: C.accentBright, fontWeight: '700', fontSize: 13 },
     hList: { paddingHorizontal: 18, gap: 11, paddingRight: 24 },
     sectionHint: { color: C.text2, fontSize: 11, marginHorizontal: 18, marginBottom: 12 },
     hideCardButton: { position: 'absolute', top: 7, left: 7, zIndex: 2, width: 25, height: 25, borderRadius: 13, backgroundColor: 'rgba(7,7,10,0.88)', borderWidth: 1, borderColor: C.borderMid, alignItems: 'center', justifyContent: 'center' },
