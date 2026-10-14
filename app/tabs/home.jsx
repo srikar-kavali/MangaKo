@@ -156,6 +156,8 @@ export default function Home() {
     const abortRef = useRef(null);
     const searchInputRef = useRef(null);
     const bgCancelledRef = useRef(false);
+    const paginationInFlightRef = useRef(false);
+    const scrollNearEndRef = useRef(false);
 
     const getSource = (m) => {
         const id = String(m.url || m.id || '');
@@ -323,7 +325,8 @@ export default function Home() {
     }, []);
 
     const loadMoreCatalog = async () => {
-        if (loadingMoreBrowse || !browseHasMore) return;
+        if (paginationInFlightRef.current || loadingBrowse || !browseHasMore) return;
+        paginationInFlightRef.current = true;
         setLoadingMoreBrowse(true);
         try {
             const titles = await searchMangadex('', 24, browseOffset);
@@ -334,7 +337,21 @@ export default function Home() {
         } catch (error) {
             setBrowseError('Could not load more titles. Please try again.');
         } finally {
+            paginationInFlightRef.current = false;
             setLoadingMoreBrowse(false);
+        }
+    };
+
+    const handleBrowseScroll = ({ nativeEvent }) => {
+        const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+        const remaining = contentSize.height - (layoutMeasurement.height + contentOffset.y);
+        const nearEnd = remaining < 650;
+        // Trigger only when crossing the threshold, rather than on every scroll event.
+        if (nearEnd && !scrollNearEndRef.current && contentOffset.y > 0) {
+            scrollNearEndRef.current = true;
+            loadMoreCatalog();
+        } else if (!nearEnd) {
+            scrollNearEndRef.current = false;
         }
     };
 
@@ -515,7 +532,7 @@ export default function Home() {
                 </>
             )}
 
-            <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={S.scrollContent}>
+            <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={S.scrollContent} onScroll={handleBrowseScroll} scrollEventThrottle={150}>
                 <View style={[S.hero, followedManga.length > 0 && S.heroCompact]}>
                     <View style={S.heroGlow} />
                     <Text style={S.heroEyebrow}>YOUR LIBRARY, YOUR NEXT ADVENTURE</Text>
@@ -684,16 +701,18 @@ export default function Home() {
                     {!!browseError && (
                         <Text style={{ color: C.text2, marginHorizontal: 18, marginTop: 12 }}>{browseError}</Text>
                     )}
-                    {browseHasMore && !loadingBrowse && (
-                        <Pressable
-                            onPress={loadMoreCatalog}
-                            disabled={loadingMoreBrowse}
-                            accessibilityRole="button"
-                            accessibilityLabel="Load more manga and manhwa titles"
-                            style={S.loadMoreBtn}
-                        >
-                            {loadingMoreBrowse && <ActivityIndicator size="small" color={C.accentBright} />}
-                            <Text style={S.loadMoreText}>{loadingMoreBrowse ? 'Loading titles…' : 'Load More Titles'}</Text>
+                    {loadingMoreBrowse && (
+                        <View style={S.paginationStatus}>
+                            <ActivityIndicator size="small" color={C.accentBright} />
+                            <Text style={S.paginationText}>Discovering more titles…</Text>
+                        </View>
+                    )}
+                    {!browseHasMore && !loadingBrowse && browseManga.length > 0 && (
+                        <Text style={S.paginationText}>You're all caught up.</Text>
+                    )}
+                    {!!browseError && browseHasMore && !loadingMoreBrowse && (
+                        <Pressable onPress={loadMoreCatalog} style={S.retryBtn} accessibilityRole="button">
+                            <Text style={S.loadMoreText}>Retry loading titles</Text>
                         </Pressable>
                     )}
                 </View>
@@ -850,6 +869,9 @@ const S = StyleSheet.create({
     liveDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: C.accent },
     liveText: { fontSize: 9, fontWeight: '800', color: C.accentBright, letterSpacing: 1 },
 
+    paginationStatus: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, paddingVertical: 26 },
+    paginationText: { color: C.text2, fontSize: 12, textAlign: 'center', marginVertical: 12 },
+    retryBtn: { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 18, marginVertical: 12, borderRadius: 10, backgroundColor: C.bg3 },
     loadMoreBtn: { alignSelf: 'center', marginVertical: 20, paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, backgroundColor: C.bg3, borderWidth: 1, borderColor: C.borderMid },
     loadMoreText: { color: C.accentBright, fontWeight: '700', fontSize: 13 },
     hList: { paddingHorizontal: 18, gap: 14, paddingRight: 30, paddingBottom: 8 },
