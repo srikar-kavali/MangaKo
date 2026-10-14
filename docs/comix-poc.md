@@ -32,3 +32,13 @@ The documented API wraps and proxies Comix.to content; its author says it is **u
 - Verify safe-only filters, failures, timeouts, and rate limits.
 - Decide on licensing/permission and long-term operational ownership.
 - Only then build a UI experiment behind the feature flag.
+
+## Live test screen
+
+After pulling the latest `cleanup` branch, add `EXPO_PUBLIC_ENABLE_COMIX=true` to your local `.env` and restart:
+
+```bash
+npx expo start --clear
+```
+
+Open `http://localhost:8081/comix-lab` on web, or navigate to `/comix-lab` inside Expo Router. This route is **not in the app tabs**. Try the preset searches, tap a title, and select **Inspect chapter list**. Copy any error shown on the screen or the chapter JSON response for verification. Nothing is saved to your reading history.
