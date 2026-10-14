@@ -139,6 +139,7 @@ export default function Home() {
     const [browseOffset, setBrowseOffset] = useState(0);
     const [browseHasMore, setBrowseHasMore] = useState(true);
     const [browseError, setBrowseError] = useState('');
+    const [catalogFilter, setCatalogFilter] = useState('all');
     const [dropdownVisible, setDropdownVisible] = useState(false);
 
     const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -587,6 +588,23 @@ export default function Home() {
                             <Text style={S.liveText}>DISCOVER</Text>
                         </View>
                     </View>
+                    <View style={S.catalogFilters}>
+                        {[
+                            ['all', 'All Titles'],
+                            ['manhwa', 'Manhwa'],
+                            ['manga', 'Manga'],
+                        ].map(([value, label]) => (
+                            <Pressable
+                                key={value}
+                                accessibilityRole="button"
+                                accessibilityState={{ selected: catalogFilter === value }}
+                                onPress={() => setCatalogFilter(value)}
+                                style={[S.catalogFilter, catalogFilter === value && S.catalogFilterActive]}
+                            >
+                                <Text style={[S.catalogFilterText, catalogFilter === value && S.catalogFilterTextActive]}>{label}</Text>
+                            </Pressable>
+                        ))}
+                    </View>
 
                     {loadingBrowse ? (
                         <View style={S.grid}>
@@ -600,7 +618,7 @@ export default function Home() {
                         </View>
                     ) : (
                         <View style={S.grid}>
-                            {browseManga.map((manga, i) => {
+                            {browseManga.filter(item => catalogFilter === 'all' || (catalogFilter === 'manhwa' ? item.source === 'asura' || item.source === 'mgeko' : item.source === 'mangapill' || item.source === 'mangadex')).map((manga, i) => {
                                 const img = getProxied(manga);
                                 const isAS = manga.source === 'asura';
                                 return (
@@ -789,6 +807,11 @@ const S = StyleSheet.create({
 
     loadMoreBtn: { alignSelf: 'center', marginVertical: 20, paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, backgroundColor: C.bg3, borderWidth: 1, borderColor: C.borderMid },
     loadMoreText: { color: C.accentBright, fontWeight: '700', fontSize: 13 },
+    catalogFilters: { flexDirection: 'row', gap: 8, paddingHorizontal: 18, marginBottom: 16 },
+    catalogFilter: { borderWidth: 1, borderColor: C.borderMid, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, backgroundColor: C.bg2 },
+    catalogFilterActive: { backgroundColor: C.accentDim, borderColor: C.accent },
+    catalogFilterText: { color: C.text2, fontSize: 12, fontWeight: '700' },
+    catalogFilterTextActive: { color: C.accentBright },
     hList: { paddingHorizontal: 18, gap: 11, paddingRight: 24 },
     sectionHint: { color: C.text2, fontSize: 11, marginHorizontal: 18, marginBottom: 12 },
     hideCardButton: { position: 'absolute', top: 7, left: 7, zIndex: 2, width: 25, height: 25, borderRadius: 13, backgroundColor: 'rgba(7,7,10,0.88)', borderWidth: 1, borderColor: C.borderMid, alignItems: 'center', justifyContent: 'center' },
