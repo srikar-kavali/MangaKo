@@ -189,6 +189,8 @@ export default function Favorites() {
         }
     };
 
+    const desktopRows = viewportWidth >= 900;
+
     const renderItem = ({ item }) => {
         const lr = lastReadInfo[item.url];
         const src = getSource(item);
@@ -213,22 +215,22 @@ export default function Favorites() {
 
         return (
             <Pressable
-                style={({ pressed }) => [S.card, isCompleted && S.cardCompleted, { opacity: pressed ? 0.88 : 1 }]}
+                style={({ pressed }) => [S.card, desktopRows && S.cardDesktop, isCompleted && S.cardCompleted, { opacity: pressed ? 0.88 : 1 }]}
                 onPress={() => openDetails(item)}
             >
                 {/* Left accent bar — color = status color */}
                 <View style={[S.cardBar, { backgroundColor: cfg.color }]} />
 
                 {/* Cover — proxied through the correct source-specific proxy */}
-                <View style={S.coverWrap}>
+                <View style={[S.coverWrap, desktopRows && S.coverWrapDesktop]}>
                     {cover ? (
                         <Image
                             source={{ uri: cover }}
-                            style={[S.cover, isCompleted && S.coverCompleted]}
+                            style={[S.cover, desktopRows && S.coverDesktop, isCompleted && S.coverCompleted]}
                             resizeMode="cover"
                         />
                     ) : (
-                        <View style={[S.cover, S.coverEmpty]}>
+                        <View style={[S.cover, desktopRows && S.coverDesktop, S.coverEmpty]}>
                             <Ionicons name="book-outline" size={20} color={C.text3} />
                         </View>
                     )}
@@ -243,14 +245,14 @@ export default function Favorites() {
                 </View>
 
                 {/* Content */}
-                <View style={S.content}>
+                <View style={[S.content, desktopRows && S.contentDesktop]}>
 
                     {/* Title + delete */}
                     <View style={S.titleRow}>
                         <Text style={[S.title, isCompleted && { color: C.text2 }]} numberOfLines={2}>{item.title}</Text>
-                        <Pressable onPress={() => handleRemove(item.url)} style={S.delBtn} hitSlop={10}>
+                        {!desktopRows && <Pressable onPress={(e) => { e.stopPropagation?.(); handleRemove(item.url); }} style={S.delBtn} hitSlop={10}>
                             <Ionicons name="trash-outline" size={15} color={C.text3} />
-                        </Pressable>
+                        </Pressable>}
                     </View>
 
                     {/* Chapter progress bar */}
@@ -281,7 +283,7 @@ export default function Favorites() {
                     )}
 
                     {/* Footer row — status dropdown + continue btn + timestamp */}
-                    <View style={S.footer}>
+                    <View style={[S.footer, desktopRows && S.footerDesktop]}>
                         {/* Status dropdown trigger */}
                         <Pressable
                             style={[S.statusBtn, { borderColor: cfg.border, backgroundColor: cfg.dim }]}
@@ -308,6 +310,9 @@ export default function Favorites() {
                         )}
                     </View>
                 </View>
+                {desktopRows && <Pressable style={S.desktopRemove} onPress={(e) => { e.stopPropagation?.(); handleRemove(item.url); }} hitSlop={8} accessibilityLabel={`Remove ${item.title} from My List`}>
+                    <Ionicons name="trash-outline" size={15} color={C.text2} />
+                </Pressable>}
             </Pressable>
         );
     };
@@ -338,6 +343,13 @@ export default function Favorites() {
 
             {/* Header */}
             <View style={S.header}>
+                {viewportWidth >= 900 && <View style={S.desktopNavigation}>
+                    <Text style={S.brand}>Mangako</Text>
+                    <View style={S.navigationLinks}>
+                        <Pressable onPress={() => router.push('/tabs/home')} style={S.navItem}><Text style={S.navText}>Discover</Text></Pressable>
+                        <Pressable onPress={() => router.push('/tabs/favorites')} style={S.navActive}><Text style={S.navActiveText}>My List</Text></Pressable>
+                    </View>
+                </View>}
                 <View style={S.headerTop}>
                     <View>
                         <Text style={S.headerTitle}>My List</Text>
@@ -465,6 +477,13 @@ export default function Favorites() {
 const S = StyleSheet.create({
     screen: { flex: 1, backgroundColor: C.bg1 },
 
+    desktopNavigation: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: C.border, marginBottom: 18 },
+    brand: { color: C.text1, fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
+    navigationLinks: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    navItem: { paddingVertical: 9, paddingHorizontal: 16 },
+    navText: { color: C.text2, fontWeight: '700', fontSize: 13 },
+    navActive: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10, backgroundColor: C.accentDim },
+    navActiveText: { color: C.accentBright, fontWeight: '800', fontSize: 13 },
     header: {
         backgroundColor: C.bg1,
         borderBottomWidth: 1, borderBottomColor: C.border,
@@ -479,7 +498,7 @@ const S = StyleSheet.create({
     statNum: { fontSize: 13, fontWeight: '800' },
     statLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
 
-    list: { padding: 12, gap: 12, paddingBottom: 42 },
+    list: { padding: 12, gap: 9, paddingBottom: 42 },
     libraryToolbar: { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 22, paddingBottom: 8, gap: 14 },
     searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.bg3, borderColor: C.borderMid, borderWidth: 1, paddingHorizontal: 14, borderRadius: 12, minHeight: 48 },
     librarySearch: { flex: 1, color: C.text1, fontSize: 14, paddingVertical: 11, minWidth: 0 },
@@ -501,6 +520,12 @@ const S = StyleSheet.create({
         shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 5,
     },
     cardCompleted: { opacity: 0.72 },
+    cardDesktop: { minHeight: 104, alignItems: 'center' },
+    coverWrapDesktop: { width: 74, height: 104 },
+    coverDesktop: { width: 74, height: 104 },
+    contentDesktop: { minHeight: 104, paddingVertical: 12, justifyContent: 'center', gap: 8 },
+    footerDesktop: { marginTop: 0, gap: 10 },
+    desktopRemove: { width: 48, height: 104, alignItems: 'center', justifyContent: 'center' },
     cardBar: { width: 3 },
 
     coverWrap: { width: 80, position: 'relative' },
