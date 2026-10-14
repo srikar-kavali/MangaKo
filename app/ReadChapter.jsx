@@ -56,6 +56,8 @@ const ReadChapter = () => {
     const [pages, setPages] = useState([]);
     const [allChapters, setAllChapters] = useState([]);
     const [loadingPages, setLoadingPages] = useState(false);
+    const [pageError, setPageError] = useState('');
+    const [retryCount, setRetryCount] = useState(0);
     const [imageSizes, setImageSizes] = useState({});
     const [screenWidth, setScreenWidth] = useState(getW());
     const [pickerVisible, setPickerVisible] = useState(false);
@@ -86,16 +88,29 @@ const ReadChapter = () => {
         (async () => {
             if (!selectedCh) { setPages([]); return; }
             setLoadingPages(true);
+            setPageError('');
             scrollRef.current?.scrollTo({ y: 0, animated: false });
             try {
                 let urls = [];
                 if (isAsura && seriesId) {
-                    const res = await fetch(`${BACKEND}/api/asura-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`);
+                    if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
+                    const requestUrl = `${BACKEND.replace(/\/$/, '')}/api/asura-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`;
+                    let res;
+                    try { res = await fetch(requestUrl); }
+                    catch (error) { throw new Error(`Could not reach chapter backend at ${requestUrl}. Check the Network tab for a CORS or connection failure. ${error?.message || ''}`); }
+                    if (!res.ok) throw new Error(`Chapter API HTTP ${res.status}: ${requestUrl}`);
                     const json = await res.json();
-                    urls = (json.pages || []).map(u => `${BACKEND}/api/image_proxy?url=${encodeURIComponent(u)}`);
+                    if (!Array.isArray(json?.pages)) throw new Error(`Invalid pages response from ${requestUrl}`);
+                    urls = json.pages.map(u => `${BACKEND.replace(/\/$/, '')}/api/image_proxy?url=${encodeURIComponent(u)}`);
                 } else if (isMgeko && seriesId) {
-                    const res = await fetch(`${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`);
+                    if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
+                    const requestUrl = `${BACKEND.replace(/\/$/, '')}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`;
+                    let res;
+                    try { res = await fetch(requestUrl); }
+                    catch (error) { throw new Error(`Could not reach chapter backend at ${requestUrl}. ${error?.message || ''}`); }
+                    if (!res.ok) throw new Error(`Chapter API HTTP ${res.status}: ${requestUrl}`);
                     const json = await res.json();
+                    if (!Array.isArray(json?.pages)) throw new Error(`Invalid pages response from ${requestUrl}`);
                     urls = (json.pages || []).map(u => proxiedMgeko(u));
                 } else if (isMangapill) {
                     const raw = await getChapterPagesMangapill(selectedCh);
@@ -112,14 +127,14 @@ const ReadChapter = () => {
                     setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: false }), 80);
                 }
             } catch (e) {
-                console.error('ReadChapter pages error:', e);
-                if (!cancelled) setPages([]);
+                console.warn('ReadChapter page request failed:', e?.message || e);
+                if (!cancelled) { setPages([]); setPageError(e?.message || 'Unable to load chapter pages.'); }
             } finally {
                 if (!cancelled) setLoadingPages(false);
             }
         })();
         return () => { cancelled = true; };
-    }, [selectedCh]);
+    }, [selectedCh, retryCount]);
 
     useEffect(() => {
         let cancelled = false;
@@ -262,6 +277,8 @@ const ReadChapter = () => {
 
                 {!loadingPages && pages.length === 0 && (
                     <View style={S.emptyWrap}>
+                        {!!pageError && <Text style={S.pageError} selectable>{pageError}</Text>}
+                        {!!pageError && <Pressable style={S.retryButton} onPress={() => setRetryCount(v => v + 1)} accessibilityRole="button"><Text style={S.retryLabel}>Retry chapter pages</Text></Pressable>}
                         <Ionicons name="image-outline" size={40} color={C.text3} />
                         <Text style={S.emptyText}>No pages found.</Text>
                     </View>
@@ -373,6 +390,9 @@ const S = StyleSheet.create({
     loadText: { color: C.text3, fontSize: 13 },
     emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 10 },
     emptyText: { color: C.text3, fontSize: 14 },
+    pageError: { color: '#fca5a5', fontSize: 12, lineHeight: 19, textAlign: 'center', maxWidth: 700, paddingHorizontal: 20 },
+    retryButton: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10, backgroundColor: C.accent, marginTop: 6 },
+    retryLabel: { color: '#fff', fontWeight: '800', fontSize: 13 },
     nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginVertical: 20, paddingHorizontal: 14 },
     navBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: C.bg3, paddingVertical: 13, borderRadius: 10, borderWidth: 1, borderColor: C.border },
     navBtnNext: { backgroundColor: C.accent, borderColor: C.accent, shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 },
