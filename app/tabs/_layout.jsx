@@ -2,7 +2,7 @@ import { Tabs } from 'expo-router';
 import { Amplify } from 'aws-amplify';
 import awsconfig from '../../src/aws-exports';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 
 Amplify.configure(awsconfig);
 
@@ -16,11 +16,14 @@ const INACTIVE   = '#666570'; // Brightened slightly for dark mode contrast
 const isIOSDevice = Platform.OS === 'ios' || (Platform.OS === 'web' && /iPhone|iPad|iPod/i.test(navigator.userAgent));
 
 export default function Layout() {
+    const { width } = useWindowDimensions();
+    const desktop = Platform.OS === 'web' && width >= 900;
     return (
         <Tabs
             screenOptions={{
                 headerShown: false,
                 tabBarStyle: {
+                    display: desktop ? 'none' : 'flex',
                     backgroundColor: TAB_BG,
                     borderTopWidth: 1,
                     borderTopColor: BORDER,

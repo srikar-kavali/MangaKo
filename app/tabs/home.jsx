@@ -482,6 +482,10 @@ export default function Home() {
                         <Text style={S.logoText}>Mangako</Text>
                     </View>
                     <View style={S.headerRight}>
+                        {viewportWidth >= 900 && <View style={S.desktopNav}>
+                            <Pressable style={S.desktopNavActive} onPress={() => router.push("/tabs/home")}><Text style={S.desktopNavActiveText}>Discover</Text></Pressable>
+                            <Pressable style={S.desktopNavItem} onPress={() => router.push("/tabs/favorites")}><Text style={S.desktopNavText}>My List</Text></Pressable>
+                        </View>}
                         <Pressable style={S.iconBtn} onPress={openSearch} hitSlop={10}>
                             <Ionicons name="search-outline" size={20} color={C.text2} />
                         </Pressable>
@@ -512,11 +516,11 @@ export default function Home() {
             )}
 
             <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={S.scrollContent}>
-                <View style={S.hero}>
+                <View style={[S.hero, followedManga.length > 0 && S.heroCompact]}>
                     <View style={S.heroGlow} />
                     <Text style={S.heroEyebrow}>YOUR LIBRARY, YOUR NEXT ADVENTURE</Text>
-                    <Text style={S.heroTitle}>Discover something{`\n`}worth reading.</Text>
-                    <Text style={S.heroDescription}>Explore manga and manhwa, keep your place, and pick up right where you left off.</Text>
+                    <Text style={[S.heroTitle, followedManga.length > 0 && S.heroCompactTitle]}>{followedManga.length > 0 ? "Ready for another chapter?" : "Discover something worth reading."}</Text>
+                    <Text style={S.heroDescription}>{followedManga.length > 0 ? "Your stories are waiting below. Or find your next favorite." : "Explore manga and manhwa, keep your place, and pick up right where you left off."}</Text>
                     <Pressable style={S.heroAction} onPress={openSearch} accessibilityRole="button" accessibilityLabel="Search manga and manhwa">
                         <Ionicons name="search-outline" size={17} color="#fff" />
                         <Text style={S.heroActionText}>Find a story</Text>
@@ -534,7 +538,7 @@ export default function Home() {
                                 <Ionicons name="chevron-forward" size={12} color={C.accentBright} />
                             </Pressable>
                         </View>
-                        <Text style={S.sectionHint}>Hide finished titles with ×. Your progress stays saved.</Text>
+                        <Text style={S.sectionHint}>Jump back into your stories · Hide a title without losing progress</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.hList}>
                             {followedManga.map((manga, i) => {
                                 const img = getProxied(manga);
@@ -542,9 +546,9 @@ export default function Home() {
                                 const { state } = resolveCardState(manga);
 
                                 return (
-                                    <View key={`${manga.url}-${i}`} style={S.contCard}>
+                                    <View key={`${manga.url}-${i}`} style={[S.contCard, viewportWidth >= 700 && S.contCardDesktop]}>
                                         <Pressable
-                                            style={({ pressed }) => [S.contCoverWrap, { opacity: pressed ? 0.75 : 1 }]}
+                                            style={({ pressed }) => [S.contCoverWrap, viewportWidth >= 700 && S.contCoverDesktop, { opacity: pressed ? 0.75 : 1 }]}
                                             onPress={() => openManga(manga)}
                                         >
                                             {img ? (
@@ -805,7 +809,12 @@ const S = StyleSheet.create({
     logoRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
     logoImg: { width: 28, height: 28 },
     logoText: { fontSize: 20, fontWeight: '800', color: C.text1, letterSpacing: -0.8 },
-    headerRight: { flexDirection: 'row', gap: 2 },
+    headerRight: { flexDirection: 'row', gap: 2, alignItems: 'center' },
+    desktopNav: { flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 18 },
+    desktopNavActive: { paddingVertical: 9, paddingHorizontal: 16, backgroundColor: C.accentDim, borderRadius: 10 },
+    desktopNavActiveText: { color: C.accentBright, fontSize: 13, fontWeight: '800' },
+    desktopNavItem: { paddingVertical: 9, paddingHorizontal: 16 },
+    desktopNavText: { color: C.text2, fontSize: 13, fontWeight: '700' },
     iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 18 },
 
     ddMask: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 98 },
@@ -822,6 +831,8 @@ const S = StyleSheet.create({
     scroll: { flex: 1 },
     scrollContent: { paddingBottom: 52, maxWidth: 1280, width: '100%', alignSelf: 'center' },
     hero: { marginHorizontal: 18, marginTop: 22, paddingHorizontal: 25, paddingVertical: 30, backgroundColor: '#1b1731', borderColor: 'rgba(157,143,255,0.19)', borderWidth: 1, borderRadius: 20, overflow: 'hidden', gap: 10 },
+    heroCompact: { paddingVertical: 18, gap: 7 },
+    heroCompactTitle: { fontSize: 24, lineHeight: 30 },
     heroGlow: { position: 'absolute', top: -110, right: -120, width: 340, height: 340, borderRadius: 170, backgroundColor: 'rgba(124,106,245,0.23)' },
     heroEyebrow: { color: '#afa4ff', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
     heroTitle: { color: '#faf9ff', fontSize: 30, fontWeight: '800', letterSpacing: -1, lineHeight: 35, maxWidth: 500 },
@@ -841,12 +852,14 @@ const S = StyleSheet.create({
 
     loadMoreBtn: { alignSelf: 'center', marginVertical: 20, paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, backgroundColor: C.bg3, borderWidth: 1, borderColor: C.borderMid },
     loadMoreText: { color: C.accentBright, fontWeight: '700', fontSize: 13 },
-    hList: { paddingHorizontal: 18, gap: 11, paddingRight: 24 },
+    hList: { paddingHorizontal: 18, gap: 14, paddingRight: 30, paddingBottom: 8 },
     sectionHint: { color: C.text2, fontSize: 11, marginHorizontal: 18, marginBottom: 12 },
     hideCardButton: { position: 'absolute', top: 7, left: 7, zIndex: 2, width: 25, height: 25, borderRadius: 13, backgroundColor: 'rgba(7,7,10,0.88)', borderWidth: 1, borderColor: C.borderMid, alignItems: 'center', justifyContent: 'center' },
-    contCard: { width: 108 },
+    contCard: { width: 118 },
+    contCardDesktop: { width: 138 },
+    contCoverDesktop: { width: 138, height: 192 },
     contCoverWrap: {
-        width: 108, height: 154, borderRadius: 10, overflow: 'hidden',
+        width: 118, height: 167, borderRadius: 12, overflow: 'hidden',
         backgroundColor: '#2a2a35', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
         marginBottom: 8,
         shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.55, shadowRadius: 14, elevation: 10,
@@ -858,6 +871,7 @@ const S = StyleSheet.create({
     srcDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' },
 
     contChBtn: {
+        minHeight: 30,
         alignItems: 'center', justifyContent: 'center',
         backgroundColor: C.accent,
         borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6, marginBottom: 7,
@@ -870,13 +884,14 @@ const S = StyleSheet.create({
     contChText: { color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 0.1 },
 
     caughtUpBox: {
+        minHeight: 30,
         alignItems: 'center', justifyContent: 'center',
         borderWidth: 1, borderColor: C.greenBorder, backgroundColor: C.greenDim,
         borderRadius: 6, paddingVertical: 5, paddingHorizontal: 6, marginBottom: 7,
     },
     caughtUpText: { color: C.green, fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
 
-    contTitle: { fontSize: 11, fontWeight: '600', color: C.text2, lineHeight: 15 },
+    contTitle: { fontSize: 12, fontWeight: '700', color: '#d3d0dd', lineHeight: 17 },
 
     grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 21 },
     gridCard: { minWidth: 0, marginBottom: 2 },
