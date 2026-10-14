@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const RECENT_SEARCHES_KEY = 'recentSearches';
 const FAVORITES_KEY = 'favorites';
 const LAST_READ_KEY = 'lastReadChapters';
+const HIDDEN_CONTINUE_KEY = 'hiddenContinueReading';
 const COMPLETED_KEY = 'completed_manga';
 
 const NEW_CHAPTER_PREFIX = 'newchapter:';
@@ -227,3 +228,27 @@ export const getLatestChapter = async (mangaUrl) => {
 export const setLastReadChapter = saveLastReadChapter;
 export const updateLastRead = saveLastReadChapter;
 export const getLastRead = getLastReadChapter;
+// Dismissing a Continue Reading card never deletes reading progress.
+export async function getHiddenContinueReading() {
+    try {
+        const raw = await AsyncStorage.getItem(HIDDEN_CONTINUE_KEY);
+        const value = raw ? JSON.parse(raw) : {};
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    } catch (error) {
+        console.warn('Unable to load hidden reading cards', error);
+        return {};
+    }
+}
+
+export async function hideFromContinueReading(mangaUrl) {
+    if (!mangaUrl) return;
+    const hidden = await getHiddenContinueReading();
+    hidden[mangaUrl] = Date.now();
+    await AsyncStorage.setItem(HIDDEN_CONTINUE_KEY, JSON.stringify(hidden));
+}
+
+export async function showInContinueReading(mangaUrl) {
+    const hidden = await getHiddenContinueReading();
+    delete hidden[mangaUrl];
+    await AsyncStorage.setItem(HIDDEN_CONTINUE_KEY, JSON.stringify(hidden));
+}
