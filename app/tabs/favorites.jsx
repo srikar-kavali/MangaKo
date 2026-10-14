@@ -59,15 +59,16 @@ export default function Favorites() {
         try {
             const list = await getFavorites();
 
-            // Load status for each item
+            // Read statuses and chapter counts in one storage round-trip.
+            const keys = list.flatMap(f => [`status:${f.url}`, `chapterCount:${f.url}`]);
+            const storedEntries = keys.length ? await AsyncStorage.multiGet(keys) : [];
+            const storedMap = new Map(storedEntries);
             const sMap = {};
             const ccMap = {};
             for (const f of list) {
-                const s = await AsyncStorage.getItem(`status:${f.url}`).catch(() => null);
-                sMap[f.url] = s || 'Reading';
-                // Total chapter count stored on manga data
-                const stored = await AsyncStorage.getItem(`chapterCount:${f.url}`).catch(() => null);
-                if (stored) ccMap[f.url] = parseInt(stored);
+                sMap[f.url] = storedMap.get(`status:${f.url}`) || 'Reading';
+                const count = Number.parseInt(storedMap.get(`chapterCount:${f.url}`), 10);
+                if (Number.isFinite(count) && count > 0) ccMap[f.url] = count;
             }
             setStatusMap(sMap);
             setChapterCounts(ccMap);
@@ -80,10 +81,16 @@ export default function Favorites() {
             });
             setFavorites(sorted);
 
+            // Limit concurrent progress reads rather than blocking once per title.
             const lrData = {};
-            for (const f of sorted) {
-                const lr = await getLastReadChapterInfo(f.url);
-                if (lr) lrData[f.url] = lr;
+            for (let i = 0; i < sorted.length; i += 16) {
+                const batch = sorted.slice(i, i + 16);
+                const results = await Promise.all(batch.map(async f => {
+                    try { return await getLastReadChapterInfo(f.url); } catch { return null; }
+                }));
+                batch.forEach((f, index) => {
+                    if (results[index]) lrData[f.url] = results[index];
+                });
             }
             setLastReadInfo(lrData);
         } catch(e) { console.error(e); }
@@ -429,6 +436,10 @@ export default function Favorites() {
                     data={filteredFavorites}
                     keyExtractor={item => item.url}
                     renderItem={renderItem}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={8}
+                    updateCellsBatchingPeriod={50}
+                    windowSize={7}
                     contentContainerStyle={[S.list, { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: viewportWidth >= 700 ? 24 : 12 }]}
                     ListEmptyComponent={<View style={S.emptyFiltered}><Ionicons name="search-outline" size={25} color={C.text2} /><Text style={S.emptyTitle}>No matching titles</Text><Text style={S.emptySub}>Try another search or reading status.</Text></View>}
                     showsVerticalScrollIndicator={false}
