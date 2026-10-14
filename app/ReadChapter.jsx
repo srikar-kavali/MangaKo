@@ -60,6 +60,8 @@ const ReadChapter = () => {
     const [allChapters, setAllChapters] = useState([]);
     const [loadingPages, setLoadingPages] = useState(false);
     const [pageError, setPageError] = useState('');
+    const [chaptersError, setChaptersError] = useState('');
+    const [chapterListRetry, setChapterListRetry] = useState(0);
     const [retryCount, setRetryCount] = useState(0);
     const [imageSizes, setImageSizes] = useState({});
     const [screenWidth, setScreenWidth] = useState(getW());
@@ -146,6 +148,7 @@ const ReadChapter = () => {
         let cancelled = false;
         (async () => {
             if (!seriesId && !mangapillUrl) return;
+            setChaptersError('');
             try {
                 let chapters = [];
                 if (isAsura && seriesId) {
@@ -189,11 +192,14 @@ const ReadChapter = () => {
                     if (!selectedCh && chapters.length) setSelectedCh(chapters[0].id);
                 }
             } catch (e) {
-                console.error('ReadChapter chapters list error:', e);
+                if (!cancelled) {
+                    setChaptersError(e?.message || 'Chapter list could not be loaded.');
+                    setAllChapters([]);
+                }
             }
         })();
         return () => { cancelled = true; };
-    }, [seriesId, mangapillUrl, source]);
+    }, [seriesId, mangapillUrl, source, chapterListRetry]);
 
     const toggleHeader = () => {
         clearTimeout(tapTimer.current);
@@ -315,6 +321,13 @@ const ReadChapter = () => {
                     </View>
                 )}
 
+                {!!chaptersError && !loadingPages && (
+                    <View style={S.listErrorBox}>
+                        <Text style={S.listErrorText}>Chapter selection unavailable: {chaptersError}</Text>
+                        <Pressable onPress={() => setChapterListRetry(n => n + 1)} style={S.retryButton} accessibilityRole="button"><Text style={S.retryLabel}>Retry chapter list</Text></Pressable>
+                    </View>
+                )}
+
                 <View style={S.nav}>
                     <Pressable
                         disabled={!hasPrev}
@@ -422,6 +435,8 @@ const S = StyleSheet.create({
     pageError: { color: '#fca5a5', fontSize: 12, lineHeight: 19, textAlign: 'center', maxWidth: 700, paddingHorizontal: 20 },
     retryButton: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10, backgroundColor: C.accent, marginTop: 6 },
     retryLabel: { color: '#fff', fontWeight: '800', fontSize: 13 },
+    listErrorBox: { alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 12 },
+    listErrorText: { color: '#fca5a5', fontSize: 12, textAlign: 'center', lineHeight: 19 },
     nav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginVertical: 20, paddingHorizontal: 14 },
     navBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: C.bg3, paddingVertical: 13, borderRadius: 10, borderWidth: 1, borderColor: C.border },
     navBtnNext: { backgroundColor: C.accent, borderColor: C.accent, shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 },
