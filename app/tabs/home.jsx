@@ -161,15 +161,15 @@ export default function Home() {
     const columns = Math.max(2, Math.min(7, Math.floor((contentWidth - gridPadding * 2 + gridGap) / 166)));
     const tileWidth = Math.max(0, (contentWidth - gridPadding * 2 - gridGap * (columns - 1)) / columns);
     const [query, setQuery] = useState('');
-    // Group titles into virtualized rows so the carousel and hero remain above the grid.
-    const discoveryRows = [];
-    for (let i = 0; i < browseManga.length; i += columns) discoveryRows.push(browseManga.slice(i, i + columns));
     const [searchActive, setSearchActive] = useState(false);
     const [recentSearches, setRecentSearches] = useState([]);
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [followedManga, setFollowedManga] = useState([]);
     const [browseManga, setBrowseManga] = useState([]);
+    // Group titles into virtualized rows so the carousel and hero remain above the grid.
+    const discoveryRows = [];
+    for (let i = 0; i < browseManga.length; i += columns) discoveryRows.push(browseManga.slice(i, i + columns));
     const [loadingBrowse, setLoadingBrowse] = useState(false);
     const [loadingMoreBrowse, setLoadingMoreBrowse] = useState(false);
     const [browseOffset, setBrowseOffset] = useState(0);
