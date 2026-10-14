@@ -1,19 +1,36 @@
+# Dependencies and Expo output
 node_modules/
-.env
-.env.local
-.env.*.local
 .expo/
 dist/
-__pycache__/
+web-build/
+coverage/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
 .venv/
-*.pyc
-extractor/__pycache__/
-extractor/sites/__pycache__/
-extractor/shared/__pycache__/
-.DS_Store
-.idea/
+venv/
+
+# Build and hosting artifacts
 .vercel/
 amplify/
-src/amplifyconfiguration.json
-extractor/.env
+*.log
+
+# Python caches and generated data
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 extractor/chapter_data.json
+extractor/chapter_data.json.bak
+extractor/chapter_data.json.tmp
+
+# OS and editor-specific files
+.DS_Store
+.idea/
+.vscode/
+
+# Machine-generated Amplify configuration
+src/amplifyconfiguration.json
