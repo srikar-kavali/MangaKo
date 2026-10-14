@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
     View, Text, FlatList, Pressable, StyleSheet,
     Image, SafeAreaView, RefreshControl, StatusBar, Modal,
-    TouchableOpacity,
+    TouchableOpacity, TextInput, ScrollView, useWindowDimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { getFavorites, getLastReadChapterInfo, removeFavorite } from "../searchStorage";
@@ -42,6 +42,9 @@ const STATUS_ORDER = { 'Reading': 0, 'Plan to Read': 1, 'On Hold': 2, 'Hiatus': 
 
 export default function Favorites() {
     const [favorites, setFavorites] = useState([]);
+    const [libraryQuery, setLibraryQuery] = useState('');
+    const [activeFilter, setActiveFilter] = useState('All');
+    const { width: viewportWidth } = useWindowDimensions();
     const [lastReadInfo, setLastReadInfo] = useState({});
     const [statusMap, setStatusMap] = useState({});       // url -> status string
     const [chapterCounts, setChapterCounts] = useState({}); // url -> total chapters from storage
@@ -315,6 +318,12 @@ export default function Favorites() {
         acc[s] = (acc[s] || 0) + 1; return acc;
     }, {});
 
+    const filteredFavorites = favorites.filter(f => {
+        const status = statusMap[f.url] || 'Reading';
+        return (activeFilter === 'All' || status === activeFilter)
+            && String(f.title || '').toLowerCase().includes(libraryQuery.trim().toLowerCase());
+    });
+
     if (loading) {
         return (
             <SafeAreaView style={S.screen}>
@@ -332,7 +341,7 @@ export default function Favorites() {
                 <View style={S.headerTop}>
                     <View>
                         <Text style={S.headerTitle}>My List</Text>
-                        <Text style={S.headerSub}>{favorites.length} title{favorites.length !== 1 ? 's' : ''}</Text>
+                        <Text style={S.headerSub}>Your personal reading library · {favorites.length} saved title{favorites.length !== 1 ? 's' : ''}</Text>
                     </View>
                     {/* Stats pill group */}
                     {favorites.length > 0 && (
@@ -354,6 +363,47 @@ export default function Favorites() {
                 </View>
             </View>
 
+            {favorites.length > 0 && (
+                <View style={S.libraryToolbar}>
+                    <View style={S.searchBox}>
+                        <Ionicons name="search-outline" size={18} color={C.text2} />
+                        <TextInput
+                            style={S.librarySearch}
+                            value={libraryQuery}
+                            onChangeText={setLibraryQuery}
+                            placeholder="Search your library"
+                            placeholderTextColor={C.text2}
+                            clearButtonMode="while-editing"
+                            autoCapitalize="none"
+                            accessibilityLabel="Search saved manga titles"
+                        />
+                        {!!libraryQuery && (
+                            <Pressable onPress={() => setLibraryQuery('')} accessibilityLabel="Clear search">
+                                <Ionicons name="close-circle" size={18} color={C.text2} />
+                            </Pressable>
+                        )}
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.filters}>
+                        {['All', ...STATUS_OPTIONS].map(status => {
+                            const selected = activeFilter === status;
+                            const n = status === 'All' ? favorites.length : (counts[status] || 0);
+                            return (
+                                <Pressable
+                                    key={status}
+                                    onPress={() => setActiveFilter(status)}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected }}
+                                    style={[S.filterChip, selected && S.filterChipActive]}
+                                >
+                                    <Text style={[S.filterText, selected && S.filterTextActive]}>{status}  {n}</Text>
+                                </Pressable>
+                            );
+                        })}
+                    </ScrollView>
+                    <Text style={S.filterSummary}>{filteredFavorites.length} {filteredFavorites.length === 1 ? 'title' : 'titles'} shown</Text>
+                </View>
+            )}
+
             {favorites.length === 0 ? (
                 <View style={S.empty}>
                     <View style={S.emptyIcon}>
@@ -364,10 +414,11 @@ export default function Favorites() {
                 </View>
             ) : (
                 <FlatList
-                    data={favorites}
+                    data={filteredFavorites}
                     keyExtractor={item => item.url}
                     renderItem={renderItem}
-                    contentContainerStyle={S.list}
+                    contentContainerStyle={[S.list, { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: viewportWidth >= 700 ? 24 : 12 }]}
+                    ListEmptyComponent={<View style={S.emptyFiltered}><Ionicons name="search-outline" size={25} color={C.text2} /><Text style={S.emptyTitle}>No matching titles</Text><Text style={S.emptySub}>Try another search or reading status.</Text></View>}
                     showsVerticalScrollIndicator={false}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
                 />
@@ -428,14 +479,24 @@ const S = StyleSheet.create({
     statNum: { fontSize: 13, fontWeight: '800' },
     statLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
 
-    list: { padding: 12, gap: 8, paddingBottom: 32 },
+    list: { padding: 12, gap: 12, paddingBottom: 42 },
+    libraryToolbar: { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 22, paddingBottom: 8, gap: 14 },
+    searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.bg3, borderColor: C.borderMid, borderWidth: 1, paddingHorizontal: 14, borderRadius: 12, minHeight: 48 },
+    librarySearch: { flex: 1, color: C.text1, fontSize: 14, paddingVertical: 11, minWidth: 0 },
+    filters: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 2, paddingRight: 18 },
+    filterChip: { borderRadius: 18, borderWidth: 1, borderColor: C.borderMid, backgroundColor: C.bg2, paddingHorizontal: 13, paddingVertical: 9 },
+    filterChipActive: { backgroundColor: C.accentDim, borderColor: C.accentBorder },
+    filterText: { fontSize: 12, color: C.text2, fontWeight: '700' },
+    filterTextActive: { color: C.accentBright },
+    filterSummary: { fontSize: 11, color: C.text2, paddingBottom: 3 },
+    emptyFiltered: { alignItems: 'center', paddingTop: 90, gap: 10 },
 
     // Card
     card: {
         flexDirection: 'row',
         backgroundColor: C.bg2,
-        borderRadius: 12,
-        borderWidth: 1, borderColor: C.border,
+        borderRadius: 15,
+        borderWidth: 1, borderColor: C.borderMid,
         overflow: 'hidden',
         shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 5,
     },
