@@ -127,6 +127,32 @@ function resolveCardState(manga) {
     return { state: 'IN_PROGRESS' };
 }
 
+const DiscoveryCard = React.memo(function DiscoveryCard({ manga, imageUri, width, checking, onOpen }) {
+    const source = manga.source;
+    const badge = source === 'asura' ? 'AS' : source === 'mgeko' ? 'MG' : source === 'mangadex' ? 'MD' : 'MP';
+    const color = source === 'asura' ? C.asuraBg : source === 'mgeko' ? 'rgba(52,211,153,0.80)' : source === 'mangadex' ? C.mdBg : C.mpBg;
+    return (
+        <Pressable
+            style={({ pressed }) => [S.gridCard, { width, opacity: pressed ? 0.76 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }]}
+            onPress={() => onOpen(manga)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${manga.title}`}
+        >
+            <View style={S.gridCoverWrap}>
+                {imageUri
+                    ? <Image source={{ uri: imageUri }} style={S.gridCover} resizeMode="cover" />
+                    : <View style={S.gridCoverEmpty}><Ionicons name="book-outline" size={20} color={C.text3} /></View>}
+                {!!imageUri && <View style={S.gridGradient} />}
+                <View style={[S.gridBadge, { backgroundColor: color }]}>
+                    <Text style={S.gridBadgeText}>{badge}</Text>
+                </View>
+            </View>
+            <Text style={S.gridTitle} numberOfLines={2}>{manga.title}</Text>
+            {checking && <Text style={S.sourceSearching}>Checking MangaPill…</Text>}
+        </Pressable>
+    );
+});
+
 export default function Home() {
     const { width: viewportWidth } = useWindowDimensions();
     const contentWidth = Math.min(viewportWidth, 1280);
@@ -447,6 +473,10 @@ export default function Home() {
         }
     };
 
+    const openCardRef = useRef(null);
+    openCardRef.current = openManga;
+    const openDiscoveryCard = useCallback(item => openCardRef.current?.(item), []);
+
     const openResult = async (item) => {
         await handleAddSearch(item?.title || query);
         closeSearch();
@@ -654,40 +684,16 @@ export default function Home() {
                         </View>
                     ) : (
                         <View style={[S.grid, { paddingHorizontal: gridPadding, columnGap: gridGap }]}>
-                            {browseManga.map((manga, i) => {
-                                const img = getProxied(manga);
-                                const isAS = manga.source === 'asura';
-                                return (
-                                    <Pressable
-                                        key={`${manga.id}-${i}`}
-                                        style={({ pressed }) => [S.gridCard, { width: tileWidth, opacity: pressed ? 0.76 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }]}
-                                        onPress={() => openManga(manga)}
-                                    >
-                                        <View style={S.gridCoverWrap}>
-                                            {img ? (
-                                                <Image source={{ uri: img }} style={S.gridCover} resizeMode="cover" />
-                                            ) : (
-                                                <View style={S.gridCoverEmpty}>
-                                                    <Ionicons name="book-outline" size={20} color={C.text3} />
-                                                </View>
-                                            )}
-                                            {!!img && <View style={S.gridGradient} />}
-                                            <View style={[S.gridBadge, {
-                                                backgroundColor: isAS ? C.asuraBg
-                                                    : manga.source === 'mgeko' ? 'rgba(52,211,153,0.80)'
-                                                        : manga.source === 'mangadex' ? C.mdBg
-                                                            : C.mpBg,
-                                            }]}>
-                                                <Text style={S.gridBadgeText}>
-                                                    {isAS ? 'AS' : manga.source === 'mgeko' ? 'MG' : manga.source === 'mangadex' ? 'MD' : 'MP'}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        <Text style={S.gridTitle} numberOfLines={2}>{manga.title}</Text>
-                                        {openingTitle === String(manga.id) && <Text style={S.sourceSearching}>Checking MangaPill…</Text>}
-                                    </Pressable>
-                                );
-                            })}
+                            {browseManga.map((manga, i) => (
+                                <DiscoveryCard
+                                    key={`${manga.source || 'unknown'}:${manga.id || manga.url || i}`}
+                                    manga={manga}
+                                    imageUri={getProxied(manga)}
+                                    width={tileWidth}
+                                    checking={openingTitle === String(manga.id)}
+                                    onOpen={openDiscoveryCard}
+                                />
+                            ))}
                         </View>
                     )}
                     {!loadingBrowse && browseManga.length === 0 && (
