@@ -327,9 +327,6 @@ const MangaDetails = () => {
             <StatusBar barStyle="light-content" backgroundColor={C.bg0} />
 
             <View style={S.topBar}>
-                <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back">
-                    <Ionicons name="arrow-back" size={20} color={C.text1} style={{ marginRight: 9 }} />
-                </Pressable>
                 <Pressable onPress={() => router.replace('/tabs/home')} hitSlop={10}>
                     <Image source={dragonLogo} style={S.logoImg} />
                 </Pressable>
