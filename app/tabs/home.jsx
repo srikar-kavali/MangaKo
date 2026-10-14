@@ -161,6 +161,9 @@ export default function Home() {
     const columns = Math.max(2, Math.min(7, Math.floor((contentWidth - gridPadding * 2 + gridGap) / 166)));
     const tileWidth = Math.max(0, (contentWidth - gridPadding * 2 - gridGap * (columns - 1)) / columns);
     const [query, setQuery] = useState('');
+    // Group titles into virtualized rows so the carousel and hero remain above the grid.
+    const discoveryRows = [];
+    for (let i = 0; i < browseManga.length; i += columns) discoveryRows.push(browseManga.slice(i, i + columns));
     const [searchActive, setSearchActive] = useState(false);
     const [recentSearches, setRecentSearches] = useState([]);
     const [searchResults, setSearchResults] = useState([]);
@@ -183,7 +186,7 @@ export default function Home() {
     const searchInputRef = useRef(null);
     const bgCancelledRef = useRef(false);
     const paginationInFlightRef = useRef(false);
-    const scrollNearEndRef = useRef(false);
+    const hasScrolledRef = useRef(false);
 
     const getSource = (m) => {
         const id = String(m.url || m.id || '');
@@ -368,19 +371,6 @@ export default function Home() {
         }
     };
 
-    const handleBrowseScroll = ({ nativeEvent }) => {
-        const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-        const remaining = contentSize.height - (layoutMeasurement.height + contentOffset.y);
-        const nearEnd = remaining < 650;
-        // Trigger only when crossing the threshold, rather than on every scroll event.
-        if (nearEnd && !scrollNearEndRef.current && contentOffset.y > 0) {
-            scrollNearEndRef.current = true;
-            loadMoreCatalog();
-        } else if (!nearEnd) {
-            scrollNearEndRef.current = false;
-        }
-    };
-
     React.useEffect(() => {
         const q = query.trim(), qL = q.toLowerCase(), key = `${CACHE_VERSION}:${qL}`;
         if (!q) {
@@ -562,7 +552,38 @@ export default function Home() {
                 </>
             )}
 
-            <ScrollView style={S.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={S.scrollContent} onScroll={handleBrowseScroll} scrollEventThrottle={150}>
+            <FlatList
+                style={S.scroll}
+                contentContainerStyle={S.scrollContent}
+                data={discoveryRows}
+                keyExtractor={(row, index) => `row:${row[0]?.source || 'unknown'}:${row[0]?.id || row[0]?.url || index}`}
+                renderItem={({ item: row }) => (
+                    <View style={[S.gridRow, { paddingHorizontal: gridPadding, columnGap: gridGap }]}>
+                        {row.map((manga, i) => (
+                            <DiscoveryCard
+                                key={`${manga.source || 'unknown'}:${manga.id || manga.url || i}`}
+                                manga={manga}
+                                imageUri={getProxied(manga)}
+                                width={tileWidth}
+                                checking={openingTitle === String(manga.id)}
+                                onOpen={openDiscoveryCard}
+                            />
+                        ))}
+                    </View>
+                )}
+                initialNumToRender={6}
+                maxToRenderPerBatch={6}
+                windowSize={7}
+                removeClippedSubviews={false}
+                onScroll={event => { if (event.nativeEvent.contentOffset.y > 80) hasScrolledRef.current = true; }}
+                scrollEventThrottle={200}
+                onEndReachedThreshold={0.8}
+                onEndReached={() => {
+                    if (hasScrolledRef.current && !loadingBrowse && !loadingMoreBrowse && browseHasMore && !browseError) loadMoreCatalog();
+                }}
+                ListHeaderComponent={
+                    <>
+
                 <View style={[S.hero, followedManga.length > 0 && S.heroCompact]}>
                     <View style={S.heroGlow} />
                     <Text style={S.heroEyebrow}>YOUR LIBRARY, YOUR NEXT ADVENTURE</Text>
@@ -672,7 +693,7 @@ export default function Home() {
                             <Text style={S.liveText}>DISCOVER</Text>
                         </View>
                     </View>
-                    {loadingBrowse ? (
+                    {loadingBrowse && (
                         <View style={[S.grid, { paddingHorizontal: gridPadding, columnGap: gridGap }]}>
                             {[...Array(columns * 2)].map((_, i) => (
                                 <View key={i} style={[S.skelCard, { width: tileWidth }]}>
@@ -682,20 +703,11 @@ export default function Home() {
                                 </View>
                             ))}
                         </View>
-                    ) : (
-                        <View style={[S.grid, { paddingHorizontal: gridPadding, columnGap: gridGap }]}>
-                            {browseManga.map((manga, i) => (
-                                <DiscoveryCard
-                                    key={`${manga.source || 'unknown'}:${manga.id || manga.url || i}`}
-                                    manga={manga}
-                                    imageUri={getProxied(manga)}
-                                    width={tileWidth}
-                                    checking={openingTitle === String(manga.id)}
-                                    onOpen={openDiscoveryCard}
-                                />
-                            ))}
-                        </View>
                     )}
+                    </>
+                }
+                ListFooterComponent={
+                    <View style={S.browseFooter}>
                     {!loadingBrowse && browseManga.length === 0 && (
                         <View style={{ marginHorizontal: 18, padding: 20, backgroundColor: C.bg2, borderRadius: 12 }}>
                             <Text style={{ color: C.text1, fontWeight: '700', marginBottom: 6 }}>No titles loaded</Text>
@@ -721,8 +733,9 @@ export default function Home() {
                             <Text style={S.loadMoreText}>Retry loading titles</Text>
                         </Pressable>
                     )}
-                </View>
-            </ScrollView>
+                    </View>
+                }
+            />
 
             {/* SEARCH OVERLAY */}
             {searchActive && (
@@ -921,6 +934,8 @@ const S = StyleSheet.create({
 
     contTitle: { fontSize: 12, fontWeight: '700', color: '#d3d0dd', lineHeight: 17 },
 
+    browseFooter: { paddingBottom: 24 },
+    gridRow: { flexDirection: 'row', marginBottom: 20 },
     grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 21 },
     gridCard: { minWidth: 0, marginBottom: 2 },
     gridCoverWrap: {
