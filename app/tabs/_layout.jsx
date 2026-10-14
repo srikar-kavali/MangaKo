@@ -68,28 +68,6 @@ export default function Layout() {
                     ),
                 }}
             />
-            <Tabs.Screen
-                name="categories"
-                options={{
-                    title: 'Categories',
-                    tabBarIcon: ({ color, focused }) => (
-                        <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
-                            <Ionicons name={focused ? 'grid' : 'grid-outline'} color={color} size={20} />
-                        </View>
-                    ),
-                }}
-            />
-            <Tabs.Screen
-                name="activity"
-                options={{
-                    title: 'Activity',
-                    tabBarIcon: ({ color, focused }) => (
-                        <View style={[styles.iconWrap, focused && styles.iconWrapActive]}>
-                            <Ionicons name={focused ? 'time' : 'time-outline'} color={color} size={20} />
-                        </View>
-                    ),
-                }}
-            />
         </Tabs>
     );
 }
