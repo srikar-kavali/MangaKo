@@ -1,12 +1,12 @@
 import { searchHardcodedManhwa } from '../manga_api/hardcodedManhwas';
 import { searchMangadex } from '../manga_api/mangadex';
-import { browseMangapill } from '../manga_api/mangapill';
 
 export function normalizeCatalogItem(item, source) {
     const id = item?.id || item?.url;
     if (!id || !item?.title) return null;
     return {
-        ...item, id,
+        ...item,
+        id,
         source: source || item.source || 'asura',
         cover: item.cover || item.coverUrl || item.image || null,
         coverUrl: item.coverUrl || item.cover || item.image || null,
@@ -24,25 +24,16 @@ export function mergeCatalogItems(...groups) {
     return [...unique.values()];
 }
 
-// Fetches title metadata, not chapter images.
+// MangaDex drives live discovery; existing curated manhwa remains available.
+// MangaPill search and chapter reading are intentionally unaffected.
 export async function discoverCatalog({ offset = 0, limit = 24, language = '' } = {}) {
     const curated = offset === 0 ? searchHardcodedManhwa('') : [];
-    const sources = offset === 0
-        ? [searchMangadex('', limit, offset, language), browseMangapill(limit)]
-        : [searchMangadex('', limit, offset, language)];
-    const responses = await Promise.allSettled(sources);
-    responses.forEach((result, index) => {
-        if (result.status === 'rejected') {
-            console.warn(`Catalog source ${index === 0 ? 'MangaDex' : 'MangaPill'} failed:`, result.reason);
-        } else if (!Array.isArray(result.value) || result.value.length === 0) {
-            console.warn(`Catalog source ${index === 0 ? 'MangaDex' : 'MangaPill'} returned no titles`);
-        }
-    });
-    const available = responses
-        .filter(result => result.status === 'fulfilled')
-        .flatMap(result => result.value);
-    if (!available.length && responses.every(result => result.status === 'rejected')) {
-        throw new Error('All remote catalog sources are unavailable');
+    try {
+        const remote = await searchMangadex('', limit, offset, language);
+        return mergeCatalogItems(curated, remote);
+    } catch (error) {
+        console.warn('MangaDex discovery failed:', error);
+        if (curated.length) return mergeCatalogItems(curated);
+        throw error;
     }
-    return mergeCatalogItems(curated, available);
 }
