@@ -107,12 +107,21 @@ class MangapillScraper:
 
     # ---- /mangas/new (catalog metadata only) -------------------------------
     def browse_new(self, limit: int = 24) -> List[Dict]:
+        """Read the recent catalog listing without retrieving chapter pages."""
         soup = self._soup("/mangas/new")
         results: List[Dict] = []
         seen = set()
-        for a in soup.select('a[href^="/manga/"]'):
-            href = a.get("href", "")
-            if not re.match(r"^/manga/[0-9]+/[^/?#]+/?$", href) or href in seen:
+        for a in soup.select('a[href*="/manga/"]'):
+            href = a.get("href", "").strip()
+            full_url = self._abs(href)
+            from urllib.parse import urlparse
+            parsed = urlparse(full_url)
+            # Match only real MangaPill manga pages, not chapters or external URLs.
+            if parsed.netloc not in ("mangapill.com", "www.mangapill.com"):
+                continue
+            if not re.fullmatch(r"/manga/[^/]+(?:/[^/]+)?/?", parsed.path):
+                continue
+            if full_url in seen:
                 continue
             img = a.select_one("img")
             title_el = a.select_one("h3, h2, p, span")
@@ -121,19 +130,21 @@ class MangapillScraper:
                 or (title_el.get_text(" ", strip=True) if title_el else None)
                 or a.get_text(" ", strip=True)
             )
-            if not title:
+            if not title or not title.strip():
                 continue
             cover = (img.get("data-src") or img.get("src")) if img else None
-            seen.add(href)
+            seen.add(full_url)
             results.append({
-                "id": self._abs(href),
-                "url": self._abs(href),
+                "id": full_url,
+                "url": full_url,
                 "title": title.strip(),
                 "cover": self._abs(cover) if cover else None,
                 "source": "mangapill",
             })
             if len(results) >= min(max(int(limit), 1), 48):
                 break
+        if not results:
+            raise ValueError("No titles parsed from MangaPill recently added listing")
         return results
 
     # ---- /manga?url=... ------------------------------------------------------

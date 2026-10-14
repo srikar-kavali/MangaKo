@@ -33,7 +33,8 @@ class handler(BaseHTTPRequestHandler):
             finally:
                 scraper.client.close()
             self._reply(200, titles)
-        except Exception:
+        except Exception as error:
+            print(f"MangaPill browse failed: {type(error).__name__}: {error}")
             self._reply(502, {"error": "MangaPill catalog temporarily unavailable"})
 
     def do_OPTIONS(self):

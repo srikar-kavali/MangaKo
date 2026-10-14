@@ -31,6 +31,13 @@ export async function discoverCatalog({ offset = 0, limit = 24, language = '' } 
         ? [searchMangadex('', limit, offset, language), browseMangapill(limit)]
         : [searchMangadex('', limit, offset, language)];
     const responses = await Promise.allSettled(sources);
+    responses.forEach((result, index) => {
+        if (result.status === 'rejected') {
+            console.warn(`Catalog source ${index === 0 ? 'MangaDex' : 'MangaPill'} failed:`, result.reason);
+        } else if (!Array.isArray(result.value) || result.value.length === 0) {
+            console.warn(`Catalog source ${index === 0 ? 'MangaDex' : 'MangaPill'} returned no titles`);
+        }
+    });
     const available = responses
         .filter(result => result.status === 'fulfilled')
         .flatMap(result => result.value);
