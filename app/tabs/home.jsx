@@ -24,7 +24,7 @@ import {
     searchMangadex, getMangadexManga, proxied as proxiedMangadex,
     toMangadexChapterKey,
 } from '../../manga_api/mangadex';
-import { getCoverUrl } from "../../api/coverurls";
+import { getCoverUrl } from "../../services/coverurls";
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',

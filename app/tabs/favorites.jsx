@@ -12,7 +12,7 @@ import { proxied as proxiedAsura } from '../../manga_api/asurascans';
 import { proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedMgeko } from '../../manga_api/mgeko';
 import { proxied as proxiedMangadex, splitMangadexChapterKey } from '../../manga_api/mangadex';
-import { getCoverUrl as getStaticCover } from "../../api/coverurls";
+import { getCoverUrl as getStaticCover } from "../../services/coverurls";
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',

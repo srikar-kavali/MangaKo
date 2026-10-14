@@ -16,7 +16,7 @@ import {
 import { getManhwaById } from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed, newChapterKey } from "./searchStorage";
-import { getCoverUrl as getStaticCover } from "../api/coverurls";
+import { getCoverUrl as getStaticCover } from "../services/coverurls";
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',
