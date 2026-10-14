@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
     View, Text, Image, StyleSheet, ActivityIndicator,
-    ScrollView, Pressable, SafeAreaView, StatusBar,
+    ScrollView, Pressable, SafeAreaView, StatusBar, useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -65,6 +65,8 @@ const normalizeKey = (key) => {
 const MangaDetails = () => {
     const { seriesId, mangapillUrl, source, title: titleParam } = useLocalSearchParams();
     const router = useRouter();
+    const { width: viewportWidth } = useWindowDimensions();
+    const isWide = viewportWidth >= 800;
     const scrollRef = useRef(null);
 
     const [loading, setLoading] = useState(true);
@@ -310,26 +312,32 @@ const MangaDetails = () => {
             <StatusBar barStyle="light-content" backgroundColor={C.bg0} />
 
             <View style={S.topBar}>
+                <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go back">
+                    <Ionicons name="arrow-back" size={20} color={C.text1} style={{ marginRight: 9 }} />
+                </Pressable>
                 <Pressable onPress={() => router.replace('/tabs/home')} hitSlop={10}>
                     <Image source={dragonLogo} style={S.logoImg} />
                 </Pressable>
                 <Text style={S.topTitle} numberOfLines={1}>{title}</Text>
             </View>
 
-            <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+            <ScrollView ref={scrollRef} contentContainerStyle={S.scrollContent} showsVerticalScrollIndicator={false}>
+                <View style={S.detailsContainer}>
 
                 {/* HERO */}
-                <View style={S.hero}>
+                <View style={[S.hero, isWide && S.heroWide]}>
+                    <View style={S.heroGlow} />
                     <View style={S.coverShadow}>
                         {cover
-                            ? <Image source={{ uri: cover }} style={S.cover} resizeMode="cover" />
-                            : <View style={[S.cover, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
+                            ? <Image source={{ uri: cover }} style={[S.cover, isWide && S.coverWide]} resizeMode="cover" />
+                            : <View style={[S.cover, isWide && S.coverWide, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
                                 <Ionicons name="book-outline" size={38} color={C.text3} />
                             </View>
                         }
                     </View>
                     <View style={S.heroMeta}>
-                        <Text style={S.heroTitle} numberOfLines={4}>{title}</Text>
+                        <Text style={S.heroEyebrow}>SERIES OVERVIEW</Text>
+                        <Text style={[S.heroTitle, isWide && S.heroTitleWide]} numberOfLines={4}>{title}</Text>
                         <View style={S.srcRow}>
                             <View style={[S.srcDot, { backgroundColor: srcColor }]} />
                             <Text style={S.srcText}>{srcLabel}</Text>
@@ -356,7 +364,7 @@ const MangaDetails = () => {
                 </View>
 
                 {/* ACTION ROW */}
-                <View style={S.actions}>
+                <View style={[S.actions, isWide && S.actionsWide]}>
                     <Pressable
                         style={({ pressed }) => [S.readBtn, { opacity: pressed ? 0.85 : 1 }]}
                         onPress={() => {
@@ -416,7 +424,7 @@ const MangaDetails = () => {
 
                 {/* SYNOPSIS */}
                 <View style={S.block}>
-                    <Text style={S.blockLabel}>SYNOPSIS</Text>
+                    <Text style={S.blockLabel}>ABOUT THIS SERIES</Text>
                     <Text style={S.synopsis}>{mangaData?.description || 'No description available.'}</Text>
                 </View>
 
@@ -433,7 +441,7 @@ const MangaDetails = () => {
                 <View style={[S.chSection, { borderTopColor: C.border }]}>
                     <View style={S.chHead}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Text style={S.blockLabel}>CHAPTERS</Text>
+                            <Text style={S.chSectionTitle}>Chapters</Text>
                             <View style={S.chCountBadge}><Text style={S.chCountText}>{total}</Text></View>
                         </View>
                         <Pressable style={({ pressed }) => [S.sortBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setAscending(v => !v)}>
@@ -503,6 +511,7 @@ const MangaDetails = () => {
                         </View>
                     )}
                 </View>
+                </View>
             </ScrollView>
         </SafeAreaView>
     );
@@ -513,17 +522,26 @@ export default MangaDetails;
 const S = StyleSheet.create({
     safe: { flex: 1, backgroundColor: C.bg1 },
     loadWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+    scrollContent: { paddingBottom: 70 },
+    detailsContainer: { width: '100%', maxWidth: 1080, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 20 },
+    heroGlow: { position: 'absolute', width: 330, height: 330, right: -110, top: -180, borderRadius: 165, backgroundColor: 'rgba(124,106,245,0.11)' },
+    heroWide: { padding: 28, gap: 28 },
+    coverWide: { width: 206, height: 300 },
+    heroEyebrow: { fontSize: 10, color: C.accentBright, fontWeight: '800', letterSpacing: 1.6 },
+    heroTitleWide: { fontSize: 32, lineHeight: 40 },
+    actionsWide: { gap: 14, paddingHorizontal: 24 },
+    chSectionTitle: { color: C.text1, fontSize: 21, fontWeight: '800', letterSpacing: -0.4, marginBottom: 10 },
     topBar: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: C.bg1, borderBottomWidth: 1, borderBottomColor: C.border },
     logoImg: { width: 30, height: 30, resizeMode: 'contain' },
     topTitle: { flex: 1, fontSize: 14, fontWeight: '600', color: C.text2, letterSpacing: -0.2 },
-    hero: { flexDirection: 'row', padding: 18, gap: 16 },
+    hero: { flexDirection: 'row', padding: 18, gap: 16, borderRadius: 18, backgroundColor: '#171422', borderWidth: 1, borderColor: C.accentBorder, overflow: 'hidden', marginBottom: 16 },
     coverShadow: { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.65, shadowRadius: 20, elevation: 14 },
     cover: { width: 116, height: 170, borderRadius: 10 },
     heroMeta: { flex: 1, gap: 9 },
-    heroTitle: { fontSize: 19, fontWeight: '800', color: C.text1, lineHeight: 25, letterSpacing: -0.5 },
+    heroTitle: { fontSize: 21, fontWeight: '800', color: C.text1, lineHeight: 28, letterSpacing: -0.5 },
     srcRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: C.bg3, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
     srcDot: { width: 6, height: 6, borderRadius: 3 },
-    srcText: { fontSize: 10, fontWeight: '700', color: C.text2, letterSpacing: 0.2 },
+    srcText: { fontSize: 10, fontWeight: '700', color: '#d0cede', letterSpacing: 0.2 },
     statusPill: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20 },
     statusDot: { width: 6, height: 6, borderRadius: 3 },
     statusText: { fontSize: 11, fontWeight: '600' },
@@ -531,7 +549,7 @@ const S = StyleSheet.create({
     genreTag: { backgroundColor: C.bg4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 5 },
     genreText: { fontSize: 10, fontWeight: '600', color: C.text3 },
     genreMore: { fontSize: 10, color: C.text3, paddingVertical: 3 },
-    actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.border, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.bg2 },
+    actions: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 14, borderWidth: 1, borderColor: C.border, borderRadius: 14, backgroundColor: C.bg2 },
     readBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: C.accent, paddingVertical: 11, borderRadius: 10, shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.38, shadowRadius: 10, elevation: 6 },
     readBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
     statusWrap: { position: 'relative' },
@@ -543,13 +561,13 @@ const S = StyleSheet.create({
     statusOpt: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14 },
     statusOptText: { fontSize: 14, color: C.text1 },
     starBtn: { padding: 6 },
-    block: { paddingHorizontal: 16, paddingTop: 20, paddingBottom: 14 },
-    blockLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.4, color: C.text3, marginBottom: 10 },
-    synopsis: { fontSize: 13.5, lineHeight: 22, color: C.text2 },
+    block: { paddingHorizontal: 12, paddingTop: 28, paddingBottom: 22 },
+    blockLabel: { fontSize: 12, fontWeight: '800', letterSpacing: 1.2, color: C.accentBright, marginBottom: 12 },
+    synopsis: { fontSize: 14, lineHeight: 24, color: '#bcb9c8' },
     tagsBlock: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingBottom: 16, paddingTop: 12, borderTopWidth: 1 },
     tagFull: { backgroundColor: C.bg3, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, borderWidth: 1, borderColor: C.border },
     tagFullText: { fontSize: 11, color: C.text2 },
-    chSection: { borderTopWidth: 1 },
+    chSection: { borderTopWidth: 1, marginTop: 12, paddingTop: 8 },
     chHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 18, paddingBottom: 12 },
     chCountBadge: { backgroundColor: C.bg4, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
     chCountText: { fontSize: 11, fontWeight: '700', color: C.text2 },
@@ -559,7 +577,7 @@ const S = StyleSheet.create({
     pageBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.bg3, borderWidth: 1, borderColor: C.border, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
     pageBtnText: { fontSize: 12, fontWeight: '600', color: C.text1 },
     pageInfo: { fontSize: 12, color: C.text2 },
-    chRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, paddingRight: 16 },
+    chRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingRight: 16, borderBottomWidth: 1, borderBottomColor: C.border },
     chBar: { width: 3, alignSelf: 'stretch', minHeight: 42, marginRight: 13, borderRadius: 1.5 },
     chTitle: { fontSize: 13.5, fontWeight: '500', color: C.text1, flex: 1 },
     lastBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, marginRight: 8 },
