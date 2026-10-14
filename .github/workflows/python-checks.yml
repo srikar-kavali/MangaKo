@@ -1,0 +1,21 @@
+name: Python checks
+
+on:
+  push:
+    branches: [cleanup]
+  pull_request:
+
+jobs:
+  image-proxy-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install httpx
+      - name: Compile Python source
+        run: python -m compileall -q api tests
+      - name: Run image proxy security tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
