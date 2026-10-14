@@ -15,7 +15,7 @@ export default function Settings() {
     setBusy(true); setFeedback('');
     try {
       const result = await syncLibraryOnce();
-      setFeedback(result.direction === 'upload' ? 'Your local library was backed up to your account.' : 'Your cloud library was downloaded. Reopen My List to refresh.');
+      setFeedback('Library synchronized. Reopen My List to see any changes from other devices.');
     } catch (e) { setFeedback(e.message || 'Unable to sync your library'); }
     finally { setBusy(false); }
   }
@@ -30,7 +30,7 @@ export default function Settings() {
       </View>
       <View style={S.panel}>
         <Text style={S.label}>CLOUD LIBRARY</Text>
-        <Text style={S.description}>Back up your saved titles and reading progress. This early sync version imports a new account's local library, or downloads an existing cloud backup. Continuous two-way synchronization is not enabled yet.</Text>
+        <Text style={S.description}>Your saved titles, reading statuses, and chapter progress sync across devices when signed in. You can also sync manually.</Text>
         <Pressable style={[S.button, busy && S.disabled]} onPress={syncNow} disabled={busy} accessibilityRole="button">
           {busy ? <ActivityIndicator color="#fff"/> : <Ionicons name="cloud-upload-outline" size={18} color="#fff"/>}
           <Text style={S.buttonText}>{busy ? 'Syncing...' : 'Sync library now'}</Text>
