@@ -9,6 +9,7 @@ import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut } from '../../auth/cognito';
+import { syncLibraryOnce, stopLibrarySync } from '../../services/accountSync';
 import {
     getRecentSearches, saveRecentSearches, getFavorites,
     getLastReadChapterInfo, getLatestChapter, saveLatestChapter,
@@ -321,6 +322,8 @@ export default function Home() {
         useCallback(() => {
             bgCancelledRef.current = false;
             (async () => {
+                await syncLibraryOnce().catch(() => {});
+                if (bgCancelledRef.current) return;
                 setRecentSearches(await getRecentSearches());
                 const series = await loadFollowedManga();
                 runBackgroundFetch(series);
@@ -552,7 +555,7 @@ export default function Home() {
                         </Pressable>
                         <View style={S.ddLine} />
                         <Pressable style={S.ddRow} onPress={async () => {
-                            setDropdownVisible(false); await signOut(); router.replace('/login');
+                            setDropdownVisible(false); stopLibrarySync(); await signOut(); router.replace('/login');
                         }}>
                             <Ionicons name="log-out-outline" size={14} color={C.accent} />
                             <Text style={[S.ddText, { color: C.accent }]}>Sign Out</Text>

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { queueLibrarySync } from '../services/accountSync';
 
 const RECENT_SEARCHES_KEY = 'recentSearches';
 const FAVORITES_KEY = 'favorites';
@@ -90,6 +91,7 @@ export async function addFavorite(manga) {
         }
 
         await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(list));
+        queueLibrarySync();
     } catch (e) {
         console.error('Failed to add favorite', e);
     }
@@ -100,6 +102,7 @@ export async function removeFavorite(mangaUrl) {
         const list = await getFavorites();
         const updated = list.filter(item => item.url !== mangaUrl);
         await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(updated));
+        queueLibrarySync();
 
         // ── FIX: do NOT delete lastReadChapters on unfollow ──────────────────
         // Previously this wiped read progress when a user unfollowed and
@@ -124,6 +127,7 @@ export async function saveLastReadChapter(mangaUrl, chapterUrl) {
         };
 
         await AsyncStorage.setItem(LAST_READ_KEY, JSON.stringify(lastRead));
+        queueLibrarySync();
     } catch (e) {
         console.error('Failed to save last read chapter', e);
     }
@@ -148,6 +152,7 @@ export async function removeLastReadChapter(mangaUrl) {
         const lastRead = JSON.parse(lastReadData);
         delete lastRead[mangaUrl];
         await AsyncStorage.setItem(LAST_READ_KEY, JSON.stringify(lastRead));
+        queueLibrarySync();
     } catch (e) {
         console.error('Failed to remove last read chapter', e);
     }
@@ -173,6 +178,7 @@ export async function markCompleted(id) {
         if (!list.includes(id)) {
             list.push(id);
             await AsyncStorage.setItem(COMPLETED_KEY, JSON.stringify(list));
+            queueLibrarySync();
         }
     } catch (err) {
         console.error('Failed to mark completed', err);
@@ -184,6 +190,7 @@ export async function unmarkCompleted(id) {
         const data = await AsyncStorage.getItem(COMPLETED_KEY);
         const list = data ? JSON.parse(data) : [];
         await AsyncStorage.setItem(COMPLETED_KEY, JSON.stringify(list.filter(x => x !== id)));
+        queueLibrarySync();
     } catch (err) {
         console.error('Failed to unmark completed', err);
     }
@@ -202,6 +209,7 @@ export async function getCompleted() {
 export async function saveFavorites(favs) {
     try {
         await AsyncStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+        queueLibrarySync();
     } catch (e) {
         console.error('Failed to save favorites', e);
     }
@@ -245,10 +253,12 @@ export async function hideFromContinueReading(mangaUrl) {
     const hidden = await getHiddenContinueReading();
     hidden[mangaUrl] = Date.now();
     await AsyncStorage.setItem(HIDDEN_CONTINUE_KEY, JSON.stringify(hidden));
+    queueLibrarySync();
 }
 
 export async function showInContinueReading(mangaUrl) {
     const hidden = await getHiddenContinueReading();
     delete hidden[mangaUrl];
     await AsyncStorage.setItem(HIDDEN_CONTINUE_KEY, JSON.stringify(hidden));
+    queueLibrarySync();
 }

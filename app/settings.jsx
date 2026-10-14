@@ -3,7 +3,7 @@ import { SafeAreaView, ScrollView, View, Text, Pressable, StyleSheet, ActivityIn
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getCurrentUser, signOut } from '../auth/cognito';
-import { syncLibraryOnce } from '../services/accountSync';
+import { syncLibraryOnce, stopLibrarySync } from '../services/accountSync';
 
 export default function Settings() {
   const router = useRouter();
@@ -37,7 +37,7 @@ export default function Settings() {
         </Pressable>
         {!!feedback && <Text style={S.feedback}>{feedback}</Text>}
       </View>
-      <Pressable style={S.signOut} onPress={async () => { await signOut(); router.replace('/login'); }}><Ionicons name="log-out-outline" color="#f87171" size={18}/><Text style={S.signOutText}>Sign out</Text></Pressable>
+      <Pressable style={S.signOut} onPress={async () => { stopLibrarySync(); await signOut(); router.replace('/login'); }}><Ionicons name="log-out-outline" color="#f87171" size={18}/><Text style={S.signOutText}>Sign out</Text></Pressable>
     </ScrollView>
   </SafeAreaView>;
 }

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
     View, Text, FlatList, Pressable, StyleSheet,
     Image, SafeAreaView, RefreshControl, StatusBar, Modal,
     TouchableOpacity, TextInput, ScrollView, useWindowDimensions,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
+import { queueLibrarySync, syncLibraryOnce } from "../../services/accountSync";
 import { getFavorites, getLastReadChapterInfo, removeFavorite } from "../searchStorage";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,7 +54,11 @@ export default function Favorites() {
     const [statusPickerFor, setStatusPickerFor] = useState(null); // url of item being edited
     const router = useRouter();
 
-    useEffect(() => { load(); }, []);
+    useFocusEffect(useCallback(() => {
+        let current = true;
+        syncLibraryOnce().catch(() => {}).finally(() => { if (current) load(); });
+        return () => { current = false; };
+    }, []));
 
     const load = async () => {
         try {
@@ -105,6 +110,7 @@ export default function Favorites() {
     const handleStatusChange = async (url, newStatus) => {
         setStatusPickerFor(null);
         await AsyncStorage.setItem(`status:${url}`, newStatus).catch(() => {});
+        queueLibrarySync();
         // Re-sort immediately
         setStatusMap(prev => ({ ...prev, [url]: newStatus }));
         setFavorites(prev => [...prev].sort((a, b) => {
