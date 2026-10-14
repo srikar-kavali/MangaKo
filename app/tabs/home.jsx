@@ -16,6 +16,7 @@ import {
     newChapterKey, getLastViewed,
 } from '../searchStorage';
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
+import { discoverCatalog, mergeCatalogItems } from '../../services/catalog';
 import { searchMangapill, getMangapillManga, proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
 import { proxied as proxiedMgeko } from '../../manga_api/mgeko';
@@ -134,6 +135,10 @@ export default function Home() {
     const [followedManga, setFollowedManga] = useState([]);
     const [browseManga, setBrowseManga] = useState([]);
     const [loadingBrowse, setLoadingBrowse] = useState(false);
+    const [loadingMoreBrowse, setLoadingMoreBrowse] = useState(false);
+    const [browseOffset, setBrowseOffset] = useState(0);
+    const [browseHasMore, setBrowseHasMore] = useState(true);
+    const [browseError, setBrowseError] = useState('');
     const [dropdownVisible, setDropdownVisible] = useState(false);
 
     const overlayAnim = useRef(new Animated.Value(0)).current;
@@ -285,16 +290,44 @@ export default function Home() {
     );
 
     React.useEffect(() => {
+        let active = true;
         (async () => {
             setLoadingBrowse(true);
+            setBrowseError('');
             try {
-                const mp = await searchMangapill('', 20).catch(() => []);
-                const hardcoded = searchHardcodedManhwa('').map(i => ({ ...i, source: i.source || 'asura' }));
-                const mpFmt = (mp || []).map(i => ({ ...i, source: 'mangapill', id: i.url }));
-                setBrowseManga([...hardcoded, ...mpFmt]);
-            } catch (e) {} finally { setLoadingBrowse(false); }
+                const titles = await discoverCatalog({ limit: 24 });
+                if (active) {
+                    setBrowseManga(titles);
+                    setBrowseOffset(24);
+                    setBrowseHasMore(titles.filter(item => item.source === 'mangadex').length >= 24);
+                }
+            } catch (error) {
+                if (active) {
+                    setBrowseManga(searchHardcodedManhwa(''));
+                    setBrowseError('Live discovery is temporarily unavailable.');
+                }
+            } finally {
+                if (active) setLoadingBrowse(false);
+            }
         })();
+        return () => { active = false; };
     }, []);
+
+    const loadMoreCatalog = async () => {
+        if (loadingMoreBrowse || !browseHasMore) return;
+        setLoadingMoreBrowse(true);
+        try {
+            const titles = await searchMangadex('', 24, browseOffset);
+            setBrowseManga(current => mergeCatalogItems(current, titles));
+            setBrowseOffset(current => current + 24);
+            setBrowseHasMore(titles.length === 24);
+            setBrowseError('');
+        } catch (error) {
+            setBrowseError('Could not load more titles. Please try again.');
+        } finally {
+            setLoadingMoreBrowse(false);
+        }
+    };
 
     React.useEffect(() => {
         const q = query.trim(), qL = q.toLowerCase(), key = `${CACHE_VERSION}:${qL}`;
@@ -545,13 +578,13 @@ export default function Home() {
                     </View>
                 )}
 
-                {/* NEW CHAPTERS */}
+                {/* DISCOVERY */}
                 <View style={S.section}>
                     <View style={S.sectionHead}>
-                        <Text style={S.sectionTitle}>New Chapters</Text>
+                        <Text style={S.sectionTitle}>Explore Titles</Text>
                         <View style={S.liveBadge}>
                             <View style={S.liveDot} />
-                            <Text style={S.liveText}>LIVE</Text>
+                            <Text style={S.liveText}>DISCOVER</Text>
                         </View>
                     </View>
 

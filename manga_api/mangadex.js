@@ -32,8 +32,9 @@ export function proxied(src) {
     return src;
 }
 
-export async function searchMangadex(title, limit = 20) {
-    const url = `${API_BASE}/api/mangadex/search?q=${encodeURIComponent(title)}&limit=${limit}`;
+export async function searchMangadex(title, limit = 20, offset = 0, language = '') {
+    if (!API_BASE) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
+    const url = `${API_BASE}/api/mangadex/search?q=${encodeURIComponent(title)}&limit=${limit}&offset=${offset}&language=${encodeURIComponent(language)}`;
     const r = await fetch(url);
     if (!r.ok) {
         const text = await r.text();

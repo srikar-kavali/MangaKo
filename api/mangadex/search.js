@@ -30,19 +30,20 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    const { q = '', limit = '20' } = req.query;
-    if (!String(q).trim()) {
-        return res.status(200).json({ results: [] });
-    }
+    const { q = '', limit = '20', offset = '0', language = '' } = req.query;
+    const searchTerm = String(q).trim();
+    const pageSize = Math.max(1, Math.min(Number(limit) || 20, 50));
+    const pageOffset = Math.max(0, Math.min(Number(offset) || 0, 10000));
 
     try {
         const params = new URLSearchParams();
-        params.set('title', q);
-        params.set('limit', String(Math.min(Number(limit) || 20, 50)));
+        if (searchTerm) params.set('title', searchTerm);
+        params.set('limit', String(pageSize));
+        params.set('offset', String(pageOffset));
+        if (['ko', 'ja', 'zh'].includes(language)) params.append('originalLanguage[]', language);
         params.append('includes[]', 'cover_art');
-        // Pornographic excluded by default — keep safe/suggestive/erotica.
-        ['safe', 'suggestive', 'erotica'].forEach(r => params.append('contentRating[]', r));
-        params.set('order[relevance]', 'desc');
+        ['safe', 'suggestive'].forEach(r => params.append('contentRating[]', r));
+        params.set(searchTerm ? 'order[relevance]' : 'order[latestUploadedChapter]', 'desc');
 
         const r = await fetch(`${MANGADEX_API}/manga?${params.toString()}`);
         if (!r.ok) {
@@ -51,7 +52,7 @@ export default async function handler(req, res) {
         }
         const json = await r.json();
         const results = (json.data || []).map(normalizeManga);
-        return res.status(200).json({ results, total: json.total ?? results.length });
+        return res.status(200).json({ results, total: json.total ?? results.length, offset: pageOffset, limit: pageSize });
     } catch (e) {
         console.error('mangadex-search error:', e);
         return res.status(500).json({ error: 'Internal server error', detail: e.message });
