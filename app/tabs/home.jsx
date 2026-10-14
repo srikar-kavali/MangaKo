@@ -693,6 +693,7 @@ export default function Home() {
                             <Text style={S.liveText}>DISCOVER</Text>
                         </View>
                     </View>
+                </View>
                     {loadingBrowse && (
                         <View style={[S.grid, { paddingHorizontal: gridPadding, columnGap: gridGap }]}>
                             {[...Array(columns * 2)].map((_, i) => (
