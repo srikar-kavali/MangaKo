@@ -112,7 +112,7 @@ class MangapillScraper:
         seen = set()
         for a in soup.select('a[href^="/manga/"]'):
             href = a.get("href", "")
-            if not re.match(r"^/manga/[^/]+/[^/]+/?$", href) or href in seen:
+            if not re.match(r"^/manga/[0-9]+/[^/?#]+/?$", href) or href in seen:
                 continue
             img = a.select_one("img")
             title_el = a.select_one("h3, h2, p, span")
