@@ -360,7 +360,6 @@ export default function Favorites() {
                 <View style={S.headerTop}>
                     <View>
                         <Text style={S.headerTitle}>My List</Text>
-                        <Text style={S.headerSub}>Your personal reading library · {favorites.length} saved title{favorites.length !== 1 ? 's' : ''}</Text>
                     </View>
                     {/* Stats pill group */}
                     {favorites.length > 0 && (
