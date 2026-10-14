@@ -294,11 +294,6 @@ const ReadChapter = () => {
                     </View>
                 )}
 
-                <View style={S.endSection}>
-                    <Ionicons name="checkmark-circle-outline" size={21} color={C.accent} />
-                    <Text style={S.endTitle}>End of chapter</Text>
-                    <Text style={S.endHint}>Keep reading or choose another chapter below.</Text>
-                </View>
                 <View style={S.nav}>
                     <Pressable
                         disabled={!hasPrev}
@@ -307,13 +302,6 @@ const ReadChapter = () => {
                     >
                         <Ionicons name="chevron-back" size={15} color={C.text1} />
                         <Text style={S.navBtnText}>Previous</Text>
-                    </Pressable>
-
-                    <Pressable style={S.navCounter} onPress={openPicker}>
-                        <Text style={S.navCounterText}>
-                            {idx >= 0 ? `${idx + 1} / ${allChapters.length}` : '—'}
-                        </Text>
-                        <Ionicons name="chevron-expand" size={11} color={C.text3} style={{ marginTop: 2 }} />
                     </Pressable>
 
                     {hasNext ? (
@@ -405,9 +393,6 @@ const S = StyleSheet.create({
     scrollContent: { backgroundColor: C.bg0, paddingBottom: 24 },
     pageWrap: { width: '100%', marginBottom: 1, maxWidth: 1800, alignSelf: 'center' },
     pageWrapCompact: { maxWidth: 900 },
-    endSection: { paddingTop: 35, paddingBottom: 8, alignItems: 'center', gap: 7 },
-    endTitle: { color: C.text1, fontSize: 17, fontWeight: '800' },
-    endHint: { color: C.text2, fontSize: 12 },
     loadWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 12 },
     loadText: { color: C.text3, fontSize: 13 },
     emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 10 },
@@ -420,8 +405,6 @@ const S = StyleSheet.create({
     navBtnNext: { backgroundColor: C.accent, borderColor: C.accent, shadowColor: C.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10, elevation: 6 },
     navBtnDone: { backgroundColor: C.greenDim, borderColor: C.greenBorder },
     navBtnText: { color: C.text1, fontWeight: '700', fontSize: 13 },
-    navCounter: { width: 72, alignItems: 'center', justifyContent: 'center', gap: 2, paddingVertical: 6 },
-    navCounterText: { color: C.text3, fontSize: 12, fontWeight: '600', textAlign: 'center' },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
     pickerSheet: { backgroundColor: C.bg3, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1, borderBottomWidth: 0, borderColor: C.border, maxHeight: '70%', overflow: 'hidden' },
     pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.12)', alignSelf: 'center', marginTop: 10, marginBottom: 4 },
