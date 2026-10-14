@@ -61,6 +61,7 @@ const ReadChapter = () => {
     const [imageSizes, setImageSizes] = useState({});
     const [screenWidth, setScreenWidth] = useState(getW());
     const [pickerVisible, setPickerVisible] = useState(false);
+    const [fitWidth, setFitWidth] = useState(true);
 
     useEffect(() => {
         if (Platform.OS !== 'web') return;
@@ -234,6 +235,11 @@ const ReadChapter = () => {
                             <Text style={S.headerSub}>{idx + 1} / {allChapters.length}</Text>
                         )}
                     </View>
+                    <View style={S.headerActions}>
+                        <Pressable onPress={() => router.back()} style={S.headerAction} accessibilityRole="button" accessibilityLabel="Back to series"><Ionicons name="arrow-back" size={18} color={C.text1} /></Pressable>
+                        <Pressable onPress={openPicker} style={S.headerAction} accessibilityRole="button" accessibilityLabel="Select chapter" disabled={!allChapters.length}><Ionicons name="list-outline" size={20} color={allChapters.length ? C.text1 : C.text3} /></Pressable>
+                        <Pressable onPress={() => setFitWidth(v => !v)} style={[S.headerAction, !fitWidth && S.headerActionSelected]} accessibilityRole="button" accessibilityLabel={fitWidth ? 'Use compact reading width' : 'Use full reading width'}><Ionicons name="resize-outline" size={19} color={C.text1} /></Pressable>
+                    </View>
                 </View>
                 <View style={S.progWrap}>
                     <View style={[S.progFill, { width: `${progress}%` }]} />
@@ -254,7 +260,7 @@ const ReadChapter = () => {
                 )}
 
                 {!loadingPages && pages.map((url, i) => (
-                    <View key={i} style={S.pageWrap}>
+                    <View key={i} style={[S.pageWrap, !fitWidth && S.pageWrapCompact]}>
                         {Platform.OS === 'web' ? (
                             <img
                                 src={url}
@@ -266,7 +272,7 @@ const ReadChapter = () => {
                                 source={{ uri: url }}
                                 style={{
                                     width: '100%',
-                                    height: imageSizes[i] ? screenWidth / imageSizes[i] : screenWidth * 1.4,
+                                    height: imageSizes[i] ? (fitWidth ? screenWidth : Math.min(screenWidth, 900)) / imageSizes[i] : (fitWidth ? screenWidth : Math.min(screenWidth, 900)) * 1.4,
                                     backgroundColor: '#000',
                                 }}
                                 onLoad={(e) => {
@@ -288,6 +294,11 @@ const ReadChapter = () => {
                     </View>
                 )}
 
+                <View style={S.endSection}>
+                    <Ionicons name="checkmark-circle-outline" size={21} color={C.accent} />
+                    <Text style={S.endTitle}>End of chapter</Text>
+                    <Text style={S.endHint}>Keep reading or choose another chapter below.</Text>
+                </View>
                 <View style={S.nav}>
                     <Pressable
                         disabled={!hasPrev}
@@ -384,12 +395,19 @@ const S = StyleSheet.create({
     headerContent: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8 },
     logoImg: { width: 30, height: 30, resizeMode: 'contain' },
     headerInfo: { flex: 1 },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    headerAction: { width: 39, height: 39, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg2, borderWidth: 1, borderColor: C.border },
+    headerActionSelected: { backgroundColor: 'rgba(124,106,245,0.25)', borderColor: C.accent },
     headerTitle: { fontSize: 14, fontWeight: '700', color: C.text1 },
     headerSub: { fontSize: 11, color: C.text3, marginTop: 1 },
     progWrap: { height: 2, backgroundColor: C.bg0 },
     progFill: { height: 2, backgroundColor: C.accent },
     scrollContent: { backgroundColor: C.bg0, paddingBottom: 24 },
-    pageWrap: { width: '100%', marginBottom: 1 },
+    pageWrap: { width: '100%', marginBottom: 1, maxWidth: 1800, alignSelf: 'center' },
+    pageWrapCompact: { maxWidth: 900 },
+    endSection: { paddingTop: 35, paddingBottom: 8, alignItems: 'center', gap: 7 },
+    endTitle: { color: C.text1, fontSize: 17, fontWeight: '800' },
+    endHint: { color: C.text2, fontSize: 12 },
     loadWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 12 },
     loadText: { color: C.text3, fontSize: 13 },
     emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 10 },
