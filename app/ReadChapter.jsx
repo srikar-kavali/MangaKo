@@ -22,6 +22,8 @@ const C = {
 };
 
 const BACKEND = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
+const INITIAL_NATIVE_PAGES = 8;
+const NATIVE_PAGE_BATCH = 6;
 const getW = () => Platform.OS === 'web' ? window.innerWidth : Dimensions.get('window').width;
 
 const normalizeKey = (key) => {
@@ -54,6 +56,7 @@ const ReadChapter = () => {
 
     const [selectedCh, setSelectedCh] = useState(chapterId || chapterUrl || null);
     const [pages, setPages] = useState([]);
+    const [visibleNativePages, setVisibleNativePages] = useState(INITIAL_NATIVE_PAGES);
     const [allChapters, setAllChapters] = useState([]);
     const [loadingPages, setLoadingPages] = useState(false);
     const [pageError, setPageError] = useState('');
@@ -90,6 +93,8 @@ const ReadChapter = () => {
             if (!selectedCh) { setPages([]); return; }
             setLoadingPages(true);
             setPageError('');
+            setVisibleNativePages(INITIAL_NATIVE_PAGES);
+            setImageSizes({});
             scrollRef.current?.scrollTo({ y: 0, animated: false });
             try {
                 let urls = [];
@@ -213,6 +218,15 @@ const ReadChapter = () => {
         }
     };
 
+    const displayedPages = Platform.OS === 'web' ? pages : pages.slice(0, visibleNativePages);
+    const onReaderScroll = ({ nativeEvent }) => {
+        if (Platform.OS === 'web' || loadingPages || visibleNativePages >= pages.length) return;
+        const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+        if (contentSize.height - (contentOffset.y + layoutMeasurement.height) < 1800) {
+            setVisibleNativePages(current => Math.min(pages.length, current + NATIVE_PAGE_BATCH));
+        }
+    };
+
     const idx = allChapters.findIndex(ch => ch.id === selectedCh);
     const hasPrev = idx > 0;
     const hasNext = idx >= 0 && idx < allChapters.length - 1;
@@ -251,6 +265,8 @@ const ReadChapter = () => {
                 contentContainerStyle={S.scrollContent}
                 showsVerticalScrollIndicator={false}
                 onTouchEnd={toggleHeader}
+                onScroll={onReaderScroll}
+                scrollEventThrottle={250}
             >
                 {loadingPages && (
                     <View style={S.loadWrap}>
@@ -259,17 +275,18 @@ const ReadChapter = () => {
                     </View>
                 )}
 
-                {!loadingPages && pages.map((url, i) => (
+                {!loadingPages && displayedPages.map((url, i) => (
                     <View key={i} style={[S.pageWrap, !fitWidth && S.pageWrapCompact]}>
                         {Platform.OS === 'web' ? (
                             <img
                                 src={url}
                                 style={{ width: '100%', height: 'auto', display: 'block', backgroundColor: '#000' }}
                                 loading="lazy"
+                                decoding="async"
                             />
                         ) : (
                             <Image
-                                source={{ uri: url }}
+                                source={{ uri: url, cache: 'force-cache' }}
                                 style={{
                                     width: '100%',
                                     height: imageSizes[i] ? (fitWidth ? screenWidth : Math.min(screenWidth, 900)) / imageSizes[i] : (fitWidth ? screenWidth : Math.min(screenWidth, 900)) * 1.4,
@@ -284,6 +301,10 @@ const ReadChapter = () => {
                         )}
                     </View>
                 ))}
+
+                {!loadingPages && Platform.OS !== 'web' && visibleNativePages < pages.length && (
+                    <View style={S.batchHint}><ActivityIndicator size="small" color={C.accent} /><Text style={S.loadText}>More pages appear as you scroll</Text></View>
+                )}
 
                 {!loadingPages && pages.length === 0 && (
                     <View style={S.emptyWrap}>
@@ -395,6 +416,7 @@ const S = StyleSheet.create({
     pageWrapCompact: { maxWidth: 900 },
     loadWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 12 },
     loadText: { color: C.text3, fontSize: 13 },
+    batchHint: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, paddingVertical: 24 },
     emptyWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 10 },
     emptyText: { color: C.text3, fontSize: 14 },
     pageError: { color: '#fca5a5', fontSize: 12, lineHeight: 19, textAlign: 'center', maxWidth: 700, paddingHorizontal: 20 },
