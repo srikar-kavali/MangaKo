@@ -39,7 +39,7 @@ const C = {
 
 const LIVE_DELAY_MS = 300;
 const CACHE_VERSION = 'v3';
-const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API;
+const BACKEND = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
 
 const BATCH_SIZE = 5;
 const BATCH_GAP_MS = 1200;

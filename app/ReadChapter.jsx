@@ -21,7 +21,7 @@ const C = {
     accent:'#7c6af5', green:'#34d399', greenDim:'rgba(52,211,153,0.10)', greenBorder:'rgba(52,211,153,0.25)',
 };
 
-const BACKEND = process.env.EXPO_PUBLIC_CHAPTERS_API;
+const BACKEND = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
 const getW = () => Platform.OS === 'web' ? window.innerWidth : Dimensions.get('window').width;
 
 const normalizeKey = (key) => {
@@ -94,17 +94,17 @@ const ReadChapter = () => {
                 let urls = [];
                 if (isAsura && seriesId) {
                     if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
-                    const requestUrl = `${BACKEND.replace(/\/$/, '')}/api/asura-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`;
+                    const requestUrl = `${BACKEND}/api/asura-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`;
                     let res;
                     try { res = await fetch(requestUrl); }
                     catch (error) { throw new Error(`Could not reach chapter backend at ${requestUrl}. Check the Network tab for a CORS or connection failure. ${error?.message || ''}`); }
                     if (!res.ok) throw new Error(`Chapter API HTTP ${res.status}: ${requestUrl}`);
                     const json = await res.json();
                     if (!Array.isArray(json?.pages)) throw new Error(`Invalid pages response from ${requestUrl}`);
-                    urls = json.pages.map(u => `${BACKEND.replace(/\/$/, '')}/api/image_proxy?url=${encodeURIComponent(u)}`);
+                    urls = json.pages.map(u => `${BACKEND}/api/image_proxy?url=${encodeURIComponent(u)}`);
                 } else if (isMgeko && seriesId) {
                     if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
-                    const requestUrl = `${BACKEND.replace(/\/$/, '')}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`;
+                    const requestUrl = `${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`;
                     let res;
                     try { res = await fetch(requestUrl); }
                     catch (error) { throw new Error(`Could not reach chapter backend at ${requestUrl}. ${error?.message || ''}`); }
@@ -143,7 +143,9 @@ const ReadChapter = () => {
             try {
                 let chapters = [];
                 if (isAsura && seriesId) {
+                    if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
                     const res = await fetch(`${BACKEND}/api/asura-chapters?seriesId=${encodeURIComponent(seriesId)}`);
+                    if (!res.ok) throw new Error(`Chapter list API HTTP ${res.status}`);
                     const json = await res.json();
                     chapters = (json.chapters || []).map(ch => ({
                         id: ch.id,
@@ -151,7 +153,9 @@ const ReadChapter = () => {
                         number: parseFloat(ch.id) || 0,
                     }));
                 } else if (isMgeko && seriesId) {
+                    if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
                     const res = await fetch(`${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}`);
+                    if (!res.ok) throw new Error(`Chapter list API HTTP ${res.status}`);
                     const json = await res.json();
                     chapters = (json.chapters || []).map(ch => ({
                         id: ch.id,
