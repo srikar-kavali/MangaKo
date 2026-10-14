@@ -18,6 +18,7 @@ import {
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { discoverCatalog, mergeCatalogItems } from '../../services/catalog';
 import { searchMangapill, getMangapillManga, proxied as proxiedMangapill } from '../../manga_api/mangapill';
+import { findMangapillMatch } from '../../services/mangapillMatch';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
 import { proxied as proxiedMgeko } from '../../manga_api/mgeko';
 import {
@@ -140,6 +141,7 @@ export default function Home() {
     const [browseHasMore, setBrowseHasMore] = useState(true);
     const [browseError, setBrowseError] = useState('');
     const [dropdownVisible, setDropdownVisible] = useState(false);
+    const [openingTitle, setOpeningTitle] = useState(null);
 
     const overlayAnim = useRef(new Animated.Value(0)).current;
     const router = useRouter();
@@ -394,10 +396,24 @@ export default function Home() {
         return proxiedAsura(url);
     };
 
-    const openManga = (item) => {
+    const openManga = async (item) => {
         const src = item.source || getSource(item);
         const id = item.id || item.url;
         const titleParam = item.title ? `&title=${encodeURIComponent(item.title)}` : '';
+        if (src === 'mangadex' && item.title) {
+            setOpeningTitle(String(id));
+            try {
+                const match = await findMangapillMatch(item.title, searchMangapill);
+                if (match) {
+                    router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(match.url)}&source=mangapill${titleParam}`);
+                    return;
+                }
+            } catch (error) {
+                console.warn('MangaPill lookup unavailable; falling back to MangaDex', error);
+            } finally {
+                setOpeningTitle(null);
+            }
+        }
         if (src === 'asura' || src === 'mgeko' || src === 'mangadex') {
             router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}${titleParam}`);
         } else {
@@ -582,7 +598,7 @@ export default function Home() {
                 {/* DISCOVERY */}
                 <View style={S.section}>
                     <View style={S.sectionHead}>
-                        <Text style={S.sectionTitle}>Explore Manga & Manhwa</Text>
+                        <View style={{ flex: 1, gap: 4 }}><Text style={S.sectionTitle}>Explore Manga & Manhwa</Text><Text style={S.sectionSubtitle}>Discover your next read</Text></View>
                         <View style={S.liveBadge}>
                             <View style={S.liveDot} />
                             <Text style={S.liveText}>DISCOVER</Text>
@@ -630,6 +646,7 @@ export default function Home() {
                                             </View>
                                         </View>
                                         <Text style={S.gridTitle} numberOfLines={2}>{manga.title}</Text>
+                                        {openingTitle === String(manga.id) && <Text style={S.sourceSearching}>Checking MangaPill…</Text>}
                                     </Pressable>
                                 );
                             })}
@@ -788,7 +805,9 @@ const S = StyleSheet.create({
     scroll: { flex: 1 },
     section: { paddingTop: 24 },
     sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, marginBottom: 14 },
-    sectionTitle: { fontSize: 15, fontWeight: '700', color: C.text1, letterSpacing: -0.2 },
+    sectionTitle: { fontSize: 19, fontWeight: '800', color: C.text1, letterSpacing: -0.4 },
+    sectionSubtitle: { fontSize: 12, color: C.text2 },
+    sourceSearching: { fontSize: 10, color: C.accentBright, marginTop: 4 },
     seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
     seeAllText: { fontSize: 12, fontWeight: '600', color: C.accentBright },
     liveBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: C.accentBorder, backgroundColor: C.accentDim, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 20 },
@@ -834,7 +853,7 @@ const S = StyleSheet.create({
 
     contTitle: { fontSize: 11, fontWeight: '600', color: C.text2, lineHeight: 15 },
 
-    grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 14, gap: 10 },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 18, gap: 14 },
     gridCard: { width: '30.5%', marginBottom: 14 },
     gridCoverWrap: {
         width: '100%', aspectRatio: 0.68, borderRadius: 9, overflow: 'hidden',
