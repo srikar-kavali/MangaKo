@@ -1,9 +1,17 @@
 const BASE = process.env.EXPO_PUBLIC_MANGAPILL_API;
 
 function cleanBase(base) {
-    return base.endsWith("/") ? base.slice(0, -1) : base;
+    return base?.endsWith("/") ? base.slice(0, -1) : base;
 }
 const API_BASE = cleanBase(BASE);
+
+export async function browseMangapill(limit = 24) {
+    if (!API_BASE) throw new Error('EXPO_PUBLIC_MANGAPILL_API is not configured');
+    const response = await fetch(`${API_BASE}/api/mangapill/browse?limit=${Math.max(1, Math.min(48, limit))}`);
+    if (!response.ok) throw new Error(`MangaPill discovery failed: ${response.status}`);
+    const results = await response.json();
+    return Array.isArray(results) ? results : [];
+}
 
 export function proxied(src) {
     if (!src) return "";

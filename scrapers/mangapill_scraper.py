@@ -105,6 +105,37 @@ class MangapillScraper:
         print(f"✅ Found {len(results)} results with titles")
         return results
 
+    # ---- /mangas/new (catalog metadata only) -------------------------------
+    def browse_new(self, limit: int = 24) -> List[Dict]:
+        soup = self._soup("/mangas/new")
+        results: List[Dict] = []
+        seen = set()
+        for a in soup.select('a[href^="/manga/"]'):
+            href = a.get("href", "")
+            if not re.match(r"^/manga/[^/]+/[^/]+/?$", href) or href in seen:
+                continue
+            img = a.select_one("img")
+            title_el = a.select_one("h3, h2, p, span")
+            title = (
+                (img.get("alt") if img else None)
+                or (title_el.get_text(" ", strip=True) if title_el else None)
+                or a.get_text(" ", strip=True)
+            )
+            if not title:
+                continue
+            cover = (img.get("data-src") or img.get("src")) if img else None
+            seen.add(href)
+            results.append({
+                "id": self._abs(href),
+                "url": self._abs(href),
+                "title": title.strip(),
+                "cover": self._abs(cover) if cover else None,
+                "source": "mangapill",
+            })
+            if len(results) >= min(max(int(limit), 1), 48):
+                break
+        return results
+
     # ---- /manga?url=... ------------------------------------------------------
     def get_manga(self, url: str) -> Dict:
         """
