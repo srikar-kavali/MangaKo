@@ -128,6 +128,7 @@ function resolveCardState(manga) {
 }
 
 const DiscoveryCard = React.memo(function DiscoveryCard({ manga, imageUri, width, checking, onOpen }) {
+    const coverSource = React.useMemo(() => imageUri ? { uri: imageUri, cache: 'force-cache' } : null, [imageUri]);
     const source = manga.source;
     const badge = source === 'asura' ? 'AS' : source === 'mgeko' ? 'MG' : source === 'mangadex' ? 'MD' : 'MP';
     const color = source === 'asura' ? C.asuraBg : source === 'mgeko' ? 'rgba(52,211,153,0.80)' : source === 'mangadex' ? C.mdBg : C.mpBg;
@@ -139,8 +140,8 @@ const DiscoveryCard = React.memo(function DiscoveryCard({ manga, imageUri, width
             accessibilityLabel={`Open ${manga.title}`}
         >
             <View style={S.gridCoverWrap}>
-                {imageUri
-                    ? <Image source={{ uri: imageUri }} style={S.gridCover} resizeMode="cover" />
+                {coverSource
+                    ? <Image source={coverSource} style={S.gridCover} resizeMode="cover" />
                     : <View style={S.gridCoverEmpty}><Ionicons name="book-outline" size={20} color={C.text3} /></View>}
                 {!!imageUri && <View style={S.gridGradient} />}
                 <View style={[S.gridBadge, { backgroundColor: color }]}>
@@ -425,14 +426,22 @@ export default function Home() {
         setRecentSearches(u); await saveRecentSearches(u);
     };
 
+    // Keep cover URLs stable across updates, without holding an unbounded catalog cache.
+    const coverUrlCacheRef = useRef(new Map());
     const getProxied = (item) => {
         const url = getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl;
         if (!url) return null;
         const src = item.source || getSource(item);
-        if (src === 'mangapill') return proxiedMangapill(url);
-        if (src === 'mangadex') return proxiedMangadex(url);
-        if (src === 'mgeko') return proxiedMgeko(url);
-        return proxiedAsura(url);
+        const key = `${src}:${url}`;
+        const cache = coverUrlCacheRef.current;
+        if (cache.has(key)) return cache.get(key);
+        const resolved = src === 'mangapill' ? proxiedMangapill(url)
+            : src === 'mangadex' ? proxiedMangadex(url)
+                : src === 'mgeko' ? proxiedMgeko(url)
+                    : proxiedAsura(url);
+        if (cache.size >= 500) cache.clear();
+        cache.set(key, resolved);
+        return resolved;
     };
 
     const openManga = async (item) => {
