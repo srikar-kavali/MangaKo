@@ -70,6 +70,8 @@ const MangaDetails = () => {
     const scrollRef = useRef(null);
 
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState('');
+    const [retryNonce, setRetryNonce] = useState(0);
     const [ascending, setAscending] = useState(false);
     const [page, setPage] = useState(1);
     const [isFav, setIsFav] = useState(false);
@@ -120,6 +122,7 @@ const MangaDetails = () => {
         let cancelled = false;
         (async () => {
             setLoading(true);
+            setFetchError('');
             try {
                 if (isMangapill && resolvedMangapillUrl) {
                     const data = await getMangapillManga(resolvedMangapillUrl);
@@ -140,8 +143,17 @@ const MangaDetails = () => {
                     if (!cancelled && localData) setMangaData(localData);
 
                     const endpoint = isMgeko ? 'mgeko-chapters' : 'asura-chapters';
-                    const res = await fetch(`${BACKEND}/api/${endpoint}?seriesId=${encodeURIComponent(seriesId)}`);
+                    if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is missing. Configure the chapters backend URL and restart Expo.');
+                    const requestUrl = `${BACKEND.replace(/\/$/, '')}/api/${endpoint}?seriesId=${encodeURIComponent(seriesId)}`;
+                    let res;
+                    try {
+                        res = await fetch(requestUrl);
+                    } catch (networkError) {
+                        throw new Error(`Unable to reach ${requestUrl}. Check your backend deployment, browser Network tab, and CORS configuration. ${networkError?.message || ''}`);
+                    }
+                    if (!res.ok) throw new Error(`Chapter API returned HTTP ${res.status}: ${requestUrl}`);
                     const json = await res.json();
+                    if (!Array.isArray(json?.chapters)) throw new Error(`Unexpected chapter response from ${requestUrl}`);
                     if (!cancelled && json.chapters) {
                         setChapters(json.chapters);
                         if (json.total) {
@@ -200,14 +212,17 @@ const MangaDetails = () => {
                     }
                 }
             } catch(e) {
-                console.error('MangaDetails fetch error:', e);
-                if (!cancelled) { setMangaData(null); setChapters([]); }
+                if (!cancelled) {
+                    setFetchError(e?.message || 'Unable to retrieve this title.');
+                    // Keep locally available metadata and reading progress, even if chapter loading fails.
+                    setChapters([]);
+                }
             } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
         return () => { cancelled = true; };
-    }, [seriesId, resolvedMangapillUrl, source, isMangapill, isMangadex]);
+    }, [seriesId, resolvedMangapillUrl, source, isMangapill, isMangadex, retryNonce]);
 
     const getCoverUrl = () => {
         const staticUrl = getStaticCover(storageKey);
@@ -462,7 +477,17 @@ const MangaDetails = () => {
                         </View>
                     )}
 
-                    {!isMangapill && !chapters.length && !loading && (
+                    {!!fetchError && (
+                        <View style={S.fetchErrorBox}>
+                            <Ionicons name="cloud-offline-outline" size={20} color={C.star} />
+                            <View style={{ flex: 1, gap: 5 }}>
+                                <Text style={S.fetchErrorTitle}>Could not load chapters</Text>
+                                <Text selectable style={S.fetchErrorText}>{fetchError}</Text>
+                            </View>
+                            <Pressable style={S.fetchRetry} onPress={() => setRetryNonce(n => n + 1)} accessibilityRole="button" accessibilityLabel="Retry chapter loading"><Text style={S.fetchRetryText}>Retry</Text></Pressable>
+                        </View>
+                    )}
+                    {!fetchError && !isMangapill && !chapters.length && !loading && (
                         <View style={S.warnBox}>
                             <Ionicons name="alert-circle-outline" size={14} color={C.star} />
                             <Text style={S.warnText}>No chapters found for this series.</Text>
@@ -497,7 +522,7 @@ const MangaDetails = () => {
                         );
                     })}
 
-                    {!paged.length && !loading && <Text style={S.noCh}>No chapters found.</Text>}
+                    {!paged.length && !loading && !fetchError && <Text style={S.noCh}>No chapters found.</Text>}
 
                     {totalPages > 1 && (
                         <View style={[S.pager, { marginTop: 8, marginBottom: 24, borderTopWidth: 1, borderTopColor: C.border }]}>
@@ -582,6 +607,11 @@ const S = StyleSheet.create({
     chTitle: { fontSize: 13.5, fontWeight: '500', color: C.text1, flex: 1 },
     lastBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, marginRight: 8 },
     lastText: { fontSize: 10, fontWeight: '700', color: C.green },
+    fetchErrorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginVertical: 14, padding: 14, borderRadius: 12, backgroundColor: 'rgba(251,191,36,0.07)', borderWidth: 1, borderColor: 'rgba(251,191,36,0.22)' },
+    fetchErrorTitle: { fontSize: 13, fontWeight: '800', color: C.star },
+    fetchErrorText: { fontSize: 11, lineHeight: 17, color: C.text2 },
+    fetchRetry: { paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, backgroundColor: C.bg4 },
+    fetchRetryText: { color: C.text1, fontSize: 12, fontWeight: '700' },
     warnBox: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 16, padding: 12, borderRadius: 10, backgroundColor: 'rgba(251,191,36,0.07)', borderWidth: 1, borderColor: 'rgba(251,191,36,0.18)' },
     warnText: { flex: 1, fontSize: 12, color: C.star },
     noCh: { padding: 20, textAlign: 'center', fontSize: 14, color: C.text3 },
