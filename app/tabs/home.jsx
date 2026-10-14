@@ -618,7 +618,7 @@ export default function Home() {
                         </View>
                     ) : (
                         <View style={S.grid}>
-                            {browseManga.filter(item => catalogFilter === 'all' || (catalogFilter === 'manhwa' ? item.source === 'asura' || item.source === 'mgeko' : item.source === 'mangapill' || item.source === 'mangadex')).map((manga, i) => {
+                            {browseManga.filter(item => catalogFilter === 'all' || (catalogFilter === 'manhwa' ? item.source === 'asura' || item.source === 'mgeko' || item.originalLanguage === 'ko' : item.source === 'mangapill' || (item.source === 'mangadex' && item.originalLanguage !== 'ko'))).map((manga, i) => {
                                 const img = getProxied(manga);
                                 const isAS = manga.source === 'asura';
                                 return (
