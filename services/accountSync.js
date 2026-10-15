@@ -6,7 +6,7 @@ const KEYS = ['favorites', 'lastReadChapters', 'hiddenContinueReading', 'complet
 const PREFIXES = ['status:', 'lastviewed:'];
 const META_OWNER = '@mangako/sync-owner';
 const META_BASE = '@mangako/sync-base:';
-const META_PENDING = '@mangako/sync-pending:';
+const META_BACKUP = '@mangako/sync-backup:';
 let activeSync = null;
 let debounceTimer = null;
 
@@ -109,11 +109,17 @@ async function performSync() {
   const { token, userId } = await identity();
   const previousOwner = await AsyncStorage.getItem(META_OWNER);
   const baselineText = await AsyncStorage.getItem(META_BASE + userId);
+  const backupKey = META_BACKUP + userId;
   const baseline = baselineText ? safeParse(baselineText, {}) : {};
   // Prevent uploading local state belonging to a different signed-in account.
   const differentAccount = !!previousOwner && previousOwner !== userId;
   const initialImport = !baselineText && !differentAccount;
   const local = differentAccount ? {} : await readLocal();
+  // A recovery copy is created once per account before any cloud state is
+  // applied. This is intentionally outside the synchronized key namespace.
+  if (!differentAccount && !await AsyncStorage.getItem(backupKey)) {
+    await AsyncStorage.setItem(backupKey, JSON.stringify({ savedAt: Date.now(), snapshot: local }));
+  }
   for (let attempt = 0; attempt < 5; attempt++) {
     const cloud = await request(token, 'GET');
     const remote = cloud.snapshot || {};
@@ -130,6 +136,10 @@ async function performSync() {
       queueLibrarySync();
       return { direction: 'retry-pending' };
     }
+    // Avoid writing account A's data if the user signed into account B
+    // while the request was in flight.
+    const currentUser = await identity();
+    if (currentUser.userId !== userId) throw new Error('Account changed during sync. Please retry.');
     await applyLocal(merged);
     await AsyncStorage.multiSet([
       [META_OWNER, userId],
@@ -138,6 +148,12 @@ async function performSync() {
     return { direction: 'synchronized' };
   }
   throw new Error('Cloud changed during sync. Please retry.');
+}
+
+export async function getLibrarySyncBackup() {
+  const { userId } = await identity();
+  const raw = await AsyncStorage.getItem(META_BACKUP + userId);
+  return raw ? safeParse(raw, null) : null;
 }
 
 export function syncLibraryOnce() {
