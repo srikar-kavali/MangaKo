@@ -21,7 +21,7 @@ export default function Settings() {
   }
   return <SafeAreaView style={S.screen}>
     <ScrollView contentContainerStyle={S.content}>
-      <Pressable style={S.back} onPress={() => router.back()}><Ionicons name="arrow-back" size={18} color="#ddd"/><Text style={S.backText}>Back</Text></Pressable>
+      <Pressable style={S.back} onPress={() => router.replace('/tabs/home')}><Ionicons name="arrow-back" size={18} color="#ddd"/><Text style={S.backText}>Back</Text></Pressable>
       <Text style={S.heading}>Settings</Text>
       <Text style={S.subtitle}>Manage your MangaKo account and reading library.</Text>
       <View style={S.panel}>

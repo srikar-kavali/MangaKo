@@ -169,9 +169,25 @@ export default function Home() {
     const [isSearching, setIsSearching] = useState(false);
     const [followedManga, setFollowedManga] = useState([]);
     const [browseManga, setBrowseManga] = useState([]);
+    const [catalogSource, setCatalogSource] = useState('all');
+    const [catalogGenre, setCatalogGenre] = useState('All');
+    const [catalogSort, setCatalogSort] = useState('default');
+    const catalogGenres = ['All', 'Action', 'Fantasy', 'Romance', 'Comedy', 'Adventure', 'Martial Arts', 'Drama'];
+    const catalogSources = [
+        { key: 'all', label: 'All titles' },
+        { key: 'mangadex', label: 'MangaDex' },
+        { key: 'asura', label: 'Asura' },
+        { key: 'mgeko', label: 'Mgeko' },
+    ];
+    const filteredBrowse = browseManga
+        .filter(item => catalogSource === 'all' || item.source === catalogSource)
+        .filter(item => catalogGenre === 'All' ||
+            (Array.isArray(item.genres) && item.genres.some(g => String(g).toLowerCase() === catalogGenre.toLowerCase())));
+    if (catalogSort === 'az') filteredBrowse.sort((a, b) => a.title.localeCompare(b.title));
+    if (catalogSort === 'za') filteredBrowse.sort((a, b) => b.title.localeCompare(a.title));
     // Group titles into virtualized rows so the carousel and hero remain above the grid.
     const discoveryRows = [];
-    for (let i = 0; i < browseManga.length; i += columns) discoveryRows.push(browseManga.slice(i, i + columns));
+    for (let i = 0; i < filteredBrowse.length; i += columns) discoveryRows.push(filteredBrowse.slice(i, i + columns));
     const [loadingBrowse, setLoadingBrowse] = useState(false);
     const [loadingMoreBrowse, setLoadingMoreBrowse] = useState(false);
     const [browseOffset, setBrowseOffset] = useState(0);
@@ -699,13 +715,44 @@ export default function Home() {
                 {/* DISCOVERY */}
                 <View style={S.section}>
                     <View style={S.sectionHead}>
-                        <View style={{ flex: 1, gap: 4 }}><Text style={S.sectionTitle}>Explore Manga & Manhwa</Text><Text style={S.sectionSubtitle}>Discover your next read</Text></View>
+                        <View style={{ flex: 1, gap: 4 }}><Text style={S.sectionTitle}>Explore Manga & Manhwa</Text><Text style={S.sectionSubtitle}>Browse sources, genres, and titles</Text></View>
                         <View style={S.liveBadge}>
                             <View style={S.liveDot} />
                             <Text style={S.liveText}>DISCOVER</Text>
                         </View>
                     </View>
                 </View>
+                    <View style={{ paddingHorizontal: gridPadding, marginBottom: 20, gap: 12 }}>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                            {catalogSources.map(option => {
+                                const active = catalogSource === option.key;
+                                return <Pressable key={option.key} accessibilityRole="button"
+                                    accessibilityState={{ selected: active }}
+                                    onPress={() => { setCatalogSource(option.key); hasScrolledRef.current = false; }}
+                                    style={{ backgroundColor: active ? C.accent : C.bg3, borderColor: active ? C.accent : C.borderMid, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20 }}>
+                                    <Text style={{ color: active ? '#fff' : C.text2, fontSize: 13, fontWeight: '700' }}>{option.label}</Text>
+                                </Pressable>;
+                            })}
+                        </ScrollView>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+                            {catalogGenres.map(genre => {
+                                const active = catalogGenre === genre;
+                                return <Pressable key={genre} accessibilityRole="button"
+                                    accessibilityState={{ selected: active }} onPress={() => { setCatalogGenre(genre); hasScrolledRef.current = false; }}
+                                    style={{ backgroundColor: active ? C.accentDim : C.bg2, borderColor: active ? C.accentBorder : C.border, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
+                                    <Text style={{ color: active ? C.accentBright : C.text2, fontSize: 12, fontWeight: '600' }}>{genre}</Text>
+                                </Pressable>;
+                            })}
+                        </ScrollView>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                            <Text style={{ color: C.text2, fontSize: 12 }}>{filteredBrowse.length} matching titles from {browseManga.length} loaded</Text>
+                            <Pressable accessibilityRole="button" onPress={() => setCatalogSort(current => current === 'default' ? 'az' : current === 'az' ? 'za' : 'default')}
+                                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8 }}>
+                                <Ionicons name="swap-vertical-outline" size={16} color={C.accentBright} />
+                                <Text style={{ color: C.accentBright, fontSize: 12, fontWeight: '700' }}>{catalogSort === 'az' ? 'Title A–Z' : catalogSort === 'za' ? 'Title Z–A' : 'Default order'}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
                     {loadingBrowse && (
                         <View style={[S.grid, { paddingHorizontal: gridPadding, columnGap: gridGap }]}>
                             {[...Array(columns * 2)].map((_, i) => (
@@ -721,6 +768,15 @@ export default function Home() {
                 }
                 ListFooterComponent={
                     <View style={S.browseFooter}>
+                    {!loadingBrowse && browseManga.length > 0 && filteredBrowse.length === 0 && (
+                        <View style={{ padding: 24, alignItems: 'center', gap: 10 }}>
+                            <Text style={{ color: C.text1, fontWeight: '700' }}>No matches in loaded titles</Text>
+                            <Text style={{ color: C.text2, textAlign: 'center' }}>Try another source or genre, or load more titles.</Text>
+                            <Pressable onPress={() => { setCatalogSource('all'); setCatalogGenre('All'); }} accessibilityRole="button">
+                                <Text style={{ color: C.accentBright, fontWeight: '700' }}>Clear filters</Text>
+                            </Pressable>
+                        </View>
+                    )}
                     {!loadingBrowse && browseManga.length === 0 && (
                         <View style={{ marginHorizontal: 18, padding: 20, backgroundColor: C.bg2, borderRadius: 12 }}>
                             <Text style={{ color: C.text1, fontWeight: '700', marginBottom: 6 }}>No titles loaded</Text>
