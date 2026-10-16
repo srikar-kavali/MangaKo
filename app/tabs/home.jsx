@@ -169,18 +169,10 @@ export default function Home() {
     const [isSearching, setIsSearching] = useState(false);
     const [followedManga, setFollowedManga] = useState([]);
     const [browseManga, setBrowseManga] = useState([]);
-    const [catalogSource, setCatalogSource] = useState('all');
     const [catalogGenre, setCatalogGenre] = useState('All');
     const [catalogSort, setCatalogSort] = useState('default');
     const catalogGenres = ['All', 'Action', 'Fantasy', 'Romance', 'Comedy', 'Adventure', 'Martial Arts', 'Drama'];
-    const catalogSources = [
-        { key: 'all', label: 'All titles' },
-        { key: 'mangadex', label: 'MangaDex' },
-        { key: 'asura', label: 'Asura' },
-        { key: 'mgeko', label: 'Mgeko' },
-    ];
     const filteredBrowse = browseManga
-        .filter(item => catalogSource === 'all' || item.source === catalogSource)
         .filter(item => catalogGenre === 'All' ||
             (Array.isArray(item.genres) && item.genres.some(g => String(g).toLowerCase() === catalogGenre.toLowerCase())));
     if (catalogSort === 'az') filteredBrowse.sort((a, b) => a.title.localeCompare(b.title));
@@ -724,17 +716,6 @@ export default function Home() {
                 </View>
                     <View style={{ paddingHorizontal: gridPadding, marginBottom: 20, gap: 12 }}>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
-                            {catalogSources.map(option => {
-                                const active = catalogSource === option.key;
-                                return <Pressable key={option.key} accessibilityRole="button"
-                                    accessibilityState={{ selected: active }}
-                                    onPress={() => { setCatalogSource(option.key); hasScrolledRef.current = false; }}
-                                    style={{ backgroundColor: active ? C.accent : C.bg3, borderColor: active ? C.accent : C.borderMid, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20 }}>
-                                    <Text style={{ color: active ? '#fff' : C.text2, fontSize: 13, fontWeight: '700' }}>{option.label}</Text>
-                                </Pressable>;
-                            })}
-                        </ScrollView>
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
                             {catalogGenres.map(genre => {
                                 const active = catalogGenre === genre;
                                 return <Pressable key={genre} accessibilityRole="button"
@@ -772,7 +753,7 @@ export default function Home() {
                         <View style={{ padding: 24, alignItems: 'center', gap: 10 }}>
                             <Text style={{ color: C.text1, fontWeight: '700' }}>No matches in loaded titles</Text>
                             <Text style={{ color: C.text2, textAlign: 'center' }}>Try another source or genre, or load more titles.</Text>
-                            <Pressable onPress={() => { setCatalogSource('all'); setCatalogGenre('All'); }} accessibilityRole="button">
+                            <Pressable onPress={() => setCatalogGenre('All')} accessibilityRole="button">
                                 <Text style={{ color: C.accentBright, fontWeight: '700' }}>Clear filters</Text>
                             </Pressable>
                         </View>
