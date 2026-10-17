@@ -6,7 +6,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
-from shared.storage import load_data, save_data
+from shared.storage import save_data
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / '.env')
@@ -104,8 +104,7 @@ def main():
     args = parser.parse_args()
 
     print("=== Manhwa Extractor ===")
-    data = load_data()
-    print(f"Loaded local cache: {len(data)} series")
+    data = {}  # Rebuild working data from Supabase, not stale local JSON.
 
     client = get_supabase_client()
     if client is None:
@@ -119,10 +118,10 @@ def main():
             f"chapter_data.json.backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         )
         shutil.copy2(local_path, backup)
-        print(f"Local backup saved: {backup}")
+        print(f"Local cache backup saved: {backup}")
     save_data(data)
-    print(f"Cloud cache restored: {len(remote)} series, "
-          f"{sum(len(ch) for ch in remote.values())} chapters")
+    print(f"Loaded Series: {len(remote)} series (Supabase)")
+    print(f"Loaded Chapters: {sum(len(ch) for ch in remote.values())} chapters (Supabase)")
 
     if args.sync_only:
         print("Sync-only complete: no scraping or Supabase writes.")
@@ -164,7 +163,7 @@ def main():
             print(f"Extraction/upload failed for {series_id}: {error}")
             continue
 
-    print(f"Finished. Local series: {len(data)}; cloud baseline: {len(remote)}")
+    print(f"Finished processing {len(MANHWA_URLS)} selected titles.")
 
 
 if __name__ == "__main__":
