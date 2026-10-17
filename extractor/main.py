@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 import os
 import certifi
+import argparse
+import shutil
+from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlparse
 from shared.storage import load_data, save_data
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / '.env')
 
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
@@ -44,139 +48,92 @@ def get_site(url):
     return None
 
 
-# ── Supabase upload helper ────────────────────────────────────────────────────
-def get_supabase_client():
-    """Returns Supabase client or None if credentials missing."""
-    try:
-        from supabase import create_client
-        url = os.environ.get("SUPABASE_URL", "")
-        key = os.environ.get("SUPABASE_SERVICE_KEY", "")
-        if not url or not key:
-            print("  ⚠ Supabase credentials not found — skipping upload")
-            return None
-        return create_client(url, key)
-    except ImportError:
-        print("  ⚠ supabase package not installed — skipping upload")
-        return None
+# The local chapter_data.json is a cache. Supabase is authoritative for
+# chapters already uploaded. Syncing from cloud happens before scraping.
+from shared.cloud_sync import (
+    get_supabase_client, hydrate_local_cache, upload_changed_chapters,
+    extract_chapters, valid_chapters,
+)
 
 
-def upload_series_to_supabase(client, series_id, chapters):
-    """Upload only new/changed chapters for a series to Supabase."""
-    if not client or not chapters:
-        return 0
-
-    rows = [
-        {
-            "series_id": series_id,
-            "chapter_id": chapter_id,
-            "pages": pages,
-        }
-        for chapter_id, pages in chapters.items()
-        if isinstance(pages, list) and len(pages) > 0
-    ]
-
-    if not rows:
-        return 0
-
-    # Upsert in batches of 100
-    total = 0
-    for i in range(0, len(rows), 100):
-        batch = rows[i:i + 100]
-        client.table("chapters").upsert(
-            batch,
-            on_conflict="series_id,chapter_id"
-        ).execute()
-        total += len(batch)
-
-    return total
+def get_scraper(site):
+    if site == "asura":
+        from extractor.sites.asura import scrape, get_series_id
+    elif site == "mgeko":
+        from extractor.sites.mgeko import scrape, get_series_id
+    else:
+        raise ValueError(f"Unsupported source: {site}")
+    return scrape, get_series_id
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    parser = argparse.ArgumentParser(description="Supabase-first chapter extractor")
+    parser.add_argument("--sync-only", action="store_true",
+                        help="Read Supabase into local JSON without scraping or uploading")
+    args = parser.parse_args()
+
     print("=== Manhwa Extractor ===")
-    print(f"Processing {len(MANHWA_URLS)} titles\n")
-
     data = load_data()
-    print(f"Loaded existing data: {len(data)} series cached\n")
+    print(f"Loaded local cache: {len(data)} series")
 
-    # Init Supabase client once — reuse for all series
-    supabase = get_supabase_client()
-    if supabase:
-        print("✓ Supabase connected\n")
+    client = get_supabase_client()
+    if client is None:
+        raise SystemExit("Supabase credentials are required to protect the database-first workflow.")
+
+    # Never mutate the local cache if we cannot complete the cloud read.
+    remote = hydrate_local_cache(client, data)
+    local_path = Path("chapter_data.json")
+    if local_path.exists():
+        backup = local_path.with_name(
+            f"chapter_data.json.backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        )
+        shutil.copy2(local_path, backup)
+        print(f"Local backup saved: {backup}")
+    save_data(data)
+    print(f"Cloud cache restored: {len(remote)} series, "
+          f"{sum(len(ch) for ch in remote.values())} chapters")
+
+    if args.sync_only:
+        print("Sync-only complete: no scraping or Supabase writes.")
+        return
 
     for url in MANHWA_URLS:
         site = get_site(url)
         if not site:
-            print(f"  ✗ Unknown site for URL: {url}")
+            print(f"Skipping unsupported URL: {url}")
             continue
 
-        print(f"-> Processing: {url}")
+        scrape, get_series_id = get_scraper(site)
+        series_id = get_series_id(url)
+        if not series_id:
+            print(f"Could not parse exact series ID: {url}")
+            continue
+
+        # Record the cloud baseline; only newly scraped or changed chapters
+        # are candidates for upload. Never delete existing cloud chapters.
+        cloud_before = remote.get(series_id, {})
+        local_before = valid_chapters(extract_chapters(data.get(series_id, {})))
+        print(f"-> Processing {series_id} ({len(cloud_before)} cloud chapters)")
 
         try:
-            if site == "asura":
-                from extractor.sites.asura import scrape
-                scrape(url, data)
-
-            elif site == "mgeko":
-                from extractor.sites.mgeko import scrape
-                scrape(url, data)
-
-            # Match what the scraper wrote directly to the data keys
-            series_id = _get_series_id_from_url(url, data)
-
-            if series_id and series_id in data:
-                # Support both nested structure and flat structure safely
-                series_entry = data[series_id]
-                if isinstance(series_entry, dict) and "chapters" in series_entry:
-                    chapters = series_entry["chapters"]
-                else:
-                    chapters = series_entry
-
-                if supabase:
-                    uploaded = upload_series_to_supabase(supabase, series_id, chapters)
-                    if uploaded > 0:
-                        print(f"  ☁ Automatically uploaded {uploaded} chapters to Supabase")
+            scrape(url, data)
+            after = valid_chapters(extract_chapters(data.get(series_id, {})))
+            updated = {
+                k: pages for k, pages in after.items()
+                if pages != local_before.get(k) and pages != cloud_before.get(k)
+            }
+            if updated:
+                upload_changed_chapters(client, series_id, updated)
+                print(f"Uploaded {len(updated)} new/updated chapters")
             else:
-                print(f"  ⚠ Could not resolve unique database ID for: {url}")
-
-        except Exception as e:
-            print(f"  ✗ Failed entirely during extraction/upload: {e}")
+                print("No new chapters to upload")
+            save_data(data)
+        except Exception as error:
+            save_data(data)
+            print(f"Extraction/upload failed for {series_id}: {error}")
             continue
 
-    # Critical: Save all updates down to disk at the end
-    save_data(data)
-    print(f"\n{'='*50}")
-    print(f"All done! Data saved to chapter_data.json")
-
-    # Print clean diagnostic totals
-    total_chaps = 0
-    for v in data.values():
-        if isinstance(v, dict) and "chapters" in v:
-            total_chaps += len(v["chapters"])
-        else:
-            total_chaps += len(v)
-
-    print(f"Total series: {len(data)} | Total chapters: {total_chaps}")
-
-
-def _get_series_id_from_url(url, data):
-    """
-    Finds the exact key slug generated by your scraper within the loaded data dictionary.
-    """
-    path = urlparse(url).path.strip("/")
-    parts = [p for p in path.split("/") if p and p not in ("manga", "comics", "all-chapters")]
-    if parts:
-        slug = parts[-1]  # Safely grabs the trailing unique title slug identifier
-
-        # Check explicit exact matching first
-        if slug in data:
-            return slug
-
-        # Fallback to fuzzy dictionary indexing checks
-        for key in data.keys():
-            if slug in key or key in slug:
-                return key
-    return None
+    print(f"Finished. Local series: {len(data)}; cloud baseline: {len(remote)}")
 
 
 if __name__ == "__main__":
