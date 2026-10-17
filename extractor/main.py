@@ -118,10 +118,9 @@ def main():
             f"chapter_data.json.backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         )
         shutil.copy2(local_path, backup)
-        print(f"Local cache backup saved: {backup}")
+
     save_data(data)
-    print(f"Loaded Series: {len(remote)} series (Supabase)")
-    print(f"Loaded Chapters: {sum(len(ch) for ch in remote.values())} chapters (Supabase)")
+    print(f"Loaded Series: {len(remote)} series\n")
 
     if args.sync_only:
         print("Sync-only complete: no scraping or Supabase writes.")
@@ -143,7 +142,7 @@ def main():
         # are candidates for upload. Never delete existing cloud chapters.
         cloud_before = remote.get(series_id, {})
         local_before = valid_chapters(extract_chapters(data.get(series_id, {})))
-        print(f"-> Processing {series_id} ({len(cloud_before)} cloud chapters)")
+        print(f"-> Processing {series_id}")
 
         try:
             scrape(url, data)
@@ -154,7 +153,7 @@ def main():
             }
             if updated:
                 upload_changed_chapters(client, series_id, updated)
-                print(f"Uploaded {len(updated)} new/updated chapters")
+                print(f"Uploaded {len(updated)} updated chapters")
             else:
                 print("No new chapters to upload")
             save_data(data)
@@ -163,7 +162,7 @@ def main():
             print(f"Extraction/upload failed for {series_id}: {error}")
             continue
 
-    print(f"Finished processing {len(MANHWA_URLS)} selected titles.")
+
 
 
 if __name__ == "__main__":
