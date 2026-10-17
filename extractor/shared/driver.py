@@ -9,7 +9,7 @@ try:
 except ImportError:
     HAS_PSUTIL = False
 
-CHROME_VERSION = 153
+CHROME_VERSION = 155
 
 
 def make_driver(headless=True):
