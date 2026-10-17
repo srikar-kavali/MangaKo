@@ -15,7 +15,7 @@ os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 # =============================================
 MANHWA_URLS = [
     # --- Asura Scans ---
-    "https://asurascans.com/comics/absolute-sword-sense-19cdf401",
+
 
     # --- Mgeko ---
     #"https://www.mgeko.cc/manga/manga-si7aaa/all-chapters/", # tower of god
@@ -31,9 +31,29 @@ MANHWA_URLS = [
     #"https://www.mgeko.cc/manga/the-story-of-a-low-rank-soldier-becoming-a-monarch-mg1/all-chapters/",
     #"https://www.mgeko.cc/manga/the-long-way-of-the-warrior/all-chapters/",
     #"https://www.mgeko.cc/manga/regressed-life-of-the-sword-clans-ignoble-reincarnator/all-chapters/",
-]
-# =============================================
+    #"https://www.mgeko.cc/manga/the-evil-ring/all-chapters/",
+    #"https://www.mgeko.cc/manga/sha-money-ism/all-chapters/",
+    #"https://www.mgeko.cc/manga/a-regressors-tale-of-cultivation/all-chapters/",
+    #"https://www.mgeko.cc/manga/hero-killer-mg1/all-chapters/",
+    #"https://www.mgeko.cc/manga/death-god/",
+    #"https://www.mgeko.cc/manga/the-tales-of-heaven-and-earth/",
+    #"https://www.mgeko.cc/manga/the-gray-mark/",
+    #"https://www.mgeko.cc/manga/black-serpent/,
+    #"https://www.mgeko.cc/manga/the-knight-of-embers-mg1/",
+    #"https://www.mgeko.cc/manga/manga-mm990169/", #Mage Again
+    #"https://www.mgeko.cc/manga/lantern-of-the-dawn/",
+    #"https://www.mgeko.cc/manga/warrior-cariel/",
+    #"https://www.mgeko.cc/manga/manga-1089/", #Hardcore Leveling Warrior
+    #"https://www.mgeko.cc/manga/burning-effect-mg1/",
+    #"https://www.mgeko.cc/manga/song-of-the-sky-walkers/",
+    #"https://www.mgeko.cc/manga/moshin-hunter-mg1/",
+    #"https://www.mgeko.cc/manga/dao-of-the-bizarre-immortal/",
+    #"https://www.mgeko.cc/manga/heavenly-demon-cultivation-simulation-mg1/",
+    #"https://www.mgeko.cc/manga/akt1-judgment/",
 
+
+# =============================================
+]
 
 def get_site(url):
     domain = urlparse(url).netloc
