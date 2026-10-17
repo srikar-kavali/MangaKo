@@ -58,9 +58,9 @@ from shared.cloud_sync import (
 
 def get_scraper(site):
     if site == "asura":
-        from extractor.sites.asura import scrape, get_series_id
+        from sites.asura import scrape, get_series_id
     elif site == "mgeko":
-        from extractor.sites.mgeko import scrape, get_series_id
+        from sites.mgeko import scrape, get_series_id
     else:
         raise ValueError(f"Unsupported source: {site}")
     return scrape, get_series_id
