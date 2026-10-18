@@ -12,6 +12,7 @@ import httpx
 # Add other verified image origins with IMAGE_PROXY_ALLOWED_HOSTS on the server.
 DEFAULT_HOSTS = {
     "mangapill.com", "www.mangapill.com", "readdetectiveconan.com",
+    "cdn.readdetectiveconan.com",
     "mgeko.cc", "www.mgeko.cc", "asurascans.com",
     "cdn.asurascans.com", "asuracomic.net", "gg.asuracomic.net",
     "uploads.mangadex.org", "mangadex.org", "api.mangadex.org",
@@ -74,7 +75,7 @@ def fallback_urls(url):
 
 def request_headers(host):
     headers = {"User-Agent": "MangaKo-ImageProxy/1.0", "Accept": "image/*"}
-    if "mangapill" in host or host == "readdetectiveconan.com":
+    if "mangapill" in host or host in {"readdetectiveconan.com", "cdn.readdetectiveconan.com"}:
         headers["Referer"] = "https://mangapill.com/"
     elif host.startswith("imgsrv") or "mgeko" in host:
         headers["Referer"] = "https://www.mgeko.cc/"
