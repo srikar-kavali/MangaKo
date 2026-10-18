@@ -13,9 +13,30 @@ export async function browseMangapill(limit = 24) {
     return Array.isArray(results) ? results : [];
 }
 
+// Saved library entries may contain proxy URLs from older Vercel deployments.
+// Unwrap only known MangaKo image-proxy paths; the backend still validates the
+// original image host against its allowlist.
+export function unwrapImageProxyUrl(src) {
+    if (typeof src !== 'string') return '';
+    let current = src;
+    for (let i = 0; i < 5; i++) {
+        try {
+            const parsed = new URL(current);
+            if (parsed.pathname !== '/api/image_proxy') break;
+            const original = parsed.searchParams.get('url');
+            if (!original || !/^https:\/\//i.test(original) || original === current) break;
+            current = original;
+        } catch {
+            break;
+        }
+    }
+    return current;
+}
+
 export function proxied(src) {
-    if (!src) return "";
-    return `${API_BASE}/api/image_proxy?url=${encodeURIComponent(src)}`;
+    const original = unwrapImageProxyUrl(src);
+    if (!original || !API_BASE) return '';
+    return `${API_BASE}/api/image_proxy?url=${encodeURIComponent(original)}`;
 }
 
 export async function searchMangapill(title, limit = 10) {

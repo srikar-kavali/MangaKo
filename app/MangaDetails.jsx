@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { proxied as proxiedAsura } from '../manga_api/asurascans';
-import { getMangapillManga, proxied as proxiedMangapill } from '../manga_api/mangapill';
+import { getMangapillManga, proxied as proxiedMangapill, unwrapImageProxyUrl } from '../manga_api/mangapill';
 import { proxied as proxiedMgeko } from '../manga_api/mgeko';
 import {
     getMangadexManga, proxied as proxiedMangadex,
@@ -227,7 +227,7 @@ const MangaDetails = () => {
     const getCoverUrl = () => {
         const staticUrl = getStaticCover(storageKey);
         const dataUrl = mangaData?.image || mangaData?.cover || null;
-        const url = staticUrl || dataUrl;
+        const url = unwrapImageProxyUrl(staticUrl || dataUrl);
         if (!url) return null;
         if (isAsura) return proxiedAsura(url);
         if (isMgeko) return proxiedMgeko(url);

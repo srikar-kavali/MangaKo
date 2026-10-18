@@ -18,7 +18,7 @@ import {
 } from '../searchStorage';
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { discoverCatalog, mergeCatalogItems } from '../../services/catalog';
-import { searchMangapill, getMangapillManga, proxied as proxiedMangapill } from '../../manga_api/mangapill';
+import { searchMangapill, getMangapillManga, proxied as proxiedMangapill, unwrapImageProxyUrl } from '../../manga_api/mangapill';
 import { findMangapillMatch } from '../../services/mangapillMatch';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
 import { proxied as proxiedMgeko } from '../../manga_api/mgeko';
@@ -440,7 +440,7 @@ export default function Home() {
     // Keep cover URLs stable across updates, without holding an unbounded catalog cache.
     const coverUrlCacheRef = useRef(new Map());
     const getProxied = (item) => {
-        const url = getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl;
+        const url = unwrapImageProxyUrl(getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl);
         if (!url) return null;
         const src = item.source || getSource(item);
         const key = `${src}:${url}`;
