@@ -216,53 +216,53 @@ export default function Home() {
 
     const loadFollowedManga = useCallback(async () => {
         const [favs, hiddenCards] = await Promise.all([getFavorites(), getHiddenContinueReading()]);
+        // Read progress once, rather than querying the same JSON for each title.
+        const keys = [
+            'lastReadChapters',
+            ...favs.flatMap(f => [
+                `latest_chapter_${f.url}`,
+                newChapterKey(f.url),
+                `lastviewed:${f.url}`,
+            ]),
+        ];
+        const values = Object.fromEntries(await AsyncStorage.multiGet([...new Set(keys)]));
+        let progress = {};
+        try { progress = JSON.parse(values.lastReadChapters || '{}') || {}; } catch {}
 
-        const withProgress = await Promise.all(
-            favs.map(async f => {
-                const key = f.url;
-                const info = await getLastReadChapterInfo(key);
-                if (!info?.chapterUrl) return null;
-                if (hiddenCards[key] && Number(hiddenCards[key]) >= (info.timestamp || 0)) return null;
+        const sorted = favs.map(f => {
+            const key = f.url;
+            const info = progress[key];
+            if (!info?.chapterUrl) return null;
+            if (hiddenCards[key] && Number(hiddenCards[key]) >= (info.timestamp || 0)) return null;
 
-                const latestChapter = await getLatestChapter(key);
-
-                let newChapterAt = null;
-                let wasCaughtUpWhenNew = false;
+            const latestChapter = values[`latest_chapter_${key}`] || null;
+            let newChapterAt = null;
+            let wasCaughtUpWhenNew = false;
+            const raw = values[newChapterKey(key)];
+            if (raw) {
                 try {
-                    const raw = await AsyncStorage.getItem(newChapterKey(key));
-                    if (raw) {
-                        try {
-                            // Current format: JSON payload with catch-up context.
-                            const parsed = JSON.parse(raw);
-                            newChapterAt = parsed?.ts ?? null;
-                            wasCaughtUpWhenNew = !!parsed?.wasCaughtUp;
-                        } catch {
-                            // Legacy format: a bare timestamp string. We don't know
-                            // the catch-up context for these, so default to the
-                            // conservative option (don't jump the target ahead).
-                            newChapterAt = parseInt(raw);
-                            wasCaughtUpWhenNew = false;
-                        }
+                    const parsed = JSON.parse(raw);
+                    if (parsed && typeof parsed === 'object') {
+                        newChapterAt = parsed.ts ?? null;
+                        wasCaughtUpWhenNew = !!parsed.wasCaughtUp;
+                    } else {
+                        newChapterAt = Number(raw) || null;
                     }
-                } catch { /* ignore */ }
-
-                const lastViewedAt = await getLastViewed(key);
-
-                return {
-                    ...f,
-                    lastReadChapter: info.chapterUrl,
-                    lastReadTimestamp: info.timestamp || 0,
-                    latestChapter: latestChapter ?? null,
-                    hasNewChapterFlag: newChapterAt != null,
-                    wasCaughtUpWhenNew,
-                    sortPriority: Math.max(newChapterAt ?? 0, info.timestamp ?? 0, lastViewedAt ?? 0),
-                };
-            })
-        );
-
-        const sorted = withProgress
-            .filter(Boolean)
-            .sort((a, b) => b.sortPriority - a.sortPriority);
+                } catch {
+                    newChapterAt = Number(raw) || null;
+                }
+            }
+            const lastViewedAt = Number(values[`lastviewed:${key}`]) || 0;
+            return {
+                ...f,
+                lastReadChapter: info.chapterUrl,
+                lastReadTimestamp: info.timestamp || 0,
+                latestChapter,
+                hasNewChapterFlag: newChapterAt != null,
+                wasCaughtUpWhenNew,
+                sortPriority: Math.max(newChapterAt || 0, info.timestamp || 0, lastViewedAt),
+            };
+        }).filter(Boolean).sort((a, b) => b.sortPriority - a.sortPriority);
 
         setFollowedManga(sorted);
         return sorted;
@@ -328,15 +328,21 @@ export default function Home() {
 
     useFocusEffect(
         useCallback(() => {
+            let cancelled = false;
             bgCancelledRef.current = false;
-            (async () => {
-                await syncLibraryOnce().catch(() => {});
-                if (bgCancelledRef.current) return;
-                setRecentSearches(await getRecentSearches());
-                const series = await loadFollowedManga();
-                runBackgroundFetch(series);
-            })();
-            return () => { bgCancelledRef.current = true; };
+            // Show cached reading progress immediately. Network sync can run
+            // independently and refresh the carousel once it finishes.
+            getRecentSearches().then(value => { if (!cancelled) setRecentSearches(value); }).catch(() => {});
+            loadFollowedManga().catch(error => console.warn('Unable to load Continue Reading', error));
+            syncLibraryOnce()
+                .catch(() => {}) // Offline mode still shows locally saved progress.
+                .then(async () => {
+                    if (cancelled) return;
+                    const series = await loadFollowedManga();
+                    if (!cancelled) runBackgroundFetch(series);
+                })
+                .catch(error => console.warn('Unable to refresh Continue Reading', error));
+            return () => { cancelled = true; bgCancelledRef.current = true; };
         }, [loadFollowedManga, runBackgroundFetch])
     );
 
