@@ -640,10 +640,9 @@ export default function Home() {
                     <>
 
                 <View style={[S.hero, followedManga.length > 0 && S.heroCompact]}>
-                    <View style={S.heroGlow} />
-                    <Text style={S.heroEyebrow}>YOUR LIBRARY, YOUR NEXT ADVENTURE</Text>
-                    <Text style={[S.heroTitle, followedManga.length > 0 && S.heroCompactTitle]}>{followedManga.length > 0 ? "Ready for another chapter?" : "Discover something worth reading."}</Text>
-                    <Text style={S.heroDescription}>{followedManga.length > 0 ? "Your stories are waiting below. Or find your next favorite." : "Explore manga and manhwa, keep your place, and pick up right where you left off."}</Text>
+                    <Text style={S.heroEyebrow}>{followedManga.length > 0 ? 'YOUR READING SHELF' : 'MANGA & MANHWA'}</Text>
+                    <Text style={[S.heroTitle, followedManga.length > 0 && S.heroCompactTitle]}>{followedManga.length > 0 ? 'Pick up where you left off.' : 'Find your next read.'}</Text>
+                    <Text style={S.heroDescription}>{followedManga.length > 0 ? 'Continue a series or explore something new.' : 'Browse titles from multiple sources in one place.'}</Text>
                     <Pressable style={S.heroAction} onPress={openSearch} accessibilityRole="button" accessibilityLabel="Search manga and manhwa">
                         <Ionicons name="search-outline" size={17} color="#fff" />
                         <Text style={S.heroActionText}>Find a story</Text>
@@ -953,16 +952,16 @@ const S = StyleSheet.create({
 
     scroll: { flex: 1 },
     scrollContent: { paddingBottom: 52, maxWidth: 1280, width: '100%', alignSelf: 'center' },
-    hero: { marginHorizontal: 18, marginTop: 22, paddingHorizontal: 25, paddingVertical: 30, backgroundColor: '#1b1731', borderColor: 'rgba(157,143,255,0.19)', borderWidth: 1, borderRadius: 20, overflow: 'hidden', gap: 10 },
-    heroCompact: { paddingVertical: 18, gap: 7 },
-    heroCompactTitle: { fontSize: 24, lineHeight: 30 },
+    hero: { marginHorizontal: 18, marginTop: 20, paddingHorizontal: 20, paddingVertical: 20, backgroundColor: C.bg2, borderColor: C.borderMid, borderWidth: 1, borderRadius: 12, gap: 8 },
+    heroCompact: { paddingVertical: 16, gap: 6 },
+    heroCompactTitle: { fontSize: 22, lineHeight: 28 },
     heroGlow: { position: 'absolute', top: -110, right: -120, width: 340, height: 340, borderRadius: 170, backgroundColor: 'rgba(124,106,245,0.23)' },
-    heroEyebrow: { color: '#afa4ff', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 },
-    heroTitle: { color: '#faf9ff', fontSize: 30, fontWeight: '800', letterSpacing: -1, lineHeight: 35, maxWidth: 500 },
-    heroDescription: { color: '#b4afc6', fontSize: 13, lineHeight: 20, maxWidth: 470 },
-    heroAction: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10, backgroundColor: '#735bf0', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12 },
-    heroActionText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-    section: { paddingTop: 32 },
+    heroEyebrow: { color: C.text2, fontSize: 10, fontWeight: '700', letterSpacing: 1.1 },
+    heroTitle: { color: C.text1, fontSize: 25, fontWeight: '800', letterSpacing: -0.7, lineHeight: 31, maxWidth: 500 },
+    heroDescription: { color: C.text2, fontSize: 13, lineHeight: 19, maxWidth: 470 },
+    heroAction: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 7, backgroundColor: C.bg4, borderWidth: 1, borderColor: C.borderMid, paddingVertical: 10, paddingHorizontal: 13, borderRadius: 8 },
+    heroActionText: { color: C.text1, fontSize: 13, fontWeight: '700' },
+    section: { paddingTop: 24 },
     sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, marginBottom: 14 },
     sectionTitle: { fontSize: 19, fontWeight: '800', color: C.text1, letterSpacing: -0.4 },
     sectionSubtitle: { fontSize: 12, color: C.text2 },
@@ -1024,7 +1023,7 @@ const S = StyleSheet.create({
     grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 21 },
     gridCard: { minWidth: 0, marginBottom: 2 },
     gridCoverWrap: {
-        width: '100%', aspectRatio: 0.68, borderRadius: 13, overflow: 'hidden',
+        width: '100%', aspectRatio: 0.68, borderRadius: 8, overflow: 'hidden',
         backgroundColor: C.bg3, marginBottom: 7,
         shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 7,
     },
