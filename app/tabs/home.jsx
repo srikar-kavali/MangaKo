@@ -132,7 +132,7 @@ const DiscoveryCard = React.memo(function DiscoveryCard({ manga, imageUri, width
     const coverSource = React.useMemo(() => imageUri ? { uri: imageUri, cache: 'force-cache' } : null, [imageUri]);
     const source = manga.source;
     const badge = source === 'asura' ? 'AS' : source === 'mgeko' ? 'MG' : source === 'mangadex' ? 'MD' : 'MP';
-    const color = source === 'asura' ? C.asuraBg : source === 'mgeko' ? 'rgba(52,211,153,0.80)' : source === 'mangadex' ? C.mdBg : C.mpBg;
+    const color = 'rgba(12,12,16,0.88)';
     return (
         <Pressable
             style={({ pressed }) => [S.gridCard, { width, opacity: pressed ? 0.76 : 1, transform: [{ scale: pressed ? 0.985 : 1 }] }]}
@@ -977,22 +977,21 @@ const S = StyleSheet.create({
     retryBtn: { alignSelf: 'center', paddingVertical: 12, paddingHorizontal: 18, marginVertical: 12, borderRadius: 10, backgroundColor: C.bg3 },
     loadMoreBtn: { alignSelf: 'center', marginVertical: 20, paddingHorizontal: 20, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, backgroundColor: C.bg3, borderWidth: 1, borderColor: C.borderMid },
     loadMoreText: { color: C.accentBright, fontWeight: '700', fontSize: 13 },
-    hList: { paddingHorizontal: 18, gap: 14, paddingRight: 30, paddingBottom: 8 },
-    sectionHint: { color: C.text2, fontSize: 11, marginHorizontal: 18, marginBottom: 12 },
+    hList: { paddingHorizontal: 18, gap: 12, paddingRight: 30, paddingBottom: 8 },
+    sectionHint: { color: C.text2, fontSize: 11, marginHorizontal: 18, marginBottom: 10 },
     hideCardButton: { position: 'absolute', top: 7, left: 7, zIndex: 2, width: 25, height: 25, borderRadius: 13, backgroundColor: 'rgba(7,7,10,0.88)', borderWidth: 1, borderColor: C.borderMid, alignItems: 'center', justifyContent: 'center' },
     contCard: { width: 118 },
     contCardDesktop: { width: 138 },
     contCoverDesktop: { width: 138, height: 192 },
     contCoverWrap: {
-        width: 118, height: 167, borderRadius: 12, overflow: 'hidden',
-        backgroundColor: '#2a2a35', borderWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
-        marginBottom: 8,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.55, shadowRadius: 14, elevation: 10,
+        width: 118, height: 167, borderRadius: 7, overflow: 'hidden',
+        backgroundColor: C.bg3, borderWidth: 1, borderColor: C.border,
+        marginBottom: 9,
     },
     contCover: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
     contCoverEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 5 },
     contCoverEmptyText: { fontSize: 9, color: C.text3, fontWeight: '600', letterSpacing: 0.3 },
-    contGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 50, backgroundColor: 'rgba(7,7,10,0.65)' },
+    contGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 20, backgroundColor: 'rgba(7,7,10,0.18)' },
     srcDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)' },
 
     contChBtn: {
@@ -1016,23 +1015,22 @@ const S = StyleSheet.create({
     },
     caughtUpText: { color: C.green, fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
 
-    contTitle: { fontSize: 12, fontWeight: '700', color: '#d3d0dd', lineHeight: 17 },
+    contTitle: { fontSize: 12, fontWeight: '600', color: C.text1, lineHeight: 18 },
 
     browseFooter: { paddingBottom: 24 },
     gridRow: { flexDirection: 'row', marginBottom: 20 },
     grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 21 },
     gridCard: { minWidth: 0, marginBottom: 2 },
     gridCoverWrap: {
-        width: '100%', aspectRatio: 0.68, borderRadius: 8, overflow: 'hidden',
-        backgroundColor: C.bg3, marginBottom: 7,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 7,
+        width: '100%', aspectRatio: 0.68, borderRadius: 7, overflow: 'hidden',
+        backgroundColor: C.bg3, marginBottom: 8,
     },
     gridCover: { width: '100%', height: '100%' },
     gridCoverEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg3 },
-    gridGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 36, backgroundColor: 'rgba(7,7,10,0.5)' },
-    gridBadge: { position: 'absolute', top: 6, right: 6, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
-    gridBadgeText: { color: '#fff', fontSize: 8, fontWeight: '800' },
-    gridTitle: { fontSize: 12, fontWeight: '700', color: '#dedce7', lineHeight: 17, marginTop: 4 },
+    gridGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 18, backgroundColor: 'rgba(7,7,10,0.15)' },
+    gridBadge: { position: 'absolute', top: 6, right: 6, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
+    gridBadgeText: { color: '#e6e3ef', fontSize: 9, fontWeight: '700', letterSpacing: 0.3 },
+    gridTitle: { fontSize: 12.5, fontWeight: '600', color: C.text1, lineHeight: 18, marginTop: 3 },
 
     skelCard: { marginBottom: 14 },
     skelCover: { width: '100%', aspectRatio: 0.68, borderRadius: 9, backgroundColor: C.bg3 },
