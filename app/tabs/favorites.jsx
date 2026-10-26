@@ -9,6 +9,7 @@ import { queueLibrarySync, syncLibraryOnce } from "../../services/accountSync";
 import { getFavorites, getLastReadChapterInfo, removeFavorite } from "../searchStorage";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import { getCurrentUser } from '../../auth/cognito';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
 import { proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedMgeko } from '../../manga_api/mgeko';
@@ -43,6 +44,7 @@ const STATUS_ORDER = { 'Reading': 0, 'Plan to Read': 1, 'On Hold': 2, 'Hiatus': 
 
 export default function Favorites() {
     const [favorites, setFavorites] = useState([]);
+    const [isGuest, setIsGuest] = useState(false);
     const [libraryQuery, setLibraryQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState('All');
     const { width: viewportWidth } = useWindowDimensions();
@@ -56,7 +58,22 @@ export default function Favorites() {
 
     useFocusEffect(useCallback(() => {
         let current = true;
-        syncLibraryOnce().catch(() => {}).finally(() => { if (current) load(); });
+        (async () => {
+            const user = await getCurrentUser();
+            if (!current) return;
+            if (!user) {
+                setIsGuest(true);
+                setFavorites([]);
+                setLastReadInfo({});
+                setStatusMap({});
+                setChapterCounts({});
+                setLoading(false);
+                return;
+            }
+            setIsGuest(false);
+            await syncLibraryOnce().catch(() => {});
+            if (current) await load();
+        })().catch(() => { if (current) { setIsGuest(true); setFavorites([]); setLoading(false); } });
         return () => { current = false; };
     }, []));
 
@@ -341,6 +358,27 @@ export default function Favorites() {
         return (activeFilter === 'All' || status === activeFilter)
             && String(f.title || '').toLowerCase().includes(libraryQuery.trim().toLowerCase());
     });
+
+    if (isGuest) {
+        return (
+            <SafeAreaView style={[S.screen, { justifyContent: 'center', alignItems: 'center', padding: 28 }]}>
+                <Ionicons name="book-outline" size={44} color={C.text2} />
+                <Text style={{ color: C.text1, fontSize: 24, fontWeight: '800', marginTop: 18 }}>Your list is empty</Text>
+                <Text style={{ color: C.text2, fontSize: 14, textAlign: 'center', marginTop: 10, lineHeight: 22 }}>
+                    Sign in or create an account to save titles and sync your reading progress.
+                </Text>
+                <Pressable onPress={() => router.push('/login')} style={{ marginTop: 22, backgroundColor: C.accent, paddingHorizontal: 28, paddingVertical: 14, borderRadius: 10 }}>
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>Sign In</Text>
+                </Pressable>
+                <Pressable onPress={() => router.push('/signup')} style={{ marginTop: 18 }}>
+                    <Text style={{ color: C.accentBright, fontWeight: '700' }}>Create Account</Text>
+                </Pressable>
+                <Pressable onPress={() => router.push('/tabs/home')} style={{ marginTop: 26 }}>
+                    <Text style={{ color: C.text2 }}>Continue browsing</Text>
+                </Pressable>
+            </SafeAreaView>
+        );
+    }
 
     if (loading) {
         return (

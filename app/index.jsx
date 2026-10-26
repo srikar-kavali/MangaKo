@@ -7,7 +7,7 @@ export default function Index() {
 
     useEffect(() => {
         const task = InteractionManager.runAfterInteractions(() => {
-            router.replace('/login');
+            router.replace('/tabs/home');
         });
 
         return () => task.cancel();

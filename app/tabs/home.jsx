@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { signOut } from '../../auth/cognito';
+import { signOut, getCurrentUser } from '../../auth/cognito';
 import { syncLibraryOnce, stopLibrarySync } from '../../services/accountSync';
 import {
     getRecentSearches, saveRecentSearches, getFavorites,
@@ -168,6 +168,7 @@ export default function Home() {
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [followedManga, setFollowedManga] = useState([]);
+    const [signedIn, setSignedIn] = useState(false);
     const [browseManga, setBrowseManga] = useState([]);
     const [catalogGenre, setCatalogGenre] = useState('All');
     const [catalogSort, setCatalogSort] = useState('default');
@@ -330,18 +331,25 @@ export default function Home() {
         useCallback(() => {
             let cancelled = false;
             bgCancelledRef.current = false;
-            // Show cached reading progress immediately. Network sync can run
-            // independently and refresh the carousel once it finishes.
             getRecentSearches().then(value => { if (!cancelled) setRecentSearches(value); }).catch(() => {});
-            loadFollowedManga().catch(error => console.warn('Unable to load Continue Reading', error));
-            syncLibraryOnce()
-                .catch(() => {}) // Offline mode still shows locally saved progress.
-                .then(async () => {
+            (async () => {
+                const user = await getCurrentUser();
+                if (cancelled) return;
+                const authenticated = !!user;
+                setSignedIn(authenticated);
+                if (!authenticated) {
+                    setFollowedManga([]);
+                    return;
+                }
+                const local = await loadFollowedManga();
+                if (cancelled) return;
+                // Do not block initial carousel rendering on network activity.
+                syncLibraryOnce().then(async () => {
                     if (cancelled) return;
                     const series = await loadFollowedManga();
                     if (!cancelled) runBackgroundFetch(series);
-                })
-                .catch(error => console.warn('Unable to refresh Continue Reading', error));
+                }).catch(() => {});
+            })().catch(error => console.warn('Unable to initialize Home library', error));
             return () => { cancelled = true; bgCancelledRef.current = true; };
         }, [loadFollowedManga, runBackgroundFetch])
     );
@@ -563,17 +571,38 @@ export default function Home() {
                 <>
                     <Pressable style={S.ddMask} onPress={() => setDropdownVisible(false)} />
                     <View style={S.dropdown}>
-                        <Pressable style={S.ddRow} onPress={() => { setDropdownVisible(false); router.push('/settings'); }}>
-                            <Ionicons name="settings-outline" size={14} color={C.text2} />
-                            <Text style={S.ddText}>Settings</Text>
-                        </Pressable>
-                        <View style={S.ddLine} />
-                        <Pressable style={S.ddRow} onPress={async () => {
-                            setDropdownVisible(false); stopLibrarySync(); await signOut(); router.replace('/login');
-                        }}>
-                            <Ionicons name="log-out-outline" size={14} color={C.accent} />
-                            <Text style={[S.ddText, { color: C.accent }]}>Sign Out</Text>
-                        </Pressable>
+                        {signedIn ? (
+                            <>
+                                <Pressable style={S.ddRow} onPress={() => { setDropdownVisible(false); router.push('/settings'); }}>
+                                    <Ionicons name="settings-outline" size={14} color={C.text2} />
+                                    <Text style={S.ddText}>Settings</Text>
+                                </Pressable>
+                                <View style={S.ddLine} />
+                                <Pressable style={S.ddRow} onPress={async () => {
+                                    setDropdownVisible(false);
+                                    stopLibrarySync();
+                                    await signOut();
+                                    setSignedIn(false);
+                                    setFollowedManga([]);
+                                    router.replace('/tabs/home');
+                                }}>
+                                    <Ionicons name="log-out-outline" size={14} color={C.accent} />
+                                    <Text style={[S.ddText, { color: C.accent }]}>Sign Out</Text>
+                                </Pressable>
+                            </>
+                        ) : (
+                            <>
+                                <Pressable style={S.ddRow} onPress={() => { setDropdownVisible(false); router.push('/login'); }}>
+                                    <Ionicons name="log-in-outline" size={14} color={C.accent} />
+                                    <Text style={S.ddText}>Sign In</Text>
+                                </Pressable>
+                                <View style={S.ddLine} />
+                                <Pressable style={S.ddRow} onPress={() => { setDropdownVisible(false); router.push('/signup'); }}>
+                                    <Ionicons name="person-add-outline" size={14} color={C.accent} />
+                                    <Text style={S.ddText}>Create Account</Text>
+                                </Pressable>
+                            </>
+                        )
                     </View>
                 </>
             )}
