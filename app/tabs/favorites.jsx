@@ -548,7 +548,7 @@ const S = StyleSheet.create({
     headerSub: { fontSize: 12, color: C.text3, marginTop: 2, fontWeight: '500' },
 
     statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end', maxWidth: 200 },
-    statPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4 },
+    statPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4 },
     statNum: { fontSize: 13, fontWeight: '800' },
     statLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
 
@@ -557,8 +557,8 @@ const S = StyleSheet.create({
     searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.bg3, borderColor: C.borderMid, borderWidth: 1, paddingHorizontal: 14, borderRadius: 12, minHeight: 48 },
     librarySearch: { flex: 1, color: C.text1, fontSize: 14, paddingVertical: 11, minWidth: 0 },
     filters: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 2, paddingRight: 18 },
-    filterChip: { borderRadius: 18, borderWidth: 1, borderColor: C.borderMid, backgroundColor: C.bg2, paddingHorizontal: 13, paddingVertical: 9 },
-    filterChipActive: { backgroundColor: C.accentDim, borderColor: C.accentBorder },
+    filterChip: { borderRadius: 7, borderWidth: 1, borderColor: C.borderMid, backgroundColor: C.bg2, paddingHorizontal: 13, paddingVertical: 9 },
+    filterChipActive: { backgroundColor: C.bg4, borderColor: C.accentBorder },
     filterText: { fontSize: 12, color: C.text2, fontWeight: '700' },
     filterTextActive: { color: C.accentBright },
     filterSummary: { fontSize: 11, color: C.text2, paddingBottom: 3 },
@@ -568,10 +568,9 @@ const S = StyleSheet.create({
     card: {
         flexDirection: 'row',
         backgroundColor: C.bg2,
-        borderRadius: 15,
-        borderWidth: 1, borderColor: C.borderMid,
+        borderRadius: 8,
+        borderWidth: 1, borderColor: C.border,
         overflow: 'hidden',
-        shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 5,
     },
     cardCompleted: { opacity: 0.72 },
     cardDesktop: { minHeight: 104, alignItems: 'center' },
@@ -596,7 +595,7 @@ const S = StyleSheet.create({
 
     content: { flex: 1, padding: 11, paddingLeft: 12, justifyContent: 'space-between' },
     titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
-    title: { flex: 1, fontSize: 13.5, fontWeight: '700', color: C.text1, lineHeight: 19, marginRight: 6 },
+    title: { flex: 1, fontSize: 14, fontWeight: '600', color: C.text1, lineHeight: 20, marginRight: 6 },
     delBtn: { padding: 2, marginTop: 1 },
 
     // Chapter progress
@@ -611,14 +610,14 @@ const S = StyleSheet.create({
     footer: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4 },
     statusBtn: {
         flexDirection: 'row', alignItems: 'center', gap: 6,
-        borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
+        borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 7,
         minHeight: 32,
     },
     statusBtnText: { fontSize: 12, fontWeight: '700' },
     continueBtn: {
         flexDirection: 'row', alignItems: 'center', gap: 6,
         backgroundColor: C.accentDim, borderWidth: 1, borderColor: C.accentBorder,
-        paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
+        paddingHorizontal: 12, paddingVertical: 7, borderRadius: 7,
         minHeight: 32,
     },
     continueBtnText: { color: C.accentBright, fontSize: 12, fontWeight: '700' },
