@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/dragonLogoTransparent.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -31,19 +31,19 @@
       "name": "Mangako",
       "shortName": "Mangako",
       "display": "standalone",
-      "backgroundColor": "#0c0c10",
-      "themeColor": "#0c0c10",
+      "backgroundColor": "#07070a",
+      "themeColor": "#07070a",
       "pwa": {
         "enabled": true
       },
       "icons": [
         {
-          "src": "./assets/dragonLogoTransparent.png",
+          "src": "/icon-192.png",
           "sizes": "192x192",
           "type": "image/png"
         },
         {
-          "src": "./assets/dragonLogoTransparent.png",
+          "src": "/icon-512.png",
           "sizes": "512x512",
           "type": "image/png"
         }
