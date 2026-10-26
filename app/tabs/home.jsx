@@ -602,7 +602,7 @@ export default function Home() {
                                     <Text style={S.ddText}>Create Account</Text>
                                 </Pressable>
                             </>
-                        )
+                        )}
                     </View>
                 </>
             )}
