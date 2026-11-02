@@ -29,7 +29,17 @@ export function splitMangadexChapterKey(composite) {
 
 export function proxied(src) {
     if (!src) return "";
-    return src;
+    // MangaDex covers are served by uploads.mangadex.org. Route only
+    // cover artwork through our allowlisted image proxy; chapter pages
+    // have their own MangaDex@Home delivery URLs and must stay untouched.
+    try {
+        const url = new URL(src);
+        if (url.hostname !== 'uploads.mangadex.org' || !url.pathname.startsWith('/covers/')) return src;
+        const base = API_BASE || 'https://manga-ko.vercel.app';
+        return `${base}/api/image_proxy?url=${encodeURIComponent(src)}`;
+    } catch {
+        return src;
+    }
 }
 
 export async function searchMangadex(title, limit = 20, offset = 0, language = '') {
