@@ -454,8 +454,16 @@ export default function Home() {
         setTimeout(() => searchInputRef.current?.focus(), 100);
     };
     const closeSearch = () => {
+        // Cancel pending searches when navigating away from the overlay so
+        // stale provider results cannot flash after returning.
+        clearTimeout(timerRef.current);
+        abortRef.current?.abort();
+        setIsSearching(false);
+        setSearchWarning('');
         Animated.timing(overlayAnim, { toValue: 0, duration: 160, useNativeDriver: true }).start(() => {
-            setSearchActive(false); setQuery(''); setSearchResults([]);
+            setSearchActive(false);
+            setQuery('');
+            setSearchResults([]);
         });
     };
     const handleAddSearch = async (text) => {
