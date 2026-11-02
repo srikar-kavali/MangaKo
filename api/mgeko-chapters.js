@@ -62,6 +62,46 @@ async function fetchLiveChapters(slug) {
     }
 }
 
+
+async function resolveLivePages(slug, chapterId) {
+    if (!slug || !/^[0-9]+(?:\.[0-9]+)?$/.test(String(chapterId))) return [];
+    const chapterSlug = String(chapterId).replace('.', '-');
+    const url = `https://www.mgeko.cc/reader/en/${slug}-chapter-${chapterSlug}-eng-li/`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    try {
+        const response = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MangaKo/1.0)', Accept: 'text/html' },
+            signal: controller.signal,
+        });
+        if (!response.ok || !String(response.headers.get('content-type') || '').includes('text/html')) return [];
+        const html = (await response.text()).slice(0, 4_000_000)
+            .replace(/&amp;/g, '&').replace(/\\\\\//g, '/');
+        // Extract only image paths for this chapter. Matches standard src,
+        // data-src and URLs embedded in script literals, preserving order.
+        const escapedSlug = slug;
+        const chapterPath = `/comic/${escapedSlug}/chapter-${chapterSlug}/`;
+        const matches = html.match(/https?:\/\/[a-z0-9.-]+\/[^"'<>\\s]+?\.(?:jpe?g|png|webp)(?:\?[^"'<>\\s]*)?/gi) || [];
+        const unique = new Set();
+        for (const raw of matches) {
+            try {
+                const parsed = new URL(raw);
+                if (!/^imgsrv[0-9]+\.com$/.test(parsed.hostname)) continue;
+                if (!parsed.pathname.includes(chapterPath)) continue;
+                unique.add(parsed.href);
+                if (unique.size >= 500) break;
+            } catch { /* discard malformed image URLs */ }
+        }
+        const pages = [...unique];
+        // Reject incomplete scripts / placeholder image sets.
+        return pages.length >= 3 ? filterPages(pages) : [];
+    } catch {
+        return [];
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -74,6 +114,14 @@ export default async function handler(req, res) {
     try {
         // ── Single chapter pages ──────────────────────────────────────────────
         if (chapterId) {
+            // Opt-in live test first; the standard reader keeps using the archive.
+            if (req.query.live === '1') {
+                const pages = await resolveLivePages(seriesSlug(seriesId), chapterId);
+                if (pages.length) {
+                    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=300');
+                    return res.status(200).json({ pages, source: 'live' });
+                }
+            }
             const { data, error } = await supabase
                 .from('chapters')
                 .select('pages')
@@ -87,7 +135,7 @@ export default async function handler(req, res) {
 
             // Filter junk pages before returning
             const pages = filterPages(data.pages);
-            return res.status(200).json({ pages });
+            return res.status(200).json({ pages, source: 'supabase' });
         }
 
         // ── Chapter list for a series ─────────────────────────────────────────
