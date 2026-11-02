@@ -34,3 +34,7 @@ extractor/chapter_data.json.tmp
 
 # Machine-generated Amplify configuration
 src/amplifyconfiguration.json
+
+# Extractor temporary and backup files
+extractor/*.tmp
+extractor/*.backup-*
