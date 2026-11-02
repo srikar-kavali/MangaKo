@@ -891,6 +891,30 @@ export const manhwas = [
         genres: ["Action", "Adventure", "Fantasy", "Shounen"],
         status: "Ongoing",
     },
+    {
+        id: "the-grand-duke-of-the-norths-crazy-son-in-law",
+        title: "The Grand Duke of the North's Crazy Son-in-Law",
+        source: "asura",
+        description: "Galahad, an elite wizard and top agent of the Intelligence Bureau, was sold off as the Grand Duke of the North's son-in-law for political reasons.\n" +
+            "\n" +
+            "Meanwhile, the ice-cold daughter of the duke is the \"key\" to defeating the Demon King and saving the world. Determined to win her heart, Galahad approached her with his usual madness and an utterly ridiculous level of determination.\n" +
+            "\n" +
+            "However, his target is a Swordmaster who burns mana, and even the slightest touch from a mage causes him to endure excruciating pain that courses through his entire body...\n" +
+            "\n" +
+            "\"I want to touch her again. This time, just for a bit longer—\"",
+        genres: ["Action", "Adventure", "Fantasy", "Crazy MC", "Magic", "Romance"],
+        status: "Ongoing",
+    },
+    {
+        id: "the-genius-knight-of-a-fallen-race",
+        title: "The Genius Knight of a Fallen Race",
+        source: "asura",
+        description: "Born as an Altoin, a race of people known as the “Demon Race,” Shan was treated like a slave by the villagers. However, when he massacres a group of mysterious mercenaries who attack his village, he awakens to his true talent. Through a man named Roden, whom he happens to meet, Shan learns that even Altoins can become knights.\n" +
+            "\n" +
+            "Finally freed from oppression, the boy experiences freedom for the first time, and sets his sights on a future beyond mere freedom... a future as a knight.",
+        genres: ["Action", "Adventure", "Dark Fantasy", "Genius MC"],
+        status: "Ongoing",
+    },
     /*
     {
         id: "",
