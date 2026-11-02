@@ -92,7 +92,7 @@ async function resolveLivePages(slug, chapterId) {
                 if (unique.size >= 500) break;
             } catch { /* discard malformed image URLs */ }
         }
-        const pages = [...unique].sort((a, b) => { const n = u => Number(new URL(u).pathname.match(/\\/(\\d+)\\.[^.]+$/)?.[1]); return n(a) - n(b); });
+        const pages = [...unique].sort((a, b) => { const n = u => Number(new URL(u).pathname.match(/\/(\d+)\.[^.]+$/)?.[1]); return n(a) - n(b); });
         // Reject incomplete scripts / placeholder image sets.
         return pages.length >= 3 ? filterPages(pages) : [];
     } catch {
