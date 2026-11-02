@@ -45,7 +45,7 @@ async function fetchLiveChapters(slug) {
         });
         if (!response.ok || !String(response.headers.get('content-type') || '').includes('text/html')) return [];
         const html = (await response.text()).slice(0, 2_000_000);
-        const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\export default async function handler(req, res) {');
+        const escaped = slug; // seriesSlug restricts slugs to safe URL characters
         const re = new RegExp(`(?:https?:\\/\\/www\\.mgeko\\.cc)?\\/reader\\/en\\/${escaped}-chapter-([0-9]+(?:-[0-9]+)?)-eng-li\\/?`, 'gi');
         const numbers = new Set();
         for (const match of html.matchAll(re)) {
