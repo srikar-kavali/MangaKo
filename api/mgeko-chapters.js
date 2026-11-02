@@ -81,7 +81,7 @@ async function resolveLivePages(slug, chapterId) {
         // data-src and URLs embedded in script literals, preserving order.
         const escapedSlug = slug;
         const chapterPath = `/comic/${escapedSlug}/chapter-${chapterSlug}/`;
-        const matches = html.match(/https?:\/\/[a-z0-9.-]+\/[^"'<>\\s]+?\.(?:jpe?g|png|webp)(?:\?[^"'<>\\s]*)?/gi) || [];
+        const matches = html.match(/https?:\/\/[a-z0-9.-]+\/[^"'<> \t\r\n]+?\.(?:jpe?g|png|webp)(?:\?[^"'<> \t\r\n]*)?/gi) || [];
         const unique = new Set();
         for (const raw of matches) {
             try {
@@ -92,7 +92,7 @@ async function resolveLivePages(slug, chapterId) {
                 if (unique.size >= 500) break;
             } catch { /* discard malformed image URLs */ }
         }
-        const pages = [...unique];
+        const pages = [...unique].sort((a, b) => { const n = u => Number(new URL(u).pathname.match(/\\/(\\d+)\\.[^.]+$/)?.[1]); return n(a) - n(b); });
         // Reject incomplete scripts / placeholder image sets.
         return pages.length >= 3 ? filterPages(pages) : [];
     } catch {
