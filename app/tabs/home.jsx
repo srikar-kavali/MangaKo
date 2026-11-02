@@ -167,6 +167,8 @@ export default function Home() {
     const [recentSearches, setRecentSearches] = useState([]);
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
+    const [searchWarning, setSearchWarning] = useState('');
+    const [searchRetry, setSearchRetry] = useState(0);
     const [followedManga, setFollowedManga] = useState([]);
     const [signedIn, setSignedIn] = useState(false);
     const [browseManga, setBrowseManga] = useState([]);
@@ -400,22 +402,33 @@ export default function Home() {
     React.useEffect(() => {
         const q = query.trim(), qL = q.toLowerCase(), key = `${CACHE_VERSION}:${qL}`;
         if (!q) {
-            setSearchResults([]); setIsSearching(false);
+            setSearchResults([]); setIsSearching(false); setSearchWarning('');
             abortRef.current?.abort(); clearTimeout(timerRef.current);
             return;
         }
-        if (cacheRef.current.has(key)) setSearchResults(cacheRef.current.get(key));
+        if (cacheRef.current.has(key) && searchRetry === 0) setSearchResults(cacheRef.current.get(key));
+        else setSearchResults([]);
+        setSearchWarning('');
         clearTimeout(timerRef.current);
         timerRef.current = setTimeout(async () => {
             abortRef.current?.abort();
             const ctrl = new AbortController(); abortRef.current = ctrl;
             setIsSearching(true);
             try {
-                const [ar, mr, dr] = await Promise.all([
+                const [ar, mangapillResult, mangadexResult] = await Promise.all([
                     Promise.resolve(searchHardcodedManhwa(q)),
-                    searchMangapill(q, 15).catch(() => []),
-                    searchMangadex(q, 15).catch(() => []),
+                    searchMangapill(q, 15).then(value => ({ ok: true, value })).catch(() => ({ ok: false, value: [] })),
+                    searchMangadex(q, 15).then(value => ({ ok: true, value })).catch(() => ({ ok: false, value: [] })),
                 ]);
+                const mr = mangapillResult.value;
+                const dr = mangadexResult.value;
+                const unavailable = [
+                    !mangapillResult.ok && 'MangaPill',
+                    !mangadexResult.ok && 'MangaDex',
+                ].filter(Boolean);
+                if (!ctrl.signal.aborted) setSearchWarning(
+                    unavailable.length ? `Some sources are unavailable: ${unavailable.join(', ')}.` : ''
+                );
                 const score = i => {
                     const t = (i.title || '').toLowerCase();
                     return t === qL ? 1000 : t.startsWith(qL) ? 500 : t.includes(qL) ? 100 : 0;
@@ -427,13 +440,13 @@ export default function Home() {
                 ].map(i => ({ ...i, score: score(i) })).sort((a, b) => b.score - a.score);
                 if (!ctrl.signal.aborted) { cacheRef.current.set(key, all); setSearchResults(all); }
             } catch (e) {
-                if (!abortRef.current?.signal.aborted) setSearchResults([]);
+                if (!ctrl.signal.aborted) { setSearchResults([]); setSearchWarning('Search failed. Please retry.'); }
             } finally {
-                if (!abortRef.current?.signal.aborted) setIsSearching(false);
+                if (!ctrl.signal.aborted) setIsSearching(false);
             }
         }, LIVE_DELAY_MS);
         return () => clearTimeout(timerRef.current);
-    }, [query]);
+    }, [query, searchRetry]);
 
     const openSearch = () => {
         setSearchActive(true);
@@ -855,6 +868,14 @@ export default function Home() {
                         </View>
                         <View style={S.hairline} />
 
+                        {!!searchWarning && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, gap: 12 }}>
+                                <Text style={{ color: C.text2, fontSize: 12, flex: 1 }}>{searchWarning}</Text>
+                                <Pressable accessibilityRole="button" accessibilityLabel="Retry search" onPress={() => setSearchRetry(n => n + 1)}>
+                                    <Text style={{ color: C.accentBright, fontSize: 12, fontWeight: '700' }}>Retry</Text>
+                                </Pressable>
+                            </View>
+                        )}
                         {query.trim().length > 0 ? (
                             searchResults.length > 0 ? (
                                 <FlatList
