@@ -105,7 +105,7 @@ export default async function handler(req, res) {
             number: parseFloat(row.chapter_id) || 0,
         }));
         const slug = seriesSlug(seriesId);
-        const live = slug ? await fetchLiveChapters(slug) : [];
+        const live = slug && req.query.live === '1' ? await fetchLiveChapters(slug) : [];
         // Only advertise chapters that have archived pages. The live index is
         // exposed separately until on-demand image resolution is verified.
         const chapters = archived.sort((a, b) => a.number - b.number);
