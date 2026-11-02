@@ -154,9 +154,13 @@ export default async function handler(req, res) {
         }));
         const slug = seriesSlug(seriesId);
         const live = slug && req.query.live === '1' ? await fetchLiveChapters(slug) : [];
-        // Only advertise chapters that have archived pages. The live index is
-        // exposed separately until on-demand image resolution is verified.
-        const chapters = archived.sort((a, b) => a.number - b.number);
+        // In opt-in live mode expose the union. New chapters can be loaded
+        // through the live page resolver, while archived entries remain intact.
+        const chapterMap = new Map(archived.map(ch => [String(ch.id), ch]));
+        for (const ch of live) {
+            if (!chapterMap.has(String(ch.id))) chapterMap.set(String(ch.id), ch);
+        }
+        const chapters = [...chapterMap.values()].sort((a, b) => a.number - b.number);
         if (error && !chapters.length) throw error;
         if (!chapters.length) {
             return res.status(404).json({ error: `Series not found: ${seriesId}`, chapters: [], total: 0 });

@@ -144,7 +144,7 @@ const MangaDetails = () => {
 
                     const endpoint = isMgeko ? 'mgeko-chapters' : 'asura-chapters';
                     if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is missing. Configure the chapters backend URL and restart Expo.');
-                    const requestUrl = `${BACKEND.replace(/\/$/, '')}/api/${endpoint}?seriesId=${encodeURIComponent(seriesId)}`;
+                    const requestUrl = `${BACKEND.replace(/\/$/, '')}/api/${endpoint}?seriesId=${encodeURIComponent(seriesId)}${isMgeko ? '&live=1' : ''}`;
                     let res;
                     try {
                         res = await fetch(requestUrl);

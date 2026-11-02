@@ -112,7 +112,7 @@ const ReadChapter = () => {
                     urls = json.pages.map(u => `${BACKEND}/api/image_proxy?url=${encodeURIComponent(u)}`);
                 } else if (isMgeko && seriesId) {
                     if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
-                    const requestUrl = `${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}`;
+                    const requestUrl = `${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}&live=1`;
                     let res;
                     try { res = await fetch(requestUrl); }
                     catch (error) { throw new Error(`Could not reach chapter backend at ${requestUrl}. ${error?.message || ''}`); }
