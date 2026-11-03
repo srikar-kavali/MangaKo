@@ -8,6 +8,9 @@ export function normalizeCatalogItem(item, source) {
         ...item,
         id,
         source: source || item.source || 'asura',
+        genres: Array.isArray(item.genres) && item.genres.length
+            ? item.genres
+            : (Array.isArray(item.tags) ? item.tags : []),
         cover: item.cover || item.coverUrl || item.image || null,
         coverUrl: item.coverUrl || item.cover || item.image || null,
     };
