@@ -163,7 +163,7 @@ const ReadChapter = () => {
                     }));
                 } else if (isMgeko && seriesId) {
                     if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
-                    const res = await fetch(`${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}`);
+                    const res = await fetch(`${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&live=1`);
                     if (!res.ok) throw new Error(`Chapter list API HTTP ${res.status}`);
                     const json = await res.json();
                     chapters = (json.chapters || []).map(ch => ({
