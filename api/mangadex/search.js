@@ -2,6 +2,21 @@ import { createClient } from '@supabase/supabase-js';
 
 const MANGADEX_API = 'https://api.mangadex.org';
 const CACHE_SECONDS = 900;
+let genreTagsCache = null;
+let genreTagsExpires = 0;
+async function getGenreTagId(genre) {
+    if (!genre) return null;
+    if (!genreTagsCache || Date.now() > genreTagsExpires) {
+        const response = await fetch(`${MANGADEX_API}/manga/tag`);
+        if (!response.ok) throw new Error(`MangaDex tags unavailable: ${response.status}`);
+        const json = await response.json();
+        genreTagsCache = new Map((json.data || []).map(tag => [
+            String(tag.attributes?.name?.en || '').toLowerCase(), tag.id,
+        ]));
+        genreTagsExpires = Date.now() + 24 * 60 * 60 * 1000;
+    }
+    return genreTagsCache.get(String(genre).trim().toLowerCase()) || null;
+}
 const getCache = () => {
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) return null;
     return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, {
@@ -40,14 +55,14 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    const { q = '', limit = '20', offset = '0', language = '' } = req.query;
+    const { q = '', limit = '20', offset = '0', language = '', genre = '' } = req.query;
     const searchTerm = String(q).trim();
     const pageSize = Math.max(1, Math.min(Number(limit) || 20, 50));
     const pageOffset = Math.max(0, Math.min(Number(offset) || 0, 10000));
 
     try {
         const cache = getCache();
-        const cacheKey = `mangadex:${JSON.stringify({ q: searchTerm, limit: pageSize, offset: pageOffset, language })}`;
+        const cacheKey = `mangadex:${JSON.stringify({ q: searchTerm, limit: pageSize, offset: pageOffset, language, genre })}`;
         if (cache) {
             try {
                 const { data } = await cache.from('catalog_cache').select('payload,expires_at').eq('cache_key', cacheKey).maybeSingle();
@@ -64,6 +79,12 @@ export default async function handler(req, res) {
         params.set('limit', String(pageSize));
         params.set('offset', String(pageOffset));
         if (['ko', 'ja', 'zh'].includes(language)) params.append('originalLanguage[]', language);
+        if (genre) {
+            const tagId = await getGenreTagId(genre);
+            if (!tagId) return res.status(400).json({ error: 'Unknown MangaDex genre' });
+            params.append('includedTags[]', tagId);
+            params.set('includedTagsMode', 'AND');
+        }
         params.append('includes[]', 'cover_art');
         ['safe', 'suggestive'].forEach(r => params.append('contentRating[]', r));
         params.set(searchTerm ? 'order[relevance]' : 'order[latestUploadedChapter]', 'desc');

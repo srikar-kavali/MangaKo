@@ -175,9 +175,8 @@ export default function Home() {
     const [catalogGenre, setCatalogGenre] = useState('All');
     const [catalogSort, setCatalogSort] = useState('default');
     const catalogGenres = ['All', 'Action', 'Fantasy', 'Romance', 'Comedy', 'Adventure', 'Martial Arts', 'Drama'];
-    const filteredBrowse = browseManga
-        .filter(item => catalogGenre === 'All' ||
-            (Array.isArray(item.genres) && item.genres.some(g => String(g).toLowerCase() === catalogGenre.toLowerCase())));
+    const filteredBrowse = [...browseManga].filter(item => catalogGenre === 'All' ||
+        (Array.isArray(item.genres) && item.genres.some(g => String(g).toLowerCase() === catalogGenre.toLowerCase())));
     if (catalogSort === 'az') filteredBrowse.sort((a, b) => a.title.localeCompare(b.title));
     if (catalogSort === 'za') filteredBrowse.sort((a, b) => b.title.localeCompare(a.title));
     // Group titles into virtualized rows so the carousel and hero remain above the grid.
@@ -186,6 +185,7 @@ export default function Home() {
     const [loadingBrowse, setLoadingBrowse] = useState(false);
     const [loadingMoreBrowse, setLoadingMoreBrowse] = useState(false);
     const [browseOffset, setBrowseOffset] = useState(0);
+    const browseRequestIdRef = useRef(0);
     const [browseHasMore, setBrowseHasMore] = useState(true);
     const [browseError, setBrowseError] = useState('');
     const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -358,44 +358,57 @@ export default function Home() {
 
     React.useEffect(() => {
         let active = true;
+        const requestId = ++browseRequestIdRef.current;
+        paginationInFlightRef.current = false;
+        setLoadingBrowse(true);
+        setBrowseManga([]);
+        setBrowseOffset(0);
+        setBrowseHasMore(true);
+        setBrowseError('');
         (async () => {
-            setLoadingBrowse(true);
-            setBrowseError('');
             try {
-                const titles = await discoverCatalog({ limit: 24 });
-                if (active) {
-                    console.info('Home catalog loaded', { count: titles.length, mangadex: titles.filter(item => item.source === 'mangadex').length });
-                    setBrowseManga(titles);
+                const genre = catalogGenre === 'All' ? '' : catalogGenre;
+                const remote = await searchMangadex('', 24, 0, '', genre);
+                const curated = catalogGenre === 'All'
+                    ? searchHardcodedManhwa('')
+                    : searchHardcodedManhwa('').filter(item =>
+                        (item.genres || []).some(g => String(g).toLowerCase() === genre.toLowerCase()));
+                if (active && requestId === browseRequestIdRef.current) {
+                    setBrowseManga(mergeCatalogItems(curated, remote));
                     setBrowseOffset(24);
-                    setBrowseHasMore(titles.filter(item => item.source === 'mangadex').length >= 24);
+                    setBrowseHasMore(remote.length === 24);
                 }
             } catch (error) {
-                if (active) {
-                    setBrowseManga(searchHardcodedManhwa(''));
-                    setBrowseError(`Live discovery failed: ${error?.message || 'unknown error'}`);
+                if (active && requestId === browseRequestIdRef.current) {
+                    setBrowseError(`Could not load ${catalogGenre} titles. Try again.`);
                 }
             } finally {
-                if (active) setLoadingBrowse(false);
+                if (active && requestId === browseRequestIdRef.current) setLoadingBrowse(false);
             }
         })();
         return () => { active = false; };
-    }, []);
+    }, [catalogGenre]);
 
     const loadMoreCatalog = async () => {
         if (paginationInFlightRef.current || loadingBrowse || !browseHasMore) return;
+        const requestId = browseRequestIdRef.current;
         paginationInFlightRef.current = true;
         setLoadingMoreBrowse(true);
         try {
-            const titles = await searchMangadex('', 24, browseOffset);
+            const genre = catalogGenre === 'All' ? '' : catalogGenre;
+            const titles = await searchMangadex('', 24, browseOffset, '', genre);
+            if (requestId !== browseRequestIdRef.current) return;
             setBrowseManga(current => mergeCatalogItems(current, titles));
             setBrowseOffset(current => current + 24);
             setBrowseHasMore(titles.length === 24);
             setBrowseError('');
         } catch (error) {
-            setBrowseError('Could not load more titles. Please try again.');
+            if (requestId === browseRequestIdRef.current) setBrowseError('Could not load more titles. Please try again.');
         } finally {
-            paginationInFlightRef.current = false;
-            setLoadingMoreBrowse(false);
+            if (requestId === browseRequestIdRef.current) {
+                paginationInFlightRef.current = false;
+                setLoadingMoreBrowse(false);
+            }
         }
     };
 
@@ -774,7 +787,7 @@ export default function Home() {
                             {catalogGenres.map(genre => {
                                 const active = catalogGenre === genre;
                                 return <Pressable key={genre} accessibilityRole="button"
-                                    accessibilityState={{ selected: active }} onPress={() => { setCatalogGenre(genre); hasScrolledRef.current = false; }}
+                                    accessibilityState={{ selected: active }} onPress={() => { setCatalogGenre(genre); hasScrolledRef.current = false; setLoadingMoreBrowse(false); }}
                                     style={{ backgroundColor: active ? C.accentDim : C.bg2, borderColor: active ? C.accentBorder : C.border, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}>
                                     <Text style={{ color: active ? C.accentBright : C.text2, fontSize: 12, fontWeight: '600' }}>{genre}</Text>
                                 </Pressable>;
