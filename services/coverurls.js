@@ -50,6 +50,7 @@ export const COVER_URLS = {
     "dungeon-odyssey":                                              "https://cdn.asurascans.com/asura-images/covers/dungeon-odyssey.f39586-400.webp",
     "the-grand-duke-of-the-norths-crazy-son-in-law":                "https://cdn.asurascans.com/asura-images/covers/the-grand-duke-of-the-norths-crazy-son-in-law.c14653-400.webp",
     "the-genius-knight-of-a-fallen-race":                           "https://cdn.asurascans.com/asura-images/covers/the-genius-knight-of-a-fallen-race.6b6fc4-400.webp",
+    "reincarnators-stream":                                         "https://cdn.asurascans.com/asura-images/covers/reincarnators-stream.c8c699-400.webp",
 
     "mgeko__a-returner-s-magic-should-be-special-mg1-njfia":        "https://imgsrv4.com/avatar/288x412/media/manga_covers/a-returner-s-magic-should-be-speci.png",
     "mgeko__absolute-dominion":                                     "https://imgsrv4.com/avatar/288x412/media/manga_covers/Absolute-Dominion-193x278.webp",

@@ -915,6 +915,22 @@ export const manhwas = [
         genres: ["Action", "Adventure", "Dark Fantasy", "Genius MC"],
         status: "Ongoing",
     },
+    {
+        id: "reincarnators-stream",
+        title: "Reincarnator’s Stream",
+        source: "asura",
+        description: "Narukami Subaru, the strongest player and the Master of Lightning, was betrayed and killed by a trusted friend while conquering the Tower. After using up all his power to save his comrades, he dies. Yet somehow, fully aware of his own death, he opens his eyes to find himself reincarnated 20 years in the future. The truth is buried, and the traitor, Kyojo Itsuki, now reigns as the top player of this new era. To take revenge and reach out to the comrades who might still be waiting for him, Subaru knows he has to get stronger, fast.\n" +
+            "\n" +
+            "\"I can't do things the same way as before.\"\n" +
+            "\n" +
+            "Given a second chance, the former strongest chooses an unexpected path: live streaming!\n" +
+            "\n" +
+            "Despite the industry overflowing with streamers shamelessly copying the legendary Narukami Subaru, he couldn't care less.\n" +
+            "\n" +
+            "\"It doesn't matter, because I'm the real one.\"",
+        genres: ["Action", "Adventure", "Fantasy", "Reincarnation", "Revenge"],
+        status: "Ongoing",
+    },
     /*
     {
         id: "",
