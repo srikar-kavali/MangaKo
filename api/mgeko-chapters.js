@@ -31,10 +31,25 @@ function filterPages(urls) {
 
 // Live chapter index is an optional freshness layer over the existing
 // Supabase archive. Only public Mgeko series slugs are accepted.
-// The internal library ID is stable, but some upstream series use an
-// unrelated URL slug. Keep aliases server-side to preserve saved progress.
+// Keep in sync with extractor/sites/mgeko.py SLUG_OVERRIDES (reverse direction).
+// The internal library ID is stable, but upstream series sometimes use an
+// unrelated URL slug. Preserve stored favorites and reading progress.
 const SERIES_SLUG_ALIASES = {
-    eleceed: 'manga-q1113',
+    'noblesse': 'manga-pl822',
+    'tower-of-god': 'manga-si7aaa',
+    'eleceed': 'manga-q1113',
+    'the-boxer': 'manga-187j',
+    'the-god-of-high-school': '7237',
+    'legend-of-the-northern-blade': 'northern-b-manhwa',
+    'leviathan': 'leviathansdads',
+    'wind-breaker': 'wind-breaker-cs',
+    'memoir-of-the-king-of-war': 'memoir-of-the-king-of-war-sop',
+    'chronicles-of-the-heavenly-demon': 'chronicles-of-heavenly-demon-mg1',
+    'the-breaker-eternal-force': 'eternal-force',
+    'the-breaker': 'the-breaker22',
+    'the-story-of-a-low-rank-soldier-becoming-a-monarch': 'the-story-of-a-low-rank-soldier-becoming-a-monarch-mg1',
+    'mage-again': 'manga-mm990169',
+    'hardcore-leveling-warrior': 'manga-1089',
 };
 function seriesSlug(id) {
     const raw = String(id || '').replace(/^mgeko__/, '').trim();
