@@ -82,7 +82,7 @@ async function fetchLatestChapterId(key, source) {
         }
         const endpoint = source === 'mgeko' ? 'mgeko-chapters' : 'asura-chapters';
         const res = await fetch(
-            `${BACKEND}/api/${endpoint}?seriesId=${encodeURIComponent(key)}`,
+            `${BACKEND}/api/${endpoint}?seriesId=${encodeURIComponent(key)}${source === 'mgeko' ? '&live=1' : ''}`,
             { signal: AbortSignal.timeout(10000) }
         );
         if (!res.ok) return null;
@@ -294,6 +294,11 @@ export default function Home() {
             const stored = await getLatestChapter(key);
             if (latestId === String(stored ?? '')) return;
 
+            // Only forward chapter movement is a new release. Never surface a
+            // false alert when an upstream source temporarily returns older data.
+            const previousNumber = chapterNum(stored);
+            const currentNumber = chapterNum(latestId);
+            if (previousNumber !== null && currentNumber !== null && currentNumber < previousNumber) return;
             const isGenuinelyNew = !!stored;
 
             // Was the reader caught up to the *old* latest chapter right before
@@ -346,11 +351,15 @@ export default function Home() {
                 const local = await loadFollowedManga();
                 if (cancelled) return;
                 // Do not block initial carousel rendering on network activity.
-                syncLibraryOnce().then(async () => {
+                // A temporary sync failure must not disable checking for new
+                // Mgeko (or other source) chapters on the local reading shelf.
+                syncLibraryOnce().catch(error => {
+                    console.warn('Library sync unavailable; checking local chapter updates', error?.message || error);
+                }).then(async () => {
                     if (cancelled) return;
                     const series = await loadFollowedManga();
                     if (!cancelled) runBackgroundFetch(series);
-                }).catch(() => {});
+                }).catch(error => console.warn('Chapter update check unavailable', error?.message || error));
             })().catch(error => console.warn('Unable to initialize Home library', error));
             return () => { cancelled = true; bgCancelledRef.current = true; };
         }, [loadFollowedManga, runBackgroundFetch])
