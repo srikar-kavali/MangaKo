@@ -31,9 +31,15 @@ function filterPages(urls) {
 
 // Live chapter index is an optional freshness layer over the existing
 // Supabase archive. Only public Mgeko series slugs are accepted.
+// The internal library ID is stable, but some upstream series use an
+// unrelated URL slug. Keep aliases server-side to preserve saved progress.
+const SERIES_SLUG_ALIASES = {
+    eleceed: 'manga-q1113',
+};
 function seriesSlug(id) {
     const raw = String(id || '').replace(/^mgeko__/, '').trim();
-    return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(raw) ? raw : null;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(raw)) return null;
+    return SERIES_SLUG_ALIASES[raw] || raw;
 }
 async function fetchLiveChapters(slug) {
     const controller = new AbortController();
