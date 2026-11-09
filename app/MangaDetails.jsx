@@ -68,7 +68,7 @@ const normalizeKey = (key) => {
 };
 
 const MangaDetails = () => {
-    const { seriesId, mangapillUrl, source, title: titleParam, sourceChoice } = useLocalSearchParams();
+    const { seriesId, mangapillUrl, source, title: titleParam, sourceChoice, coverUrl: coverParam } = useLocalSearchParams();
     const router = useRouter();
     const { width: viewportWidth } = useWindowDimensions();
     const isWide = viewportWidth >= 800;
@@ -283,7 +283,7 @@ const MangaDetails = () => {
 
     const getCoverUrl = () => {
         const staticUrl = getStaticCover(storageKey);
-        const dataUrl = mangaData?.image || mangaData?.cover || null;
+        const dataUrl = mangaData?.image || mangaData?.cover || coverParam || null;
         const url = unwrapImageProxyUrl(staticUrl || dataUrl);
         if (!url) return null;
         if (isAsura) return proxiedAsura(url);

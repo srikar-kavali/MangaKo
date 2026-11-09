@@ -21,7 +21,7 @@ import { discoverCatalog, mergeCatalogItems } from '../../services/catalog';
 import { searchMangapill, getMangapillManga, proxied as proxiedMangapill, unwrapImageProxyUrl } from '../../manga_api/mangapill';
 import { findMangapillMatch } from '../../services/mangapillMatch';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
-import { proxied as proxiedMgeko } from '../../manga_api/mgeko';
+import { proxied as proxiedMgeko, searchMgeko } from '../../manga_api/mgeko';
 import {
     searchMangadex, getMangadexManga, proxied as proxiedMangadex,
     toMangadexChapterKey,
@@ -437,16 +437,19 @@ export default function Home() {
             const ctrl = new AbortController(); abortRef.current = ctrl;
             setIsSearching(true);
             try {
-                const [ar, mangapillResult, mangadexResult] = await Promise.all([
+                const [ar, mangapillResult, mangadexResult, mgekoResult] = await Promise.all([
                     Promise.resolve(searchHardcodedManhwa(q)),
                     searchMangapill(q, 15).then(value => ({ ok: true, value })).catch(() => ({ ok: false, value: [] })),
                     searchMangadex(q, 15).then(value => ({ ok: true, value })).catch(() => ({ ok: false, value: [] })),
+                    searchMgeko(q, 30, 1, ctrl.signal).then(value => ({ ok: true, value })).catch(() => ({ ok: false, value: [] })),
                 ]);
                 const mr = mangapillResult.value;
                 const dr = mangadexResult.value;
+                const gr = mgekoResult.value;
                 const unavailable = [
                     !mangapillResult.ok && 'MangaPill',
                     !mangadexResult.ok && 'MangaDex',
+                    !mgekoResult.ok && 'Mgeko',
                 ].filter(Boolean);
                 if (!ctrl.signal.aborted) setSearchWarning(
                     unavailable.length ? `Some sources are unavailable: ${unavailable.join(', ')}.` : ''
@@ -459,6 +462,7 @@ export default function Home() {
                     ...(ar || []).map(i => ({ ...i, source: i.source || 'asura' })),
                     ...(mr || []).map(i => ({ ...i, source: 'mangapill', id: i.url })),
                     ...(dr || []).map(i => ({ ...i, source: 'mangadex' })),
+                    ...(gr || []).map(i => ({ ...i, source: 'mgeko' })),
                 ].map(i => ({ ...i, score: score(i) })).sort((a, b) => b.score - a.score);
                 if (!ctrl.signal.aborted) { cacheRef.current.set(key, all); setSearchResults(all); }
             } catch (e) {
@@ -531,7 +535,9 @@ export default function Home() {
             }
         }
         if (src === 'asura' || src === 'mgeko' || src === 'mangadex') {
-            router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}${titleParam}`);
+            const coverParam = src === 'mgeko' && (item.cover || item.coverUrl)
+                ? '&coverUrl=' + encodeURIComponent(item.cover || item.coverUrl) : '';
+            router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}${titleParam}${coverParam}`);
         } else {
             const mangapillUrl = id.includes('mangapill.com')
                 ? id
