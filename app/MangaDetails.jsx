@@ -17,6 +17,7 @@ import { getManhwaById } from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed, newChapterKey } from "./searchStorage";
 import { getCoverUrl as getStaticCover } from "../services/coverurls";
+import { discoverReadingSources, sourcePreferenceKey, sourceDetailPath } from "../services/sourceOptions";
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',
@@ -67,7 +68,7 @@ const normalizeKey = (key) => {
 };
 
 const MangaDetails = () => {
-    const { seriesId, mangapillUrl, source, title: titleParam } = useLocalSearchParams();
+    const { seriesId, mangapillUrl, source, title: titleParam, sourceChoice } = useLocalSearchParams();
     const router = useRouter();
     const { width: viewportWidth } = useWindowDimensions();
     const isWide = viewportWidth >= 800;
@@ -84,6 +85,9 @@ const MangaDetails = () => {
     const [lastRead, setLastRead] = useState(null);
     const [statusOpen, setStatusOpen] = useState(false);
     const [status, setStatus] = useState(null);
+    const [sourceOptions, setSourceOptions] = useState([]);
+    const [sourcesLoading, setSourcesLoading] = useState(false);
+    const [preferredSource, setPreferredSource] = useState(null);
 
     const isMgeko = source === 'mgeko' || String(seriesId).startsWith('mgeko__');
     const isMangadex = source === 'mangadex' || String(seriesId).startsWith('mangadex__');
@@ -227,6 +231,51 @@ const MangaDetails = () => {
         })();
         return () => { cancelled = true; };
     }, [seriesId, resolvedMangapillUrl, source, isMangapill, isMangadex, retryNonce]);
+
+    // Discover compatible sources only after the primary title has loaded.
+    // The selected source retains its own last-read chapter and favorite key.
+    useEffect(() => {
+        if (loading || fetchError || !chapters.length) return;
+        const title = mangaData?.title || mangaData?.name || titleParam;
+        const currentSource = isMgeko ? 'mgeko' : isAsura ? 'asura' : isMangapill ? 'mangapill' : null;
+        const currentId = isMangapill ? resolvedMangapillUrl : seriesId;
+        if (!title || !currentSource || !currentId) return;
+        let cancelled = false;
+        setSourceOptions([]);
+        setSourcesLoading(true);
+        (async () => {
+            const pref = await AsyncStorage.getItem(sourcePreferenceKey(title)).catch(() => null);
+            const available = await discoverReadingSources({
+                title, currentSource, currentId, currentCount: chapters.length,
+            });
+            if (cancelled) return;
+            setPreferredSource(pref);
+            setSourceOptions(available);
+            setSourcesLoading(false);
+            if (sourceChoice === '1' || available.length < 2) return;
+            const preferred = pref ? available.find(opt => opt.source === pref) : null;
+            const recommended = [...available].filter(opt => Number.isFinite(opt.count))
+                .sort((a, b) => b.count - a.count)[0];
+            // The first visit selects better verified chapter coverage, unless
+            // the user has explicitly chosen a provider in the past.
+            const chosen = preferred || (
+                recommended && recommended.count > chapters.length ? recommended : null
+            );
+            if (chosen && (chosen.source !== currentSource || chosen.id !== currentId)) {
+                router.replace(sourceDetailPath(chosen, title));
+            }
+        })().catch(() => { if (!cancelled) setSourcesLoading(false); });
+        return () => { cancelled = true; };
+    }, [loading, fetchError, mangaData?.title, mangaData?.name, titleParam, chapters.length,
+        isMgeko, isAsura, isMangapill, resolvedMangapillUrl, seriesId, sourceChoice]);
+
+    const switchSource = async option => {
+        const title = mangaData?.title || mangaData?.name || titleParam;
+        if (!title) return;
+        await AsyncStorage.setItem(sourcePreferenceKey(title), option.source).catch(() => {});
+        setPreferredSource(option.source);
+        router.replace(sourceDetailPath(option, title));
+    };
 
     const getCoverUrl = () => {
         const staticUrl = getStaticCover(storageKey);
@@ -437,6 +486,51 @@ const MangaDetails = () => {
                         <Ionicons name={isFav ? 'star' : 'star-outline'} size={21} color={isFav ? C.star : C.text3} />
                     </Pressable>
                 </View>
+
+                {/* SOURCE SELECTOR: only trusted cross-source matches */}
+                {(sourceOptions.length > 1 || sourcesLoading) && (
+                    <View style={{ marginBottom: 16, padding: 16, borderRadius: 10,
+                        backgroundColor: C.bg2, borderWidth: 1, borderColor: C.borderMid, gap: 10 }}>
+                        <Text style={{ color: C.text1, fontSize: 14, fontWeight: '800' }}>READING SOURCE</Text>
+                        <Text style={{ color: C.text2, fontSize: 12 }}>
+                            Different providers may have different chapter numbering. Progress is saved separately.
+                        </Text>
+                        {sourcesLoading && <ActivityIndicator size="small" color={C.accent} />}
+                        {sourceOptions.map(option => {
+                            const currentId = isMangapill ? resolvedMangapillUrl : seriesId;
+                            const active = option.source === (isMangapill ? 'mangapill' : isMgeko ? 'mgeko' : isAsura ? 'asura' : 'mangadex')
+                                && option.id === currentId;
+                            const bestCount = Math.max(...sourceOptions.map(x => x.count ?? 0));
+                            const recommended = option.count === bestCount && bestCount > 0;
+                            return (
+                                <Pressable key={option.source + ':' + option.id}
+                                    accessibilityRole="button" accessibilityState={{ selected: active }}
+                                    onPress={() => { if (!active) switchSource(option); }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                                        padding: 12, borderWidth: 1, borderRadius: 8,
+                                        borderColor: active ? C.accent : C.border,
+                                        backgroundColor: active ? C.accentDim : C.bg1, gap: 8 }}>
+                                    <View style={{ flex: 1, gap: 3 }}>
+                                        <Text style={{ color: C.text1, fontWeight: '700', fontSize: 13 }}>
+                                            {option.label}{active ? ' · Selected' : ''}
+                                        </Text>
+                                        {recommended && (
+                                            <Text style={{ color: C.green, fontSize: 11 }}>Most available chapters</Text>
+                                        )}
+                                        {preferredSource === option.source && (
+                                            <Text style={{ color: C.text2, fontSize: 11 }}>Your preferred source</Text>
+                                        )}
+                                    </View>
+                                    <Text style={{ color: C.text2, fontSize: 12 }}>
+                                        {option.count == null ? 'Chapters unavailable' : option.count + ' chapters'}
+                                    </Text>
+                                    <Ionicons name={active ? 'checkmark-circle' : 'chevron-forward'}
+                                        color={active ? C.accent : C.text2} size={17}/>
+                                </Pressable>
+                            );
+                        })}
+                    </View>
+                )}
 
                 {/* SYNOPSIS */}
                 <View style={S.block}>
