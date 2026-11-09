@@ -253,6 +253,10 @@ const MangaDetails = () => {
             setSourceOptions(available);
             setSourcesLoading(false);
             if (sourceChoice === '1' || available.length < 2) return;
+            // Existing readers should stay on their current source unless
+            // they explicitly switch. Never redirect away from saved progress
+            // just because another provider has more chapter entries.
+            if (lastRead && !pref) return;
             const preferred = pref ? available.find(opt => opt.source === pref) : null;
             const recommended = [...available].filter(opt => Number.isFinite(opt.count))
                 .sort((a, b) => b.count - a.count)[0];
@@ -267,7 +271,7 @@ const MangaDetails = () => {
         })().catch(() => { if (!cancelled) setSourcesLoading(false); });
         return () => { cancelled = true; };
     }, [loading, fetchError, mangaData?.title, mangaData?.name, titleParam, chapters.length,
-        isMgeko, isAsura, isMangapill, resolvedMangapillUrl, seriesId, sourceChoice]);
+        isMgeko, isAsura, isMangapill, resolvedMangapillUrl, seriesId, sourceChoice, lastRead]);
 
     const switchSource = async option => {
         const title = mangaData?.title || mangaData?.name || titleParam;
