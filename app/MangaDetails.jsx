@@ -17,7 +17,8 @@ import { getManhwaById } from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed, newChapterKey } from "./searchStorage";
 import { getCoverUrl as getStaticCover } from "../services/coverurls";
-import { discoverReadingSources, sourcePreferenceKey, sourceDetailPath } from "../services/sourceOptions";
+import { discoverReadingSources, sourcePreferenceKey, seriesMetadataKey, sourceStorageKey, sourceDetailPath } from "../services/sourceOptions";
+import { queueLibrarySync } from "../services/accountSync";
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',
@@ -88,6 +89,8 @@ const MangaDetails = () => {
     const [sourceOptions, setSourceOptions] = useState([]);
     const [sourcesLoading, setSourcesLoading] = useState(false);
     const [preferredSource, setPreferredSource] = useState(null);
+    const [sharedMetadata, setSharedMetadata] = useState(null);
+    const [resumeSuggestion, setResumeSuggestion] = useState(null);
 
     const isMgeko = source === 'mgeko' || String(seriesId).startsWith('mgeko__');
     const isMangadex = source === 'mangadex' || String(seriesId).startsWith('mangadex__');
@@ -109,6 +112,7 @@ const MangaDetails = () => {
     useFocusEffect(
         useCallback(() => {
             if (!storageKey) return;
+            setLastRead(null);
             getLastReadChapter(storageKey)
                 .then(val => setLastRead(val ?? null))
                 .catch(() => {});
@@ -232,6 +236,72 @@ const MangaDetails = () => {
         return () => { cancelled = true; };
     }, [seriesId, resolvedMangapillUrl, source, isMangapill, isMangadex, retryNonce]);
 
+
+    // Cross-provider artwork and description belong to the SERIES, not a
+    // particular chapter provider. Retain usable metadata when moving from
+    // MangaPill to live-only Mgeko pages that have no local catalog entry.
+    useEffect(() => {
+        const name = mangaData?.title || mangaData?.name || titleParam;
+        if (!name) return;
+        let cancelled = false;
+        (async () => {
+            const key = seriesMetadataKey(name);
+            const prior = await AsyncStorage.getItem(key).then(v => v ? JSON.parse(v) : {}).catch(() => ({}));
+            const favorites = await getFavorites().catch(() => []);
+            const previousFavorite = favorites.find(f =>
+                String(f.title || '').toLowerCase().trim() === String(name).toLowerCase().trim()
+                && (f.cover || f.coverUrl || f.description));
+            const freshCover = getStaticCover(storageKey) || mangaData?.image || mangaData?.cover
+                || mangaData?.coverUrl || coverParam;
+            const freshDescription = mangaData?.description;
+            const meaningful = text => !!text && !/^no description available\.?$/i.test(String(text).trim());
+            const meta = {
+                cover: unwrapImageProxyUrl(freshCover || prior.cover || previousFavorite?.cover || previousFavorite?.coverUrl || ''),
+                description: meaningful(freshDescription) ? freshDescription :
+                    meaningful(prior.description) ? prior.description :
+                    meaningful(previousFavorite?.description) ? previousFavorite.description : '',
+            };
+            if (cancelled) return;
+            setSharedMetadata(meta);
+            if (meta.cover || meta.description) await AsyncStorage.setItem(key, JSON.stringify(meta)).catch(() => {});
+        })();
+        return () => { cancelled = true; };
+    }, [mangaData?.title, mangaData?.name, mangaData?.description, mangaData?.image,
+        mangaData?.cover, mangaData?.coverUrl, titleParam, coverParam, storageKey]);
+
+    // A source swap never transfers read flags. Instead suggest the nearest
+    // SAME-NUMBERED chapter explicitly, keeping the original provider's last
+    // read timestamp/chapter unchanged until the user opens the suggestion.
+    useEffect(() => {
+        let cancelled = false;
+        setResumeSuggestion(null);
+        if (!sourceOptions.length || !chapters.length || !storageKey) return;
+        (async () => {
+            const raw = await AsyncStorage.getItem('lastReadChapters');
+            const progress = raw ? JSON.parse(raw) : {};
+            if (progress[storageKey]?.chapterUrl) return;
+            const candidates = sourceOptions
+                .filter(opt => sourceStorageKey(opt) !== storageKey)
+                .map(opt => ({ opt, progress: progress[sourceStorageKey(opt)] }))
+                .filter(x => x.progress?.chapterUrl)
+                .sort((a, b) => (b.progress.timestamp || 0) - (a.progress.timestamp || 0));
+            for (const candidate of candidates) {
+                const number = candidate.opt.source === 'mangapill'
+                    ? mangapillChapterNumber({ url: candidate.progress.chapterUrl })
+                    : extractNum({ id: candidate.progress.chapterUrl });
+                if (number == null || !Number.isFinite(number)) continue;
+                const matches = chapters.filter(ch => extractNum(ch) === number);
+                if (matches.length === 1) {
+                    if (!cancelled) setResumeSuggestion({
+                        chapter: matches[0], number, source: candidate.opt.label,
+                    });
+                    break;
+                }
+            }
+        })().catch(() => {});
+        return () => { cancelled = true; };
+    }, [sourceOptions, chapters, storageKey, lastRead]);
+
     // Discover compatible sources only after the primary title has loaded.
     // The selected source retains its own last-read chapter and favorite key.
     useEffect(() => {
@@ -253,10 +323,6 @@ const MangaDetails = () => {
             setSourceOptions(available);
             setSourcesLoading(false);
             if (sourceChoice === '1' || available.length < 2) return;
-            // Existing readers should stay on their current source unless
-            // they explicitly switch. Never redirect away from saved progress
-            // just because another provider has more chapter entries.
-            if (lastRead && !pref) return;
             const preferred = pref ? available.find(opt => opt.source === pref) : null;
             const recommended = [...available].filter(opt => Number.isFinite(opt.count))
                 .sort((a, b) => b.count - a.count)[0];
@@ -277,13 +343,15 @@ const MangaDetails = () => {
         const title = mangaData?.title || mangaData?.name || titleParam;
         if (!title) return;
         await AsyncStorage.setItem(sourcePreferenceKey(title), option.source).catch(() => {});
+        queueLibrarySync();
         setPreferredSource(option.source);
         router.replace(sourceDetailPath(option, title));
     };
 
     const getCoverUrl = () => {
         const staticUrl = getStaticCover(storageKey);
-        const dataUrl = mangaData?.image || mangaData?.cover || coverParam || null;
+        const dataUrl = mangaData?.image || mangaData?.cover || mangaData?.coverUrl
+            || sharedMetadata?.cover || coverParam || null;
         const url = unwrapImageProxyUrl(staticUrl || dataUrl);
         if (!url) return null;
         if (isAsura) return proxiedAsura(url);
@@ -297,7 +365,7 @@ const MangaDetails = () => {
         return {
             url: storageKey,
             title: mangaData?.title || mangaData?.name || titleParam || 'Manga',
-            description: mangaData?.description || '',
+            description: mangaData?.description || sharedMetadata?.description || '',
             coverUrl: freshCover,
             cover: freshCover,
             source: isMangadex ? 'mangadex' : isMangapill ? 'mangapill' : isMgeko ? 'mgeko' : 'asura',
@@ -536,10 +604,29 @@ const MangaDetails = () => {
                     </View>
                 )}
 
+                {!!resumeSuggestion && !lastRead && (
+                    <View style={{ marginBottom: 16, padding: 14, backgroundColor: C.bg2,
+                        borderRadius: 10, borderWidth: 1, borderColor: C.borderMid, gap: 9 }}>
+                        <Text style={{ color: C.text1, fontSize: 13, fontWeight: '700' }}>
+                            Reading history found on {resumeSuggestion.source}
+                        </Text>
+                        <Text style={{ color: C.text2, fontSize: 12 }}>
+                            You reached chapter {resumeSuggestion.number} there. Numbering and content can differ between sources. Confirm before continuing.
+                        </Text>
+                        <Pressable accessibilityRole="button"
+                            onPress={() => handleChapter(resumeSuggestion.chapter)}
+                            style={{ backgroundColor: C.accentDim, padding: 12, borderRadius: 8,
+                                borderWidth: 1, borderColor: C.accentBorder }}>
+                            <Text style={{ color: C.accentBright, textAlign: 'center', fontWeight: '700' }}>
+                                Open matching Chapter {resumeSuggestion.number} on this source
+                            </Text>
+                        </Pressable>
+                    </View>
+                )}
                 {/* SYNOPSIS */}
                 <View style={S.block}>
                     <Text style={S.blockLabel}>ABOUT THIS SERIES</Text>
-                    <Text style={S.synopsis}>{mangaData?.description || 'No description available.'}</Text>
+                    <Text style={S.synopsis}>{mangaData?.description || sharedMetadata?.description || 'No description available.'}</Text>
                 </View>
 
                 {/* TAGS */}

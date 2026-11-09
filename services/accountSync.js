@@ -13,7 +13,7 @@ function getSyncApiBase() {
   return PRODUCTION_API;
 }
 const KEYS = ['favorites', 'lastReadChapters', 'hiddenContinueReading', 'completed_manga'];
-const PREFIXES = ['status:', 'lastviewed:'];
+const PREFIXES = ['status:', 'lastviewed:', 'mangako:preferred-source:'];
 const META_OWNER = '@mangako/sync-owner';
 const META_BASE = '@mangako/sync-base:';
 const META_BACKUP = '@mangako/sync-backup:';
