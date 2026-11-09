@@ -17,7 +17,7 @@ import { getManhwaById } from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed, newChapterKey } from "./searchStorage";
 import { getCoverUrl as getStaticCover } from "../services/coverurls";
-import { discoverReadingSources, sourcePreferenceKey, seriesMetadataKey, sourceStorageKey, sourceDetailPath } from "../services/sourceOptions";
+import { discoverReadingSources, sourcePreferenceKey, sourceSelectionKey, seriesMetadataKey, sourceStorageKey, sourceDetailPath } from "../services/sourceOptions";
 import { queueLibrarySync } from "../services/accountSync";
 
 const C = {
@@ -354,7 +354,10 @@ const MangaDetails = () => {
     const switchSource = async option => {
         const title = mangaData?.title || mangaData?.name || titleParam;
         if (!title) return;
-        await AsyncStorage.setItem(sourcePreferenceKey(title), option.source).catch(() => {});
+        await AsyncStorage.multiSet([
+            [sourcePreferenceKey(title), option.source],
+            [sourceSelectionKey(title), JSON.stringify({ source: option.source, id: option.id })],
+        ]).catch(() => {});
         queueLibrarySync();
         setPreferredSource(option.source);
         router.replace(sourceDetailPath(option, title));

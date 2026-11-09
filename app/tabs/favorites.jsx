@@ -15,6 +15,7 @@ import { proxied as proxiedMangapill } from '../../manga_api/mangapill';
 import { proxied as proxiedMgeko } from '../../manga_api/mgeko';
 import { proxied as proxiedMangadex, splitMangadexChapterKey } from '../../manga_api/mangadex';
 import { getCoverUrl as getStaticCover } from "../../services/coverurls";
+import { sourceSelectionKey, sourceDetailPath } from "../../services/sourceOptions";
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',
@@ -210,8 +211,18 @@ export default function Favorites() {
         }
     };
 
-    const openContinue = (item, lr) => {
+    const openContinue = async (item, lr) => {
         const src = getSource(item);
+        if (item.title) {
+            try {
+                const raw = await AsyncStorage.getItem(sourceSelectionKey(item.title));
+                const preferred = raw ? JSON.parse(raw) : null;
+                if (preferred?.id && preferred?.source && preferred.source !== src) {
+                    router.push(sourceDetailPath(preferred, item.title));
+                    return;
+                }
+            } catch { /* Fall back to the existing saved chapter */ }
+        }
         if (src === 'mangapill') {
             router.push(`/ReadChapter?chapterUrl=${encodeURIComponent(lr.chapterUrl)}&mangapillUrl=${encodeURIComponent(item.url)}&source=mangapill`);
         } else {

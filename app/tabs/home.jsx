@@ -27,6 +27,7 @@ import {
     toMangadexChapterKey,
 } from '../../manga_api/mangadex';
 import { getCoverUrl } from "../../services/coverurls";
+import { sourceSelectionKey, sourceDetailPath } from "../../services/sourceOptions";
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',
@@ -556,10 +557,23 @@ export default function Home() {
         openManga(item);
     };
 
-    const openChapter = (manga, chapterId) => {
+    const openChapter = async (manga, chapterId) => {
         if (!chapterId) return;
         const src = getSource(manga);
         const id = manga.url || manga.id;
+        // A user-selected provider takes precedence over the old library
+        // entry. Open its details/resume suggestion rather than an unrelated
+        // chapter number on a different provider.
+        if (manga.title) {
+            try {
+                const raw = await AsyncStorage.getItem(sourceSelectionKey(manga.title));
+                const preferred = raw ? JSON.parse(raw) : null;
+                if (preferred?.id && preferred?.source && preferred.source !== src) {
+                    router.push(sourceDetailPath(preferred, manga.title));
+                    return;
+                }
+            } catch { /* Use the saved chapter on the original source */ }
+        }
         if (src === 'mangapill') {
             const mangapillUrl = id.includes('mangapill.com')
                 ? id

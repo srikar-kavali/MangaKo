@@ -13,6 +13,7 @@ const VERIFIED_EXTRA_SOURCES = {
 };
 
 export const sourcePreferenceKey = title => 'mangako:preferred-source:' + normalizedTitle(title);
+export const sourceSelectionKey = title => 'mangako:preferred-selection:' + normalizedTitle(title);
 export const seriesMetadataKey = title => 'mangako:series-metadata:' + normalizedTitle(title);
 
 export function sourceStorageKey(item) {
