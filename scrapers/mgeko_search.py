@@ -1,6 +1,3 @@
-# api/mgeko-search.py
-"""Search Mgeko's public catalog without relying on curated MangaKo entries."""
-import json
 import re
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urljoin, urlparse
@@ -102,45 +99,17 @@ def parse_results(html, limit):
     return results
 
 
-class handler(BaseHTTPRequestHandler):
-    def send_json(self, status, payload):
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Cache-Control", "s-maxage=120, stale-while-revalidate=300")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def do_GET(self):
-        args = parse_qs(urlparse(self.path).query)
-        query = (args.get("q") or [""])[0].strip()
-        if not query or len(query) > 100:
-            return self.send_json(400, {"error": "q must be 1–100 characters"})
-        try:
-            page = max(1, min(50, int((args.get("page") or ["1"])[0])))
-            limit = max(1, min(50, int((args.get("limit") or ["30"])[0])))
-        except ValueError:
-            return self.send_json(400, {"error": "Invalid pagination"})
-        try:
-            with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=9.0) as client:
-                response = client.get(BASE + "/search/", params={"search": query, "page": page})
-                response.raise_for_status()
-            if "html" not in response.headers.get("content-type", ""):
-                raise ValueError("Search returned non-HTML content")
-            matches = parse_results(response.text, limit)
-            return self.send_json(200, {
-                "results": matches, "page": page,
-                "hasMore": bool(BeautifulSoup(response.text, "html.parser").find(
-                    "a", string=re.compile(r"Next", re.I))),
-            })
-        except Exception as exc:
-            print("Mgeko search unavailable:", type(exc).__name__, str(exc)[:180])
-            return self.send_json(502, {"error": "Mgeko search is temporarily unavailable"})
-
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.end_headers()
+def search_mgeko(query, limit=30, page=1):
+    if not query or len(query) > 100:
+        raise ValueError("Invalid Mgeko search query")
+    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=9.0) as client:
+        response = client.get(BASE + "/search/", params={"search": query, "page": page})
+        response.raise_for_status()
+    if "html" not in response.headers.get("content-type", ""):
+        raise ValueError("Mgeko search returned non-HTML content")
+    return {
+        "results": parse_results(response.text, limit),
+        "page": page,
+        "hasMore": bool(BeautifulSoup(response.text, "html.parser").find(
+            "a", string=re.compile(r"Next", re.I))),
+    }

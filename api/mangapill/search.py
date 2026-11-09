@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..'))
 from scrapers.mangapill_scraper import MangapillScraper
+from scrapers.mgeko_search import search_mgeko
 
 scraper = MangapillScraper()
 
@@ -17,10 +18,15 @@ class handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
         q = params.get('q', [''])[0]
-        limit = int(params.get('limit', [20])[0])
+        provider = params.get('provider', ['mangapill'])[0].lower()
+        try:
+            limit = max(1, min(50, int(params.get('limit', [20])[0])))
+            page = max(1, min(50, int(params.get('page', [1])[0])))
+        except (ValueError, TypeError):
+            limit, page = 20, 1
 
         try:
-            results = scraper.search(q, limit)
+            results = search_mgeko(q, limit, page) if provider == 'mgeko' else scraper.search(q, limit)
             body = json.dumps(results).encode()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -30,7 +36,7 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         except Exception as e:
             body = json.dumps({'error': str(e)}).encode()
-            self.send_response(500)
+            self.send_response(502 if provider == 'mgeko' else 500)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Content-Length', str(len(body)))
