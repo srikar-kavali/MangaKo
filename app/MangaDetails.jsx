@@ -262,8 +262,9 @@ const MangaDetails = () => {
             const previousFavorite = favorites.find(f =>
                 String(f.title || '').toLowerCase().trim() === String(name).toLowerCase().trim()
                 && (f.cover || f.coverUrl || f.description));
-            const freshCover = getStaticCover(storageKey) || mangaData?.image || mangaData?.cover
-                || mangaData?.coverUrl || coverParam;
+            const freshCover = getStaticCover(storageKey) ||
+                (isMgeko ? (prior.cover || previousFavorite?.cover || previousFavorite?.coverUrl) : null) ||
+                mangaData?.image || mangaData?.cover || mangaData?.coverUrl || coverParam;
             const freshDescription = mangaData?.description;
             const meaningful = text => !!text && !/^no description available\.?$/i.test(String(text).trim());
             const meta = {
@@ -278,7 +279,7 @@ const MangaDetails = () => {
         })();
         return () => { cancelled = true; };
     }, [mangaData?.title, mangaData?.name, mangaData?.description, mangaData?.image,
-        mangaData?.cover, mangaData?.coverUrl, titleParam, coverParam, storageKey]);
+        mangaData?.cover, mangaData?.coverUrl, titleParam, coverParam, storageKey, isMgeko]);
 
     // A source swap never transfers read flags. Instead suggest the nearest
     // SAME-NUMBERED chapter explicitly, keeping the original provider's last
@@ -361,8 +362,9 @@ const MangaDetails = () => {
 
     const getCoverUrl = () => {
         const staticUrl = getStaticCover(storageKey);
-        const dataUrl = mangaData?.image || mangaData?.cover || mangaData?.coverUrl
-            || sharedMetadata?.cover || coverParam || null;
+        const dataUrl = (isMgeko ? sharedMetadata?.cover : null) ||
+            mangaData?.image || mangaData?.cover || mangaData?.coverUrl ||
+            sharedMetadata?.cover || coverParam || null;
         const url = unwrapImageProxyUrl(staticUrl || dataUrl);
         if (!url) return null;
         if (isAsura) return proxiedAsura(url);
