@@ -281,8 +281,8 @@ export default function Home() {
             const activeProgress = progress[activeKey] || null;
             const progressOnSelected = !!activeProgress?.chapterUrl;
             const effectiveProgress = activeProgress || info;
-            const latestChapter = extraLatest[`latest_chapter_${activeKey}`] || values[`latest_chapter_${key}`] && activeKey === key
-                ? extraLatest[`latest_chapter_${activeKey}`] || values[`latest_chapter_${key}`] : null;
+            const latestChapter = extraLatest[`latest_chapter_${activeKey}`]
+                || (activeKey === key ? values[`latest_chapter_${key}`] : null);
             let newChapterAt = null;
             let wasCaughtUpWhenNew = false;
             const raw = extraLatest[newChapterKey(activeKey)] || (activeKey === key ? values[newChapterKey(key)] : null);
