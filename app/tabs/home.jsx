@@ -923,9 +923,9 @@ export default function Home() {
                                         const cover = getProxied(item);
                                         const isAS = item.source === 'asura';
                                         const isMD = item.source === 'mangadex';
-                                        const badgeColor = isAS ? C.accentDim : isMD ? 'rgba(251,146,60,0.14)' : 'rgba(56,189,248,0.12)';
-                                        const badgeTextColor = isAS ? C.accentBright : isMD ? '#fb923c' : '#7dd3fc';
-                                        const badgeLabel = isAS ? 'AsuraScans' : isMD ? 'MangaDex' : 'MangaPill';
+                                        const badgeColor = isAS ? C.accentDim : isMD ? 'rgba(251,146,60,0.14)' : item.source === 'mgeko' ? C.greenDim : 'rgba(56,189,248,0.12)';
+                                        const badgeTextColor = isAS ? C.accentBright : isMD ? '#fb923c' : item.source === 'mgeko' ? C.green : '#7dd3fc';
+                                        const badgeLabel = isAS ? 'AsuraScans' : isMD ? 'MangaDex' : item.source === 'mgeko' ? 'Mgeko' : 'MangaPill';
                                         return (
                                             <Pressable
                                                 onPress={() => openResult(item)}

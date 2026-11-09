@@ -10,6 +10,24 @@ from bs4 import BeautifulSoup
 
 BASE = "https://www.mgeko.cc"
 SERIES_PATH = re.compile(r"^/manga/([a-zA-Z0-9][a-zA-Z0-9-]*)/?$")
+LEGACY_ID_ALIASES = {
+    "manga-pl822": "noblesse",
+    "manga-si7aaa": "tower-of-god",
+    "manga-q1113": "eleceed",
+    "manga-187j": "the-boxer",
+    "7237": "the-god-of-high-school",
+    "northern-b-manhwa": "legend-of-the-northern-blade",
+    "leviathansdads": "leviathan",
+    "wind-breaker-cs": "wind-breaker",
+    "memoir-of-the-king-of-war-sop": "memoir-of-the-king-of-war",
+    "chronicles-of-heavenly-demon-mg1": "chronicles-of-the-heavenly-demon",
+    "eternal-force": "the-breaker-eternal-force",
+    "the-breaker22": "the-breaker",
+    "the-story-of-a-low-rank-soldier-becoming-a-monarch-mg1": "the-story-of-a-low-rank-soldier-becoming-a-monarch",
+    "manga-mm990169": "mage-again",
+    "manga-1089": "hardcore-leveling-warrior",
+}
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml",
@@ -72,7 +90,7 @@ def parse_results(html, limit):
                     break
         seen.add(slug)
         results.append({
-            "id": "mgeko__" + slug,
+            "id": "mgeko__" + LEGACY_ID_ALIASES.get(slug, slug),
             "url": href,
             "title": name,
             "cover": cover,
