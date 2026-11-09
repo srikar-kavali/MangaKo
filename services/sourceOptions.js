@@ -5,6 +5,12 @@ import { normalizedTitle, findMangapillMatch } from './mangapillMatch';
 const CHAPTERS_API = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
 const SOURCE_NAMES = { mangapill: 'MangaPill', mgeko: 'Mgeko', asura: 'Asura Scans' };
 
+// Verified cross-source association not present in the curated catalog.
+// Alternatives are offered only after their chapter API responds successfully.
+const VERIFIED_EXTRA_SOURCES = {
+    'ane no tomodachi': [{ source: 'mgeko', id: 'mgeko__ane-no-tomodachi' }],
+};
+
 export const sourcePreferenceKey = title => 'mangako:preferred-source:' + normalizedTitle(title);
 
 function curatedMatches(title) {
@@ -50,7 +56,10 @@ export async function discoverReadingSources({ title, currentSource, currentId, 
     const current = { source: currentSource, id: currentId, title: name,
         count: currentCount, label: SOURCE_NAMES[currentSource] || currentSource };
     const options = [current];
-    const matches = curatedMatches(name);
+    const matches = [
+        ...curatedMatches(name),
+        ...(VERIFIED_EXTRA_SOURCES[normalizedTitle(name)] || []),
+    ];
     const mapped = VERIFIED_MGEKO_MATCHES[normalizedTitle(name)];
     if (mapped && !matches.some(item => item.id === mapped)) {
         matches.push({ source: 'mgeko', id: mapped, title: name });
