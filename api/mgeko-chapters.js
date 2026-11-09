@@ -123,6 +123,48 @@ async function resolveLivePages(slug, chapterId) {
     }
 }
 
+
+function decodeMeta(text) {
+    return String(text || '').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'")
+        .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>');
+}
+
+async function fetchSeriesMetadata(slug) {
+    if (!slug) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+        const response = await fetch('https://www.mgeko.cc/manga/' + encodeURIComponent(slug) + '/', {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MangaKo/1.0)', Accept: 'text/html' },
+            signal: controller.signal,
+        });
+        if (!response.ok || !String(response.headers.get('content-type') || '').includes('text/html')) return null;
+        const html = (await response.text()).slice(0, 1200000);
+        const tags = html.match(/<meta\b[^>]*>/gi) || [];
+        function metaContent(keys) {
+            for (const tag of tags) {
+                const attrs = {};
+                const attrsRe = /([\w:-]+)\s*=\s*(["'])(.*?)\2/g;
+                for (const attr of tag.matchAll(attrsRe)) attrs[attr[1].toLowerCase()] = attr[3];
+                if (keys.includes(String(attrs.property || attrs.name || '').toLowerCase())) {
+                    return decodeMeta(attrs.content || '');
+                }
+            }
+            return '';
+        }
+        const description = metaContent(['og:description', 'description', 'twitter:description']);
+        const cover = metaContent(['og:image', 'twitter:image']);
+        // Only HTTPS image URLs can be passed onward to the image proxy,
+        // which enforces its own allowlist and checks.
+        const validCover = /^https:\/\//i.test(cover) ? cover : null;
+        return description || validCover ? { description, cover: validCover } : null;
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -174,7 +216,10 @@ export default async function handler(req, res) {
             number: parseFloat(row.chapter_id) || 0,
         }));
         const slug = seriesSlug(seriesId);
-        const live = slug && req.query.live === '1' ? await fetchLiveChapters(slug) : [];
+        const [live, metadata] = await Promise.all([
+            slug && req.query.live === '1' ? fetchLiveChapters(slug) : Promise.resolve([]),
+            slug && req.query.metadata === '1' ? fetchSeriesMetadata(slug) : Promise.resolve(null),
+        ]);
         // In opt-in live mode expose the union. New chapters can be loaded
         // through the live page resolver, while archived entries remain intact.
         const chapterMap = new Map(archived.map(ch => [String(ch.id), ch]));
@@ -192,6 +237,7 @@ export default async function handler(req, res) {
             liveLatestChapter: live.length ? live.reduce((a,b) => a.number > b.number ? a : b).id : null,
             liveChapterCount: live.length,
             archivedChapterCount: chapters.length,
+            ...(req.query.metadata === '1' ? { metadata } : {}),
         });
 
     } catch (e) {

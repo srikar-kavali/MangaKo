@@ -135,6 +135,10 @@ const MangaDetails = () => {
         (async () => {
             setLoading(true);
             setFetchError('');
+            setMangaData(null);
+            setChapters([]);
+            setSourceOptions([]);
+            setResumeSuggestion(null);
             try {
                 if (isMangapill && resolvedMangapillUrl) {
                     const data = await getMangapillManga(resolvedMangapillUrl);
@@ -156,7 +160,7 @@ const MangaDetails = () => {
 
                     const endpoint = isMgeko ? 'mgeko-chapters' : 'asura-chapters';
                     if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is missing. Configure the chapters backend URL and restart Expo.');
-                    const requestUrl = `${BACKEND.replace(/\/$/, '')}/api/${endpoint}?seriesId=${encodeURIComponent(seriesId)}${isMgeko ? '&live=1' : ''}`;
+                    const requestUrl = `${BACKEND.replace(/\/$/, '')}/api/${endpoint}?seriesId=${encodeURIComponent(seriesId)}${isMgeko ? '&live=1&metadata=1' : ''}`;
                     let res;
                     try {
                         res = await fetch(requestUrl);
@@ -167,6 +171,13 @@ const MangaDetails = () => {
                     const json = await res.json();
                     if (!Array.isArray(json?.chapters)) throw new Error(`Unexpected chapter response from ${requestUrl}`);
                     if (!cancelled && json.chapters) {
+                        if (isMgeko && json.metadata) {
+                            setMangaData(previous => ({
+                                ...(previous || {}), title: previous?.title || titleParam || '',
+                                description: json.metadata.description || previous?.description || '',
+                                cover: json.metadata.cover || previous?.cover || '',
+                            }));
+                        }
                         setChapters(json.chapters);
                         if (json.total) {
                             await AsyncStorage.setItem(`chapterCount:${storageKey}`, String(json.total)).catch(() => {});
