@@ -27,7 +27,8 @@ import {
     toMangadexChapterKey,
 } from '../../manga_api/mangadex';
 import { getCoverUrl } from "../../services/coverurls";
-import { sourceSelectionKey, sourceDetailPath } from "../../services/sourceOptions";
+import { sourceSelectionKey, sourceDetailPath, sourceStorageKey } from "../../services/sourceOptions";
+import { mangapillChapterNumber } from '../../manga_api/mangapill';
 
 const C = {
     bg0:'#07070a', bg1:'#0c0c10', bg2:'#111118', bg3:'#18181f', bg4:'#1f1f28',
@@ -50,8 +51,11 @@ const STALE_AFTER_MS = 15 * 1000;
 function chapterNum(id) {
     const s = String(id ?? '');
     const slug = s.includes('/') ? (s.split('/').filter(Boolean).pop() || s) : s;
-    const m = slug.match(/(\d+(\.\d+)?)/);
-    return m ? parseFloat(m[1]) : null;
+    // Do not interpret a series ID or MangaPill's opaque URL identifier
+    // as the chapter number (e.g. the 999 in Yamada-kun Lv999).
+    if (/^\d+(?:\.\d+)?$/.test(slug)) return Number(slug);
+    const m = slug.match(/(?:^|[-_])(?:chapter|ch)[-_]?(\d+(?:\.\d+)?)(?:$|[-_])/i);
+    return m ? Number(m[1]) : null;
 }
 
 function extractNewest(chapters) {
@@ -72,7 +76,18 @@ async function fetchLatestChapterId(key, source) {
                 ? key
                 : `https://mangapill.com/manga/${key.replace('__', '/')}`;
             const data = await getMangapillManga(mangapillUrl);
-            return extractNewest(data?.chapters);
+            const chapters = data?.chapters || [];
+            if (!chapters.length) return null;
+            const numbered = chapters.map((ch, index) => ({
+                chapter: ch, index, num: mangapillChapterNumber(ch),
+            })).filter(x => x.num !== null);
+            if (numbered.length) {
+                numbered.sort((a, b) => b.num - a.num);
+                return numbered[0].chapter.url || null;
+            }
+            // MangaPill normally lists latest first, but without reliable
+            // labels we cannot safely declare that a reader is caught up.
+            return chapters[0]?.url || null;
         }
         if (source === 'mangadex') {
             const data = await getMangadexManga(key);
@@ -113,9 +128,12 @@ function resolveCardState(manga) {
     const latestNum = chapterNum(latestChapter);
 
     const exactMatch = latestChapter && String(lastReadChapter) === String(latestChapter);
-    const numMatch   = readNum !== null && latestNum !== null && readNum >= latestNum;
+    const numMatch = (manga.activeSource === 'mgeko' || manga.activeSource === 'asura')
+        && readNum !== null && latestNum !== null && readNum >= latestNum;
 
-    if (exactMatch || numMatch) return { state: 'CAUGHT_UP' };
+    // A card must have progress and a verified latest chapter on the
+    // SELECTED provider. Never infer caught-up from a stale other-source URL.
+    if (manga.progressOnSelected && (exactMatch || numMatch)) return { state: 'CAUGHT_UP' };
 
     if (latestChapter && hasNewChapterFlag && wasCaughtUpWhenNew) {
         // Only jump the "continue" target ahead — and show the green "new"
@@ -233,16 +251,41 @@ export default function Home() {
         let progress = {};
         try { progress = JSON.parse(values.lastReadChapters || '{}') || {}; } catch {}
 
-        const sorted = favs.map(f => {
+        const prefEntries = await AsyncStorage.multiGet(favs
+            .filter(f => f.title).map(f => sourceSelectionKey(f.title)));
+        const preferenceByTitle = Object.fromEntries(prefEntries);
+        const selected = favs.map(f => {
+            try {
+                const raw = preferenceByTitle[sourceSelectionKey(f.title)];
+                const choice = raw ? JSON.parse(raw) : null;
+                if (choice?.source && choice?.id) return choice;
+            } catch {}
+            return null;
+        });
+        const activeKeys = selected.map((choice, i) =>
+            choice ? sourceStorageKey(choice) : favs[i].url);
+        const extraLatest = Object.fromEntries(await AsyncStorage.multiGet(
+            [...new Set(activeKeys.flatMap(key => [
+                `latest_chapter_${key}`, newChapterKey(key), `lastviewed:${key}`,
+            ]))]
+        ));
+        const sorted = favs.map((f, index) => {
             const key = f.url;
             const info = progress[key];
             if (!info?.chapterUrl) return null;
             if (hiddenCards[key] && Number(hiddenCards[key]) >= (info.timestamp || 0)) return null;
 
-            const latestChapter = values[`latest_chapter_${key}`] || null;
+            const choice = selected[index];
+            const activeKey = activeKeys[index];
+            const activeSource = choice?.source || getSource(f);
+            const activeProgress = progress[activeKey] || null;
+            const progressOnSelected = !!activeProgress?.chapterUrl;
+            const effectiveProgress = activeProgress || info;
+            const latestChapter = extraLatest[`latest_chapter_${activeKey}`] || values[`latest_chapter_${key}`] && activeKey === key
+                ? extraLatest[`latest_chapter_${activeKey}`] || values[`latest_chapter_${key}`] : null;
             let newChapterAt = null;
             let wasCaughtUpWhenNew = false;
-            const raw = values[newChapterKey(key)];
+            const raw = extraLatest[newChapterKey(activeKey)] || (activeKey === key ? values[newChapterKey(key)] : null);
             if (raw) {
                 try {
                     const parsed = JSON.parse(raw);
@@ -256,11 +299,12 @@ export default function Home() {
                     newChapterAt = Number(raw) || null;
                 }
             }
-            const lastViewedAt = Number(values[`lastviewed:${key}`]) || 0;
+            const lastViewedAt = Number(extraLatest[`lastviewed:${activeKey}`] || values[`lastviewed:${key}`]) || 0;
             return {
                 ...f,
-                lastReadChapter: info.chapterUrl,
-                lastReadTimestamp: info.timestamp || 0,
+                activeKey, activeSource, activeId: choice?.id || key, progressOnSelected,
+                lastReadChapter: effectiveProgress.chapterUrl,
+                lastReadTimestamp: effectiveProgress.timestamp || 0,
                 latestChapter,
                 hasNewChapterFlag: newChapterAt != null,
                 wasCaughtUpWhenNew,
@@ -279,8 +323,8 @@ export default function Home() {
 
         const tasks = series.map(manga => async () => {
             if (bgCancelledRef.current) return;
-            const key = manga.url;
-            const src = getSource(manga);
+            const key = manga.activeKey || manga.url;
+            const src = manga.activeSource || getSource(manga);
 
             try {
                 const lastChecked = await AsyncStorage.getItem(`bgcheck:${key}`);
@@ -319,7 +363,7 @@ export default function Home() {
             }
 
             setFollowedManga(prev => {
-                const idx = prev.findIndex(m => m.url === key);
+                const idx = prev.findIndex(m => (m.activeKey || m.url) === key);
                 if (idx < 0) return prev;
                 const patched = {
                     ...prev[idx],
@@ -599,9 +643,8 @@ export default function Home() {
     const fmtCh = (id, src) => {
         if (!id) return '';
         if (src === 'asura' || src === 'mgeko') return `Ch.${id}`;
-        const slug = String(id).split('/').filter(Boolean).pop() || '';
-        const m = slug.match(/(\d+(\.\d+)?)/);
-        return m ? `Ch.${m[1]}` : '?';
+        const number = chapterNum(id);
+        return number !== null ? `Ch.${number}` : 'Continue';
     };
 
     return (
@@ -727,7 +770,7 @@ export default function Home() {
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.hList}>
                             {followedManga.map((manga, i) => {
                                 const img = getProxied(manga);
-                                const src = getSource(manga);
+                                const src = manga.activeSource || getSource(manga);
                                 const { state } = resolveCardState(manga);
 
                                 return (
