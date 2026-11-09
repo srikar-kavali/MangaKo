@@ -16,6 +16,12 @@ function curatedMatches(title) {
     );
 }
 
+// Verified source mappings for series not yet included in our curated catalog.
+// No fuzzy matching: an incorrect match could send a reader to another work.
+const VERIFIED_MGEKO_MATCHES = {
+    'ane no tomodachi': 'mgeko__ane-no-tomodachi',
+};
+
 function identity(item) {
     return item.source + ':' + item.id;
 }
@@ -45,6 +51,10 @@ export async function discoverReadingSources({ title, currentSource, currentId, 
         count: currentCount, label: SOURCE_NAMES[currentSource] || currentSource };
     const options = [current];
     const matches = curatedMatches(name);
+    const mapped = VERIFIED_MGEKO_MATCHES[normalizedTitle(name)];
+    if (mapped && !matches.some(item => item.id === mapped)) {
+        matches.push({ source: 'mgeko', id: mapped, title: name });
+    }
     for (const provider of ['mgeko', 'asura']) {
         const same = matches.filter(item => item.source === provider);
         if (same.length === 1) {

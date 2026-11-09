@@ -493,7 +493,7 @@ const MangaDetails = () => {
                         backgroundColor: C.bg2, borderWidth: 1, borderColor: C.borderMid, gap: 10 }}>
                         <Text style={{ color: C.text1, fontSize: 14, fontWeight: '800' }}>READING SOURCE</Text>
                         <Text style={{ color: C.text2, fontSize: 12 }}>
-                            Different providers may have different chapter numbering. Progress is saved separately.
+                            Sources can split or combine chapters differently. Counts aren't directly comparable, and progress stays separate.
                         </Text>
                         {sourcesLoading && <ActivityIndicator size="small" color={C.accent} />}
                         {sourceOptions.map(option => {
@@ -515,7 +515,7 @@ const MangaDetails = () => {
                                             {option.label}{active ? ' · Selected' : ''}
                                         </Text>
                                         {recommended && (
-                                            <Text style={{ color: C.green, fontSize: 11 }}>Most available chapters</Text>
+                                            <Text style={{ color: C.green, fontSize: 11 }}>Most listed chapter entries</Text>
                                         )}
                                         {preferredSource === option.source && (
                                             <Text style={{ color: C.text2, fontSize: 11 }}>Your preferred source</Text>
