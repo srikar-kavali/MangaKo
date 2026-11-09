@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from "expo-router";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
-import { getMangapillManga, getChapterPagesMangapill, proxied as proxiedMangapill } from "../manga_api/mangapill";
+import { getMangapillManga, getChapterPagesMangapill, mangapillChapterNumber, mangapillChapterLabel, proxied as proxiedMangapill } from "../manga_api/mangapill";
 import { proxied as proxiedMgeko } from "../manga_api/mgeko";
 import {
     getMangadexManga, getChapterPagesMangadex, proxied as proxiedMangadex,
@@ -173,11 +173,12 @@ const ReadChapter = () => {
                     }));
                 } else if (isMangapill && mangapillUrl) {
                     const data = await getMangapillManga(mangapillUrl);
-                    chapters = (data.chapters || []).map(ch => {
-                        const slug = String(ch.url).split('/').filter(Boolean).pop() || '';
-                        const m = slug.match(/(\d+(\.\d+)?)/);
-                        return { id: ch.url, title: `Ch. ${m ? m[1] : '–'}`, number: m ? parseFloat(m[1]) : 0 };
-                    });
+                    chapters = (data.chapters || []).map((ch, index) => ({
+                        id: ch.url,
+                        title: mangapillChapterLabel(ch),
+                        number: mangapillChapterNumber(ch),
+                        originalIndex: index,
+                    }));
                 } else if (isMangadex && seriesId) {
                     const data = await getMangadexManga(seriesId);
                     chapters = (data.chapters || []).map(ch => ({
@@ -186,7 +187,16 @@ const ReadChapter = () => {
                         number: ch.number ?? 0,
                     }));
                 }
-                chapters.sort((a, b) => a.number - b.number);
+                chapters.sort((a, b) => {
+                    const aValid = Number.isFinite(a.number), bValid = Number.isFinite(b.number);
+                    if (aValid && bValid) return a.number - b.number;
+                    if (aValid) return -1;
+                    if (bValid) return 1;
+                    // Unnumbered MangaPill entries preserve their source order
+                    // reversed (the provider normally lists newest first).
+                    if (isMangapill) return (b.originalIndex ?? 0) - (a.originalIndex ?? 0);
+                    return 0;
+                });
                 if (!cancelled) {
                     setAllChapters(chapters);
                     if (!selectedCh && chapters.length) setSelectedCh(chapters[0].id);

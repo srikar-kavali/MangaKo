@@ -50,6 +50,26 @@ export async function searchMangapill(title, limit = 10) {
     return r.json();
 }
 
+
+// MangaPill series names may include numbers (for example Lv999).
+// Use the displayed chapter name or an explicit chapter marker in the URL.
+export function mangapillChapterNumber(chapter) {
+    const label = String(chapter?.name || chapter?.title || '');
+    const labelMatch = label.match(/(?:^|\b)(?:chapter|ch\.?)\s*[:#._-]?\s*(\d+(?:\.\d+)?)/i);
+    if (labelMatch) return Number(labelMatch[1]);
+    if (typeof chapter?.number === 'number' && Number.isFinite(chapter.number)) return chapter.number;
+    const url = String(chapter?.url || chapter?.id || '');
+    const slug = url.split(/[?#]/)[0].split('/').filter(Boolean).pop() || '';
+    const urlMatch = slug.match(/(?:^|[-_])(?:chapter|ch)[-_]?(\d+(?:[._]\d+)?)(?:$|[-_])/i);
+    return urlMatch ? Number(urlMatch[1].replace('_', '.')) : null;
+}
+
+export function mangapillChapterLabel(chapter) {
+    const number = mangapillChapterNumber(chapter);
+    if (number !== null) return 'Ch. ' + number;
+    return String(chapter?.name || chapter?.title || 'Chapter').trim() || 'Chapter';
+}
+
 export async function getMangapillManga(mangaUrl) {
     const url = `${API_BASE}/api/mangapill/manga?url=${encodeURIComponent(mangaUrl)}`;
     const r = await fetch(url);

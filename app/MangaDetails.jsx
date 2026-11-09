@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { proxied as proxiedAsura } from '../manga_api/asurascans';
-import { getMangapillManga, proxied as proxiedMangapill, unwrapImageProxyUrl } from '../manga_api/mangapill';
+import { getMangapillManga, mangapillChapterNumber, proxied as proxiedMangapill, unwrapImageProxyUrl } from '../manga_api/mangapill';
 import { proxied as proxiedMgeko } from '../manga_api/mgeko';
 import {
     getMangadexManga, proxied as proxiedMangadex,
@@ -34,6 +34,10 @@ const STATUS_OPTIONS = ['Reading', 'Completed', 'On Hold', 'Dropped', 'Plan to R
 
 function extractNum(ch) {
     if (typeof ch?.number === 'number' && !isNaN(ch.number)) return ch.number;
+    if (ch?.url && String(ch.url).includes('mangapill.com/chapters/')) {
+        const parsed = mangapillChapterNumber(ch);
+        return parsed === null ? NaN : parsed;
+    }
     const raw = ch?.id ?? ch?.url ?? ch?.title ?? '';
     const s = String(raw);
     const slug = s.includes('/') ? (s.split('/').filter(Boolean).pop() || s) : s;
