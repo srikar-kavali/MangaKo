@@ -17,7 +17,7 @@ import { getManhwaById } from '../manga_api/hardcodedManhwas';
 import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed, newChapterKey } from "./searchStorage";
 import { getCoverUrl as getStaticCover } from "../services/coverurls";
-import { discoverReadingSources, sourcePreferenceKey, sourceSelectionKey, seriesMetadataKey, sourceStorageKey, sourceDetailPath } from "../services/sourceOptions";
+import { discoverReadingSources, sourcePreferenceKey, sourceSelectionKey, seriesMetadataKey, sourceStorageKey, sourceDetailPath, highestChapterNumber, compareChapterCoverage } from "../services/sourceOptions";
 import { queueLibrarySync } from "../services/accountSync";
 
 const C = {
@@ -327,9 +327,14 @@ const MangaDetails = () => {
         setSourcesLoading(true);
         (async () => {
             const pref = await AsyncStorage.getItem(sourcePreferenceKey(title)).catch(() => null);
-            const available = await discoverReadingSources({
+            const discovered = await discoverReadingSources({
                 title, currentSource, currentId, currentCount: chapters.length,
             });
+            const available = discovered.map(opt =>
+                opt.source === currentSource && opt.id === currentId
+                    ? { ...opt, latestNumber: highestChapterNumber(chapters, currentSource) }
+                    : opt
+            );
             if (cancelled) return;
             setPreferredSource(pref);
             setSourceOptions(available);
@@ -337,11 +342,14 @@ const MangaDetails = () => {
             if (sourceChoice === '1' || available.length < 2) return;
             const preferred = pref ? available.find(opt => opt.source === pref) : null;
             const recommended = [...available].filter(opt => Number.isFinite(opt.count))
-                .sort((a, b) => b.count - a.count)[0];
-            // The first visit selects better verified chapter coverage, unless
-            // the user has explicitly chosen a provider in the past.
+                .sort(compareChapterCoverage)[0];
+            const current = available.find(opt => opt.source === currentSource && opt.id === currentId);
+            // Prefer the newest numbered chapter, not raw entry count:
+            // a provider with split parts 36.1/36.2 may have more entries
+            // even though another source has newer full chapters.
             const chosen = preferred || (
-                recommended && recommended.count > chapters.length ? recommended : null
+                recommended && current && compareChapterCoverage(recommended, current) < 0
+                    ? recommended : null
             );
             if (chosen && (chosen.source !== currentSource || chosen.id !== currentId)) {
                 router.replace(sourceDetailPath(chosen, title));
@@ -588,8 +596,8 @@ const MangaDetails = () => {
                             const currentId = isMangapill ? resolvedMangapillUrl : seriesId;
                             const active = option.source === (isMangapill ? 'mangapill' : isMgeko ? 'mgeko' : isAsura ? 'asura' : 'mangadex')
                                 && option.id === currentId;
-                            const bestCount = Math.max(...sourceOptions.map(x => x.count ?? 0));
-                            const recommended = option.count === bestCount && bestCount > 0;
+                            const best = [...sourceOptions].sort(compareChapterCoverage)[0];
+                            const recommended = best?.id === option.id && best?.source === option.source;
                             return (
                                 <Pressable key={option.source + ':' + option.id}
                                     accessibilityRole="button" accessibilityState={{ selected: active }}
@@ -603,14 +611,15 @@ const MangaDetails = () => {
                                             {option.label}{active ? ' · Selected' : ''}
                                         </Text>
                                         {recommended && (
-                                            <Text style={{ color: C.green, fontSize: 11 }}>Most listed chapter entries</Text>
+                                            <Text style={{ color: C.green, fontSize: 11 }}>Latest available chapter</Text>
                                         )}
                                         {preferredSource === option.source && (
                                             <Text style={{ color: C.text2, fontSize: 11 }}>Your preferred source</Text>
                                         )}
                                     </View>
                                     <Text style={{ color: C.text2, fontSize: 12 }}>
-                                        {option.count == null ? 'Chapters unavailable' : option.count + ' chapters'}
+                                        {Number.isFinite(option.latestNumber) ? 'Ch. ' + option.latestNumber + ' · ' : ''}
+                                        {option.count == null ? 'Chapters unavailable' : option.count + ' entries'}
                                     </Text>
                                     <Ionicons name={active ? 'checkmark-circle' : 'chevron-forward'}
                                         color={active ? C.accent : C.text2} size={17}/>

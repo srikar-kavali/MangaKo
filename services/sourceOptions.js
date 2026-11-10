@@ -1,4 +1,4 @@
-import { getMangapillManga, searchMangapill } from '../manga_api/mangapill';
+import { getMangapillManga, searchMangapill, mangapillChapterNumber } from '../manga_api/mangapill';
 import { searchMgeko } from '../manga_api/mgeko';
 import { searchHardcodedManhwa } from '../manga_api/hardcodedManhwas';
 import { normalizedTitle, findMangapillMatch } from './mangapillMatch';
@@ -10,6 +10,7 @@ const SOURCE_NAMES = { mangapill: 'MangaPill', mgeko: 'Mgeko', asura: 'Asura Sca
 // extend these without creating guessed/fuzzy mappings.
 const VERIFIED_EXTRA_SOURCES = {
     'ane no tomodachi': [{ source: 'mgeko', id: 'mgeko__ane-no-tomodachi' }],
+    'fuufu ijou koibito miman': [{ source: 'mgeko', id: 'mgeko__fuufu-ijou-koibito-miman' }],
 };
 
 export const sourcePreferenceKey = title => 'mangako:preferred-source:' + normalizedTitle(title);
@@ -26,7 +27,18 @@ export function sourceStorageKey(item) {
     return item.id;
 }
 
-const sameWork = (a, b) => normalizedTitle(a) === normalizedTitle(b) && !!normalizedTitle(a);
+// Explicitly recognized official/English title variants for the same work.
+// This is intentionally conservative: fuzzy text similarity can match
+// different manga and corrupt cross-source recommendations.
+const TITLE_ALIASES = {
+    'more than a married couple but not lovers': 'fuufu ijou koibito miman',
+    'fuufu ijou koibito miman': 'fuufu ijou koibito miman',
+};
+const canonicalName = name => {
+    const n = normalizedTitle(name);
+    return TITLE_ALIASES[n] || n;
+};
+const sameWork = (a, b) => canonicalName(a) === canonicalName(b) && !!canonicalName(a);
 const identity = item => item.source + ':' + item.id;
 
 function curatedMatches(title) {
@@ -35,11 +47,30 @@ function curatedMatches(title) {
     );
 }
 
-async function chapterCountFor(item) {
+export function highestChapterNumber(chapters, source) {
+    const values = (chapters || []).map(ch => {
+        if (source === 'mangapill') return mangapillChapterNumber(ch);
+        if (Number.isFinite(ch?.number)) return ch.number;
+        if (Number.isFinite(Number(ch?.id)) && String(ch?.id || '').trim()) return Number(ch.id);
+        const label = String(ch?.title || ch?.name || ch?.id || '');
+        const match = label.match(/(?:^|\\b)(?:chapter|ch\\.?)[\\s:#._-]*(\\d+(?:\\.\\d+)?)/i);
+        return match ? Number(match[1]) : null;
+    }).filter(n => n !== null && Number.isFinite(n));
+    return values.length ? Math.max(...values) : null;
+}
+export function compareChapterCoverage(a, b) {
+    const an = a.latestNumber, bn = b.latestNumber;
+    if (Number.isFinite(an) && Number.isFinite(bn)) return bn - an;
+    if (Number.isFinite(an)) return -1;
+    if (Number.isFinite(bn)) return 1;
+    return (b.count || 0) - (a.count || 0);
+}
+async function chapterCoverageFor(item) {
     if (item.source === 'mangapill') {
         const result = await getMangapillManga(item.id);
         if (!sameWork(result.title, item.title)) return null;
-        return Array.isArray(result.chapters) ? result.chapters.length : null;
+        const chapters = Array.isArray(result.chapters) ? result.chapters : [];
+        return { count: chapters.length, latestNumber: highestChapterNumber(chapters, 'mangapill') };
     }
     if (!CHAPTERS_API) return null;
     const endpoint = item.source === 'mgeko' ? 'mgeko-chapters' : 'asura-chapters';
@@ -48,7 +79,8 @@ async function chapterCountFor(item) {
     const res = await fetch(CHAPTERS_API + '/api/' + endpoint + '?' + params.toString());
     if (!res.ok) return null;
     const data = await res.json();
-    return Array.isArray(data.chapters) ? data.chapters.length : null;
+    const chapters = Array.isArray(data.chapters) ? data.chapters : [];
+    return { count: chapters.length, latestNumber: highestChapterNumber(chapters, item.source) };
 }
 
 export async function discoverReadingSources({ title, currentSource, currentId, currentCount }) {
@@ -56,7 +88,7 @@ export async function discoverReadingSources({ title, currentSource, currentId, 
     if (!name || !currentId) return [];
     const current = { source: currentSource, id: currentId, title: name,
         count: currentCount, label: SOURCE_NAMES[currentSource] || currentSource };
-    const candidates = [current, ...curatedMatches(name), ...(VERIFIED_EXTRA_SOURCES[normalizedTitle(name)] || [])];
+    const candidates = [current, ...curatedMatches(name), ...(VERIFIED_EXTRA_SOURCES[canonicalName(name)] || [])];
 
     // Mgeko discovery is no longer restricted to hardcodedManhwas. Never
     // associate ambiguous results: only one distinct exact-title hit qualifies.
@@ -85,8 +117,8 @@ export async function discoverReadingSources({ title, currentSource, currentId, 
         const options = unique.filter(i => i.source === provider);
         if (options.length !== 1) continue;
         try {
-            const count = await chapterCountFor(options[0]);
-            if (count > 0) choices.push({ ...options[0], count });
+            const coverage = await chapterCoverageFor(options[0]);
+            if (coverage?.count > 0) choices.push({ ...options[0], ...coverage });
         } catch { /* Preserve working choices during provider outages */ }
     }
     return choices;
