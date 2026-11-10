@@ -101,7 +101,10 @@ async function resolveLivePages(slug, chapterId) {
         // Extract only image paths for this chapter. Matches standard src,
         // data-src and URLs embedded in script literals, preserving order.
         const escapedSlug = slug;
-        const chapterPath = `/comic/${escapedSlug}/chapter-${chapterSlug}/`;
+        // Mgeko serves multiple image directory layouts, e.g.
+        // /sv2/comic/absolute-dominion/chapter-115/0.jpg and
+        // /mg2/cdn_mangaraw/fuufu-ijou-koibito-miman/chapter-1/01.jpg.
+        const chapterPath = `/${escapedSlug}/chapter-${chapterSlug}/`;
         const matches = html.match(/https?:\/\/[a-z0-9.-]+\/[^"'<> \t\r\n]+?\.(?:jpe?g|png|webp)(?:\?[^"'<> \t\r\n]*)?/gi) || [];
         const unique = new Set();
         for (const raw of matches) {

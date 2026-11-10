@@ -180,8 +180,14 @@ export default function Favorites() {
             const n = parseFloat(number);
             return isNaN(n) ? null : n;
         }
-        const slug = String(chUrl).split('/').filter(Boolean).pop() || '';
-        const m = slug.match(/(\d+(\.\d+)?)/); return m ? parseFloat(m[1]) : null;
+        const slug = String(chUrl).split(/[?#]/)[0].split('/').filter(Boolean).pop() || '';
+        if (/^\\d+(?:\\.\\d+)?$/.test(slug)) return Number(slug);
+        // Never mistake digits in the manga title for a chapter number:
+        // "yamada-kun-to-lv999-no-koi-wo-suru" is not chapter 999.
+        const explicit = slug.match(/(?:^|[-_])(?:chapter|ch)[-_]?(\\d+(?:\\.\\d+)?)(?:$|[-_])/i);
+        if (explicit) return Number(explicit[1]);
+        const trailing = slug.match(/[-_](\\d+(?:\\.\\d+)?)$/);
+        return trailing ? Number(trailing[1]) : null;
     };
 
     const fmtCh = (url, item) => {
@@ -192,8 +198,8 @@ export default function Favorites() {
             const { number } = splitMangadexChapterKey(url);
             return number ? `Ch. ${number}` : 'Continue';
         }
-        const slug = String(url).split('/').filter(Boolean).pop() || '';
-        const m = slug.match(/(\d+(\.\d+)?)$/); return m ? `Ch. ${m[1]}` : 'Continue';
+        const num = parseChNum(url, src);
+        return num !== null ? `Ch. ${num}` : 'Continue';
     };
 
     const timeSince = (ts) => {
