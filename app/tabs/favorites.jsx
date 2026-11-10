@@ -181,12 +181,12 @@ export default function Favorites() {
             return isNaN(n) ? null : n;
         }
         const slug = String(chUrl).split(/[?#]/)[0].split('/').filter(Boolean).pop() || '';
-        if (/^\\d+(?:\\.\\d+)?$/.test(slug)) return Number(slug);
+        if (/^\d+(?:\.\d+)?$/.test(slug)) return Number(slug);
         // Never mistake digits in the manga title for a chapter number:
         // "yamada-kun-to-lv999-no-koi-wo-suru" is not chapter 999.
-        const explicit = slug.match(/(?:^|[-_])(?:chapter|ch)[-_]?(\\d+(?:\\.\\d+)?)(?:$|[-_])/i);
+        const explicit = slug.match(/(?:^|[-_])(?:chapter|ch)[-_]?(\d+(?:\.\d+)?)(?:$|[-_])/i);
         if (explicit) return Number(explicit[1]);
-        const trailing = slug.match(/[-_](\\d+(?:\\.\\d+)?)$/);
+        const trailing = slug.match(/[-_](\d+(?:\.\d+)?)$/);
         return trailing ? Number(trailing[1]) : null;
     };
 
