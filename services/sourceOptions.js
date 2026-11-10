@@ -53,7 +53,7 @@ export function highestChapterNumber(chapters, source) {
         if (Number.isFinite(ch?.number)) return ch.number;
         if (Number.isFinite(Number(ch?.id)) && String(ch?.id || '').trim()) return Number(ch.id);
         const label = String(ch?.title || ch?.name || ch?.id || '');
-        const match = label.match(/(?:^|\\b)(?:chapter|ch\\.?)[\\s:#._-]*(\\d+(?:\\.\\d+)?)/i);
+        const match = label.match(/(?:^|\b)(?:chapter|ch\.?)[\s:#._-]*(\d+(?:\.\d+)?)/i);
         return match ? Number(match[1]) : null;
     }).filter(n => n !== null && Number.isFinite(n));
     return values.length ? Math.max(...values) : null;
