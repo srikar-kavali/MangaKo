@@ -70,7 +70,7 @@ def is_driver_alive(driver):
 def restart_driver(driver, delay=(5, 8)):
     safe_quit(driver)
     time.sleep(random.uniform(*delay))
-    return make_driver(headless=True)
+    return make_driver(headless=False)
 
 
 def get_all_chapters(driver, series_url):
@@ -202,7 +202,7 @@ def _load_series_with_recovery(driver, series_url):
                 wait = RETRY_BACKOFF * request_attempt + random.uniform(5, 15)
                 print(f"  Restarting driver and waiting {wait:.0f}s...")
                 time.sleep(wait)
-                driver = make_driver(headless=True)
+                driver = make_driver(headless=False)
 
         except Exception as e:
             err_str = str(e)
@@ -251,7 +251,7 @@ def _fetch_chapter_with_recovery(driver, chapter):
                 wait = RETRY_BACKOFF * request_attempt + random.uniform(5, 15)
                 print(f"    Restarting driver and waiting {wait:.0f}s...")
                 time.sleep(wait)
-                driver = make_driver(headless=True)
+                driver = make_driver(headless=False)
 
         except Exception as e:
             err_str = str(e)
@@ -293,7 +293,7 @@ def scrape(series_url, data):
     failed = []
 
     try:
-        driver = make_driver(headless=True)
+        driver = make_driver(headless=False)
         driver, all_chapters = _load_series_with_recovery(driver, series_url)
 
         if all_chapters is None:
