@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { getMangapillManga, getChapterPagesMangapill, mangapillChapterNumber, mangapillChapterLabel, proxied as proxiedMangapill } from "../manga_api/mangapill";
 import { proxied as proxiedMgeko } from "../manga_api/mgeko";
+import { proxied as proxiedAsura } from "../manga_api/asurascans";
 import {
     getMangadexManga, getChapterPagesMangadex, proxied as proxiedMangadex,
     splitMangadexChapterKey, toMangadexChapterKey,
