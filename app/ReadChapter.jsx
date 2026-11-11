@@ -8,7 +8,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import dragonLogo from "../assets/dragonLogoTransparent.png";
 import { getMangapillManga, getChapterPagesMangapill, mangapillChapterNumber, mangapillChapterLabel, proxied as proxiedMangapill } from "../manga_api/mangapill";
 import { proxied as proxiedMgeko } from "../manga_api/mgeko";
-import { proxied as proxiedAsura } from "../manga_api/asurascans";
 import {
     getMangadexManga, getChapterPagesMangadex, proxied as proxiedMangadex,
     splitMangadexChapterKey, toMangadexChapterKey,
@@ -110,7 +109,11 @@ const ReadChapter = () => {
                     if (!res.ok) throw new Error(`Chapter API HTTP ${res.status}: ${requestUrl}`);
                     const json = await res.json();
                     if (!Array.isArray(json?.pages)) throw new Error(`Invalid pages response from ${requestUrl}`);
-                    urls = json.pages.map(u => proxiedAsura(u));
+                    urls = json.pages.map(u => {
+                        const workerBase = (process.env.EXPO_PUBLIC_IMAGE_PROXY_URL || '').replace(/\/+$/, '');
+                        const proxyBase = workerBase || BACKEND;
+                        return `${proxyBase}${workerBase && workerBase.includes('workers.dev') ? '' : '/api/image_proxy'}?url=${encodeURIComponent(u)}`;
+                    });
                 } else if (isMgeko && seriesId) {
                     if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
                     const requestUrl = `${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}&live=1`;
