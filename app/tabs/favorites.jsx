@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import SourceCover, { coverSources } from "../../components/SourceCover";
 import {
     View, Text, FlatList, Pressable, StyleSheet,
     Image, SafeAreaView, RefreshControl, StatusBar, Modal,
@@ -154,22 +155,9 @@ export default function Favorites() {
         return 'asura';
     };
 
-    // Covers must be routed through the correct source-specific proxy —
-    // these CDNs (imgsrv4.com, mangapill's, etc) reject direct browser
-    // requests without the right headers. This screen previously rendered
-    // getStaticCover()/item.coverUrl directly with no proxying at all,
-    // which is why covers failed outright (net::ERR_SSL_VERSION_OR_CIPHER_MISMATCH
-    // for mgeko covers, similar failures for MangaPill) — home.jsx and
-    // MangaDetails.jsx never had this problem because they always proxy.
-    const getProxiedCover = (item) => {
-        const url = getStaticCover(item.url) || item.coverUrl || item.cover;
-        if (!url) return null;
-        const src = getSource(item);
-        if (src === 'mangapill') return proxiedMangapill(url);
-        if (src === 'mgeko') return proxiedMgeko(url);
-        if (src === 'mangadex') return proxiedMangadex(url);
-        return proxiedAsura(url);
-    };
+    const getCoverCandidates = (item) => coverSources(
+        item.image, item.coverUrl, item.cover, getStaticCover(item.url)
+    );
 
     // Parse chapter number from a chapter id/url
     const parseChNum = (chUrl, src) => {
@@ -261,7 +249,7 @@ export default function Favorites() {
         const totalCh = chapterCounts[item.url] || null;
         const hasProgress = readChNum !== null;
         const progressPercent = hasProgress && totalCh ? Math.min(100, Math.max(0, Math.round((readChNum / totalCh) * 100))) : null;
-        const cover = getProxiedCover(item);
+        const coverUrls = getCoverCandidates(item);
 
         return (
             <Pressable
@@ -273,17 +261,11 @@ export default function Favorites() {
 
                 {/* Cover — proxied through the correct source-specific proxy */}
                 <View style={[S.coverWrap, desktopRows && S.coverWrapDesktop]}>
-                    {cover ? (
-                        <Image
-                            source={{ uri: cover }}
-                            style={[S.cover, desktopRows && S.coverDesktop, isCompleted && S.coverCompleted]}
-                            resizeMode="cover"
-                        />
-                    ) : (
-                        <View style={[S.cover, desktopRows && S.coverDesktop, S.coverEmpty]}>
+                    <SourceCover urls={coverUrls}
+                        style={[S.cover, desktopRows && S.coverDesktop, isCompleted && S.coverCompleted]}
+                        placeholder={<View style={[S.cover, desktopRows && S.coverDesktop, S.coverEmpty]}>
                             <Ionicons name="book-outline" size={20} color={C.text3} />
-                        </View>
-                    )}
+                        </View>} />
                     <View style={[S.srcBadge, { backgroundColor: badgeColor }]}>
                         <Text style={S.srcText}>{badgeLabel}</Text>
                     </View>

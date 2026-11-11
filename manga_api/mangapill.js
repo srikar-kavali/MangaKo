@@ -23,7 +23,11 @@ export function unwrapImageProxyUrl(src) {
     for (let i = 0; i < 5; i++) {
         try {
             const parsed = new URL(current);
-            if (parsed.pathname !== '/api/image_proxy') break;
+            const workerBase = process.env.EXPO_PUBLIC_IMAGE_PROXY_URL;
+            const workerHost = workerBase ? new URL(workerBase).host : null;
+            const isWorker = parsed.pathname === '/' &&
+                (parsed.hostname.endsWith('.workers.dev') || (workerHost && parsed.host === workerHost));
+            if (parsed.pathname !== '/api/image_proxy' && !isWorker) break;
             const original = parsed.searchParams.get('url');
             if (!original || !/^https:\/\//i.test(original) || original === current) break;
             current = original;

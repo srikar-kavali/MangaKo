@@ -6,6 +6,7 @@ import {
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import dragonLogo from "../assets/dragonLogoTransparent.png";
+import SourceCover, { coverSources } from "../components/SourceCover";
 import { proxied as proxiedAsura } from '../manga_api/asurascans';
 import { getMangapillManga, mangapillChapterNumber, proxied as proxiedMangapill, unwrapImageProxyUrl } from '../manga_api/mangapill';
 import { proxied as proxiedMgeko } from '../manga_api/mgeko';
@@ -371,18 +372,11 @@ const MangaDetails = () => {
         router.replace(sourceDetailPath(option, title));
     };
 
-    const getCoverUrl = () => {
-        const staticUrl = getStaticCover(storageKey);
-        const dataUrl = (isMgeko ? sharedMetadata?.cover : null) ||
-            mangaData?.image || mangaData?.cover || mangaData?.coverUrl ||
-            sharedMetadata?.cover || coverParam || null;
-        const url = unwrapImageProxyUrl(staticUrl || dataUrl);
-        if (!url) return null;
-        if (isAsura) return proxiedAsura(url);
-        if (isMgeko) return proxiedMgeko(url);
-        if (isMangadex) return proxiedMangadex(url);
-        return proxiedMangapill(url);
-    };
+    const getCoverCandidates = () => coverSources(
+        mangaData?.image, mangaData?.cover, mangaData?.coverUrl,
+        sharedMetadata?.cover, coverParam, getStaticCover(storageKey)
+    );
+    const getCoverUrl = () => getCoverCandidates()[0] || null;
 
     const getFavData = () => {
         const freshCover = getCoverUrl();
@@ -466,7 +460,7 @@ const MangaDetails = () => {
     );
 
     const title = mangaData?.title || mangaData?.name || titleParam || 'Unknown';
-    const cover = getCoverUrl();
+    const coverUrls = getCoverCandidates();
     const isOngoing = mangaData?.status === 'Ongoing';
     const srcLabel = isMangadex ? 'MangaDex' : isMangapill ? 'MangaPill' : isMgeko ? 'MgEko' : 'AsuraScans';
     const srcColor = isMangadex ? '#fb923c' : isMangapill ? '#38bdf8' : isMgeko ? '#10b981' : C.accent;
@@ -489,12 +483,10 @@ const MangaDetails = () => {
                 <View style={[S.hero, isWide && S.heroWide]}>
                     <View style={S.heroGlow} />
                     <View style={S.coverShadow}>
-                        {cover
-                            ? <Image source={{ uri: cover }} style={[S.cover, isWide && S.coverWide]} resizeMode="cover" />
-                            : <View style={[S.cover, isWide && S.coverWide, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
+                        <SourceCover urls={coverUrls} style={[S.cover, isWide && S.coverWide]}
+                            placeholder={<View style={[S.cover, isWide && S.coverWide, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
                                 <Ionicons name="book-outline" size={38} color={C.text3} />
-                            </View>
-                        }
+                            </View>} />
                     </View>
                     <View style={S.heroMeta}>
                         <Text style={S.heroEyebrow}>SERIES OVERVIEW</Text>

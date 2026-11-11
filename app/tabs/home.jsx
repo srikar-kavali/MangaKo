@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import dragonLogo from '../../assets/dragonLogoTransparent.png';
+import SourceCover, { coverSources } from '../../components/SourceCover';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { signOut, getCurrentUser } from '../../auth/cognito';
@@ -147,8 +148,7 @@ function resolveCardState(manga) {
     return { state: 'IN_PROGRESS' };
 }
 
-const DiscoveryCard = React.memo(function DiscoveryCard({ manga, imageUri, width, checking, onOpen }) {
-    const coverSource = React.useMemo(() => imageUri ? { uri: imageUri, cache: 'force-cache' } : null, [imageUri]);
+const DiscoveryCard = React.memo(function DiscoveryCard({ manga, coverUrls, width, checking, onOpen }) {
     const source = manga.source;
     const badge = source === 'asura' ? 'AS' : source === 'mgeko' ? 'MG' : source === 'mangadex' ? 'MD' : 'MP';
     const color = 'rgba(12,12,16,0.88)';
@@ -160,10 +160,9 @@ const DiscoveryCard = React.memo(function DiscoveryCard({ manga, imageUri, width
             accessibilityLabel={`Open ${manga.title}`}
         >
             <View style={S.gridCoverWrap}>
-                {coverSource
-                    ? <Image source={coverSource} style={S.gridCover} resizeMode="cover" />
-                    : <View style={S.gridCoverEmpty}><Ionicons name="book-outline" size={20} color={C.text3} /></View>}
-                {!!imageUri && <View style={S.gridGradient} />}
+                <SourceCover urls={coverUrls} style={S.gridCover}
+                    placeholder={<View style={S.gridCoverEmpty}><Ionicons name="book-outline" size={20} color={C.text3} /></View>} />
+                {!!coverUrls?.length && <View style={S.gridGradient} />}
                 <View style={[S.gridBadge, { backgroundColor: color }]}>
                     <Text style={S.gridBadgeText}>{badge}</Text>
                 </View>
@@ -543,23 +542,10 @@ export default function Home() {
         setRecentSearches(u); await saveRecentSearches(u);
     };
 
-    // Keep cover URLs stable across updates, without holding an unbounded catalog cache.
-    const coverUrlCacheRef = useRef(new Map());
-    const getProxied = (item) => {
-        const url = unwrapImageProxyUrl(getCoverUrl(item.id) || getCoverUrl(item.url) || item.cover || item.coverUrl);
-        if (!url) return null;
-        const src = item.source || getSource(item);
-        const key = `${src}:${url}`;
-        const cache = coverUrlCacheRef.current;
-        if (cache.has(key)) return cache.get(key);
-        const resolved = src === 'mangapill' ? proxiedMangapill(url)
-            : src === 'mangadex' ? proxiedMangadex(url)
-                : src === 'mgeko' ? proxiedMgeko(url)
-                    : proxiedAsura(url);
-        if (cache.size >= 500) cache.clear();
-        cache.set(key, resolved);
-        return resolved;
-    };
+    const getCoverCandidates = (item) => coverSources(
+        item.image, item.coverUrl, item.cover,
+        getCoverUrl(item.id), getCoverUrl(item.url)
+    );
 
     const openManga = async (item) => {
         const src = item.source || getSource(item);
@@ -724,7 +710,7 @@ export default function Home() {
                             <DiscoveryCard
                                 key={`${manga.source || 'unknown'}:${manga.id || manga.url || i}`}
                                 manga={manga}
-                                imageUri={getProxied(manga)}
+                                coverUrls={getCoverCandidates(manga)}
                                 width={tileWidth}
                                 checking={openingTitle === String(manga.id)}
                                 onOpen={openDiscoveryCard}
@@ -769,7 +755,7 @@ export default function Home() {
                         <Text style={S.sectionHint}>Jump back into your stories · Hide a title without losing progress</Text>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={S.hList}>
                             {followedManga.map((manga, i) => {
-                                const img = getProxied(manga);
+                                const imgUrls = getCoverCandidates(manga);
                                 const src = manga.activeSource || getSource(manga);
                                 const { state } = resolveCardState(manga);
 
@@ -779,17 +765,12 @@ export default function Home() {
                                             style={({ pressed }) => [S.contCoverWrap, viewportWidth >= 700 && S.contCoverDesktop, { opacity: pressed ? 0.75 : 1 }]}
                                             onPress={() => openManga(manga)}
                                         >
-                                            {img ? (
-                                                <>
-                                                    <Image source={{ uri: img }} style={S.contCover} resizeMode="cover" onError={() => {}} />
-                                                    <View style={S.contGradient} />
-                                                </>
-                                            ) : (
-                                                <View style={S.contCoverEmpty}>
+                                            <SourceCover urls={imgUrls} style={S.contCover}
+                                                placeholder={<View style={S.contCoverEmpty}>
                                                     <Ionicons name="image-outline" size={26} color={C.text3} />
                                                     <Text style={S.contCoverEmptyText}>No cover</Text>
-                                                </View>
-                                            )}
+                                                </View>} />
+                                            {!!imgUrls.length && <View style={S.contGradient} />}
                                             <View style={[S.srcDot, {
                                                 backgroundColor: src === 'asura' ? C.asuraBg
                                                     : src === 'mgeko' ? 'rgba(52,211,153,0.82)'
