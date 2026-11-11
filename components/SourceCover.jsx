@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Image } from 'react-native';
 import { proxied as proxiedMangapill, unwrapImageProxyUrl } from '../manga_api/mangapill';
 
-const BACKEND = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\\/+$/, '');
+const BACKEND = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
 const metadataCache = new Map();
 const metadataPending = new Map();
 
@@ -12,7 +12,7 @@ export function coverSources(...groups) {
     const seen = new Set();
     return values.map(raw => unwrapImageProxyUrl(raw))
         .filter(url => {
-            if (typeof url !== 'string' || !/^https:\\/\\//i.test(url) || seen.has(url)) return false;
+            if (typeof url !== 'string' || !/^https:\/\//i.test(url) || seen.has(url)) return false;
             seen.add(url);
             return true;
         });
