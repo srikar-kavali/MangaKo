@@ -56,10 +56,20 @@ export default function SourceCover({
         for (const url of items) {
             let host = '';
             try { host = new URL(url).hostname; } catch { continue; }
-            // MangaDex cover proxy requests have been returning 502 in production.
-            // Try MangaDex's public CDN directly first, then our Worker as backup.
-            const directFirst = host === 'uploads.mangadex.org' && url.includes('/covers/');
-            const choices = directFirst ? [url, proxiedMangapill(url)] : [proxiedMangapill(url)];
+            // MangaDex supports resized covers (256/512) and their original
+            // artwork. A missing thumbnail must not blank the whole card.
+            // Use the public CDN first; the Worker is a bounded fallback.
+            const isMangadexCover = host === 'uploads.mangadex.org' && url.includes('/covers/');
+            const variants = isMangadexCover ? [url] : [];
+            if (isMangadexCover) {
+                const original = url.replace(/\.(?:256|512)\.jpg(?=\?|$)/i, '');
+                if (original !== url) {
+                    variants.push(original, original + '.512.jpg');
+                }
+            }
+            const choices = isMangadexCover
+                ? [...variants, proxiedMangapill(url)]
+                : [proxiedMangapill(url)];
             for (const candidate of choices) {
                 if (candidate && !seen.has(candidate)) {
                     seen.add(candidate);
