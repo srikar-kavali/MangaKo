@@ -7,6 +7,7 @@ const ALLOWED_HOSTS = new Set([
   'asurascans.com', 'cdn.asurascans.com',
   'asuracomic.net', 'gg.asuracomic.net',
   'uploads.mangadex.org', 'mangadex.org', 'api.mangadex.org',
+  'm.media-amazon.com',
 ]);
 const MAX_BYTES = 12 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
@@ -26,7 +27,8 @@ function allowedUrl(raw) {
 }
 function upstreamHeaders(host) {
   const headers = new Headers({
-    'User-Agent': 'Mozilla/5.0 (compatible; MangaKo/1.0)',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9',
     'Accept': 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
   });
   if (host.includes('mangapill') || host.includes('readdetectiveconan')) {
@@ -61,31 +63,48 @@ export default {
     }
 
     try {
-      let current = target;
-      let response;
-      for (let i = 0; i <= MAX_REDIRECTS; i++) {
-        response = await fetch(current.toString(), {
-          method: 'GET',
-          headers: upstreamHeaders(current.hostname),
-          redirect: 'manual',
-        });
-        if ([301, 302, 303, 307, 308].includes(response.status)) {
-          const location = response.headers.get('location');
-          const redirected = location ? allowedUrl(new URL(location, current).toString()) : null;
-          if (!redirected) return error(502, 'Upstream redirect not allowed');
-          current = redirected;
-          continue;
-        }
-        break;
+      // Some Mgeko cover links were saved on imgsrv4, while the same
+      // image is mirrored on imgsrv5. Try at most one alternate host for
+      // image-server URLs; never retry unrelated sources or private hosts.
+      const mirrors = [target];
+      const mirrorMatch = target.hostname.match(/^imgsrv([0-9]+)\.com$/);
+      if (mirrorMatch) {
+        const mirrorNum = Number(mirrorMatch[1]) === 4 ? 5 : 4;
+        const mirror = new URL(target.toString());
+        mirror.hostname = 'imgsrv' + mirrorNum + '.com';
+        mirrors.push(mirror);
       }
-      if (!response || [301, 302, 303, 307, 308].includes(response.status)) return error(502, 'Too many redirects');
-      if (!response.ok) return error(502, 'Upstream image unavailable');
-      const type = (response.headers.get('content-type') || '').split(';')[0].toLowerCase();
-      if (!type.startsWith('image/') || type === 'image/svg+xml') return error(502, 'Unsupported image content');
-      const length = Number(response.headers.get('content-length') || 0);
-      if (length > MAX_BYTES) return error(413, 'Image too large');
-      const data = await response.arrayBuffer();
-      if (data.byteLength > MAX_BYTES) return error(413, 'Image too large');
+
+      let data, type;
+      for (const candidate of mirrors) {
+        let current = candidate;
+        for (let i = 0; i <= MAX_REDIRECTS; i++) {
+          const response = await fetch(current.toString(), {
+            method: 'GET',
+            headers: upstreamHeaders(current.hostname),
+            redirect: 'manual',
+          });
+          if ([301, 302, 303, 307, 308].includes(response.status)) {
+            const location = response.headers.get('location');
+            const redirected = location ? allowedUrl(new URL(location, current).toString()) : null;
+            if (!redirected) break;
+            current = redirected;
+            continue;
+          }
+          if (!response.ok) break;
+          const contentType = (response.headers.get('content-type') || '').split(';')[0].toLowerCase();
+          if (!contentType.startsWith('image/') || contentType === 'image/svg+xml') break;
+          const length = Number(response.headers.get('content-length') || 0);
+          if (length > MAX_BYTES) break;
+          const body = await response.arrayBuffer();
+          if (body.byteLength > MAX_BYTES) break;
+          type = contentType;
+          data = body;
+          break;
+        }
+        if (data) break;
+      }
+      if (!data) return error(502, 'Upstream image unavailable');
       const headers = new Headers({
         ...CORS,
         'Content-Type': type,
