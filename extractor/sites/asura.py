@@ -20,6 +20,11 @@ MAX_RETRIES = 3
 MAX_CRASH_RESTARTS = 5
 RETRY_BACKOFF = 30
 
+
+class AsuraChallengeBlocked(ConnectionError):
+    """The site presented an access challenge; do not retry automatically."""
+
+
 CRASH_SIGNALS = [
     "no such window",
     "target window already closed",
@@ -86,7 +91,7 @@ def get_all_chapters(driver, series_url):
     time.sleep(2)
 
     if is_blocked(driver):
-        raise ConnectionError(f"Blocked on series page (title: {driver.title})")
+        raise AsuraChallengeBlocked(f"Blocked on series page (title: {driver.title})")
 
     domain = urlparse(series_url).netloc
     chapter_links = []
@@ -127,7 +132,7 @@ def get_chapter_pages(driver, chapter):
     time.sleep(2)
 
     if is_blocked(driver):
-        raise ConnectionError(f"Blocked on chapter {chapter['id']} (title: {driver.title})")
+        raise AsuraChallengeBlocked(f"Blocked on chapter {chapter['id']} (title: {driver.title})")
 
     full_scroll(driver)
 
@@ -183,6 +188,11 @@ def _load_series_with_recovery(driver, series_url):
             chapters = get_all_chapters(driver, series_url)
             return driver, chapters
 
+        except AsuraChallengeBlocked:
+            # Repeated automated retries do not resolve an access challenge.
+            # The caller will stop Asura processing for this run.
+            raise
+
         except ConnectionError as e:
             request_attempt += 1
             print(f"  ⚠ Series page blocked ({request_attempt}/{MAX_RETRIES}): {e}")
@@ -228,6 +238,9 @@ def _fetch_chapter_with_recovery(driver, chapter):
 
             pages = get_chapter_pages(driver, chapter)
             return driver, pages
+
+        except AsuraChallengeBlocked:
+            raise
 
         except ConnectionError as e:
             request_attempt += 1
@@ -321,6 +334,10 @@ def scrape(series_url, data):
                 else:
                     time.sleep(delay)
 
+    except AsuraChallengeBlocked as e:
+        print(f"  ⚠ Asura access challenge: {e}")
+        print("  Skipping remaining Asura requests in this run; cached chapters preserved.")
+        return "blocked"
     finally:
         safe_quit(driver)
 

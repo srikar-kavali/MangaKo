@@ -126,10 +126,14 @@ def main():
         print("Sync-only complete: no scraping or Supabase writes.")
         return
 
+    blocked_sources = set()
     for url in MANHWA_URLS:
         site = get_site(url)
         if not site:
             print(f"Skipping unsupported URL: {url}")
+            continue
+        if site in blocked_sources:
+            print(f"Skipping {site} title: access challenge detected earlier in this run")
             continue
 
         scrape, get_series_id = get_scraper(site)
@@ -145,7 +149,12 @@ def main():
         print(f"-> Processing {series_id}")
 
         try:
-            scrape(url, data)
+            result = scrape(url, data)
+            if result == "blocked":
+                blocked_sources.add(site)
+                save_data(data)
+                print(f"Paused {site} extraction for this run (cached chapters retained).")
+                continue
             after = valid_chapters(extract_chapters(data.get(series_id, {})))
             updated = {
                 k: pages for k, pages in after.items()
