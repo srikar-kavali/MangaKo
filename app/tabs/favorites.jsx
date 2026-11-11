@@ -48,6 +48,7 @@ export default function Favorites() {
     const [isGuest, setIsGuest] = useState(false);
     const [libraryQuery, setLibraryQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState('All');
+    const [sortBy, setSortBy] = useState('recent');
     const { width: viewportWidth } = useWindowDimensions();
     const [lastReadInfo, setLastReadInfo] = useState({});
     const [statusMap, setStatusMap] = useState({});       // url -> status string
@@ -237,6 +238,7 @@ export default function Favorites() {
     };
 
     const desktopRows = viewportWidth >= 900;
+    const twoColumns = viewportWidth >= 1180;
 
     const renderItem = ({ item }) => {
         const lr = lastReadInfo[item.url];
@@ -258,6 +260,7 @@ export default function Favorites() {
         const readChNum = lr ? parseChNum(lr.chapterUrl, src) : null;
         const totalCh = chapterCounts[item.url] || null;
         const hasProgress = readChNum !== null;
+        const progressPercent = hasProgress && totalCh ? Math.min(100, Math.max(0, Math.round((readChNum / totalCh) * 100))) : null;
         const cover = getProxiedCover(item);
 
         return (
@@ -312,21 +315,25 @@ export default function Favorites() {
                                         : `Ch. ${Math.round(readChNum)} read`
                                     }
                                 </Text>
-                                {totalCh && (
-                                    <Text style={S.progressPct}>
-                                        {Math.min(100, Math.round((readChNum / totalCh) * 100))}%
-                                    </Text>
+                                {progressPercent !== null && (
+                                    <Text style={S.progressPct}>{progressPercent}%</Text>
                                 )}
                             </View>
                             {totalCh && (
                                 <View style={S.progressBar}>
                                     <View style={[S.progressFill, {
-                                        width: `${Math.min(100, (readChNum / totalCh) * 100)}%`,
+                                        width: `${progressPercent}%`,
                                         backgroundColor: cfg.color,
                                     }]} />
                                 </View>
                             )}
                         </View>
+                    )}
+
+                    {!hasProgress && (
+                        <Text style={S.notStartedText} numberOfLines={1}>
+                            {isCompleted ? 'Marked as completed' : 'Not started yet'}
+                        </Text>
                     )}
 
                     {/* Footer row — status dropdown + continue btn + timestamp */}
@@ -374,6 +381,15 @@ export default function Favorites() {
         const status = statusMap[f.url] || 'Reading';
         return (activeFilter === 'All' || status === activeFilter)
             && String(f.title || '').toLowerCase().includes(libraryQuery.trim().toLowerCase());
+    }).sort((a, b) => {
+        if (sortBy === 'title') return String(a.title || '').localeCompare(String(b.title || ''));
+        if (sortBy === 'recent') {
+            const aTime = lastReadInfo[a.url]?.timestamp || 0;
+            const bTime = lastReadInfo[b.url]?.timestamp || 0;
+            if (aTime !== bTime) return bTime - aTime;
+        }
+        const statusDiff = (STATUS_ORDER[statusMap[a.url] || 'Reading'] ?? 0) - (STATUS_ORDER[statusMap[b.url] || 'Reading'] ?? 0);
+        return statusDiff || String(a.title || '').localeCompare(String(b.title || ''));
     });
 
     if (isGuest) {
@@ -419,8 +435,10 @@ export default function Favorites() {
                     </View>
                 </View>}
                 <View style={S.headerTop}>
-                    <View>
+                    <View style={S.headerHeading}>
+                        <Text style={S.headerEyebrow}>YOUR LIBRARY</Text>
                         <Text style={S.headerTitle}>My List</Text>
+                        <Text style={S.headerSub}>{favorites.length} saved titles · Pick up where you left off</Text>
                     </View>
                     {/* Stats pill group */}
                     {favorites.length > 0 && (
@@ -479,7 +497,27 @@ export default function Favorites() {
                             );
                         })}
                     </ScrollView>
-                    <Text style={S.filterSummary}>{filteredFavorites.length} {filteredFavorites.length === 1 ? 'title' : 'titles'} shown</Text>
+                    <View style={S.toolbarFooter}>
+                        <Text style={S.filterSummary}>
+                            {filteredFavorites.length} {filteredFavorites.length === 1 ? 'title' : 'titles'} shown
+                        </Text>
+                        <View style={S.sortRow}>
+                            <Ionicons name="swap-vertical-outline" size={15} color={C.text2} />
+                            <Text style={S.sortLabel}>Sort</Text>
+                            {[
+                                ['recent', 'Recent'],
+                                ['status', 'Status'],
+                                ['title', 'A–Z'],
+                            ].map(([value, label]) => (
+                                <Pressable key={value} onPress={() => setSortBy(value)}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ selected: sortBy === value }}
+                                    style={[S.sortChip, sortBy === value && S.sortChipActive]}>
+                                    <Text style={[S.sortChipText, sortBy === value && S.sortChipTextActive]}>{label}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    </View>
                 </View>
             )}
 
@@ -493,14 +531,17 @@ export default function Favorites() {
                 </View>
             ) : (
                 <FlatList
+                    key={twoColumns ? 'library-two-columns' : 'library-one-column'}
                     data={filteredFavorites}
+                    numColumns={twoColumns ? 2 : 1}
+                    columnWrapperStyle={twoColumns ? S.columnRow : undefined}
                     keyExtractor={item => item.url}
                     renderItem={renderItem}
                     initialNumToRender={10}
                     maxToRenderPerBatch={8}
                     updateCellsBatchingPeriod={50}
                     windowSize={7}
-                    contentContainerStyle={[S.list, { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: viewportWidth >= 700 ? 24 : 12 }]}
+                    contentContainerStyle={[S.list, { width: '100%', maxWidth: 1340, alignSelf: 'center', paddingHorizontal: viewportWidth >= 700 ? 24 : 14 }]}
                     ListEmptyComponent={<View style={S.emptyFiltered}><Ionicons name="search-outline" size={25} color={C.text2} /><Text style={S.emptyTitle}>No matching titles</Text><Text style={S.emptySub}>Try another search or reading status.</Text></View>}
                     showsVerticalScrollIndicator={false}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.accent} />}
@@ -548,7 +589,7 @@ export default function Favorites() {
 const S = StyleSheet.create({
     screen: { flex: 1, backgroundColor: C.bg1 },
 
-    desktopNavigation: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: C.border, marginBottom: 18 },
+    desktopNavigation: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: C.border, marginBottom: 16 },
     brand: { color: C.text1, fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
     navigationLinks: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     navItem: { paddingVertical: 9, paddingHorizontal: 16 },
@@ -560,17 +601,20 @@ const S = StyleSheet.create({
         borderBottomWidth: 1, borderBottomColor: C.border,
         paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14,
     },
-    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-    headerTitle: { fontSize: 26, fontWeight: '800', color: C.text1, letterSpacing: -0.8 },
-    headerSub: { fontSize: 12, color: C.text3, marginTop: 2, fontWeight: '500' },
+    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', maxWidth: 1292, width: '100%', alignSelf: 'center' },
+    headerHeading: { flexShrink: 1, minWidth: 160 },
+    headerEyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5, color: C.accentBright, marginBottom: 6 },
+    headerTitle: { fontSize: 29, fontWeight: '800', color: C.text1, letterSpacing: -1 },
+    headerSub: { fontSize: 12, color: C.text2, marginTop: 4, fontWeight: '500' },
 
-    statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end', maxWidth: 200 },
+    statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end', maxWidth: 400, flexShrink: 1 },
     statPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4 },
     statNum: { fontSize: 13, fontWeight: '800' },
     statLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 0.2 },
 
-    list: { padding: 12, gap: 9, paddingBottom: 42 },
-    libraryToolbar: { width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 18, paddingTop: 22, paddingBottom: 8, gap: 14 },
+    list: { paddingTop: 10, paddingBottom: 42, gap: 12 },
+    columnRow: { gap: 12 },
+    libraryToolbar: { width: '100%', maxWidth: 1340, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 18, paddingBottom: 8, gap: 12 },
     searchBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.bg3, borderColor: C.borderMid, borderWidth: 1, paddingHorizontal: 14, borderRadius: 12, minHeight: 48 },
     librarySearch: { flex: 1, color: C.text1, fontSize: 14, paddingVertical: 11, minWidth: 0 },
     filters: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 2, paddingRight: 18 },
@@ -578,30 +622,39 @@ const S = StyleSheet.create({
     filterChipActive: { backgroundColor: C.bg4, borderColor: C.accentBorder },
     filterText: { fontSize: 12, color: C.text2, fontWeight: '700' },
     filterTextActive: { color: C.accentBright },
-    filterSummary: { fontSize: 11, color: C.text2, paddingBottom: 3 },
+    filterSummary: { fontSize: 12, color: C.text2, fontWeight: '600' },
+    toolbarFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
+    sortRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
+    sortLabel: { fontSize: 11, color: C.text2, marginRight: 5 },
+    sortChip: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7, borderWidth: 1, borderColor: C.border, backgroundColor: C.bg2 },
+    sortChipActive: { backgroundColor: C.accentDim, borderColor: C.accentBorder },
+    sortChipText: { color: C.text2, fontSize: 11, fontWeight: '700' },
+    sortChipTextActive: { color: C.accentBright },
     emptyFiltered: { alignItems: 'center', paddingTop: 90, gap: 10 },
 
     // Card
     card: {
+        flex: 1,
         flexDirection: 'row',
         backgroundColor: C.bg2,
-        borderRadius: 8,
-        borderWidth: 1, borderColor: C.border,
+        borderRadius: 11,
+        borderWidth: 1, borderColor: C.borderMid,
+        minHeight: 128,
         overflow: 'hidden',
     },
-    cardCompleted: { opacity: 0.72 },
-    cardDesktop: { minHeight: 104, alignItems: 'center' },
-    coverWrapDesktop: { width: 74, height: 104 },
-    coverDesktop: { width: 74, height: 104 },
-    contentDesktop: { minHeight: 104, paddingVertical: 12, justifyContent: 'center', gap: 8 },
-    footerDesktop: { marginTop: 0, gap: 10 },
-    desktopRemove: { width: 48, height: 104, alignItems: 'center', justifyContent: 'center' },
+    cardCompleted: { borderColor: C.border },
+    cardDesktop: { minHeight: 132 },
+    coverWrapDesktop: { width: 90, height: 132 },
+    coverDesktop: { width: 90, height: 132 },
+    contentDesktop: { minHeight: 132, paddingVertical: 12 },
+    footerDesktop: { gap: 7 },
+    desktopRemove: { width: 34, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
     cardBar: { width: 3 },
 
-    coverWrap: { width: 80, position: 'relative' },
-    cover: { width: 80, height: 130 },
-    coverCompleted: { },
-    coverEmpty: { backgroundColor: C.bg4, alignItems: 'center', justifyContent: 'center', height: 130 },
+    coverWrap: { width: 84, position: 'relative', backgroundColor: C.bg4 },
+    cover: { width: '100%', height: '100%', minHeight: 128 },
+    coverCompleted: { opacity: 0.8 },
+    coverEmpty: { backgroundColor: C.bg4, alignItems: 'center', justifyContent: 'center', minHeight: 128 },
     srcBadge: { position: 'absolute', top: 5, right: 5, paddingHorizontal: 4, paddingVertical: 1.5, borderRadius: 3 },
     srcText: { color: '#fff', fontSize: 7.5, fontWeight: '800' },
     completedOverlay: {
@@ -610,13 +663,14 @@ const S = StyleSheet.create({
         alignItems: 'center', justifyContent: 'center',
     },
 
-    content: { flex: 1, padding: 11, paddingLeft: 12, justifyContent: 'space-between' },
-    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
-    title: { flex: 1, fontSize: 14, fontWeight: '600', color: C.text1, lineHeight: 20, marginRight: 6 },
+    content: { flex: 1, padding: 12, minWidth: 0, justifyContent: 'space-between', gap: 6 },
+    titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+    title: { flex: 1, fontSize: 14, fontWeight: '700', color: C.text1, lineHeight: 19, marginRight: 6 },
     delBtn: { padding: 2, marginTop: 1 },
 
     // Chapter progress
-    progressWrap: { marginBottom: 8 },
+    progressWrap: { marginBottom: 1 },
+    notStartedText: { fontSize: 11, color: C.text3 },
     progressRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
     progressText: { fontSize: 11, color: C.text2, fontWeight: '600' },
     progressPct: { fontSize: 10, color: C.text3, fontWeight: '600' },
@@ -624,7 +678,7 @@ const S = StyleSheet.create({
     progressFill: { height: 3, borderRadius: 2 },
 
     // Footer
-    footer: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 4 },
+    footer: { flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 'auto' },
     statusBtn: {
         flexDirection: 'row', alignItems: 'center', gap: 6,
         borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 7,
