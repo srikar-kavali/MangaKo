@@ -483,7 +483,7 @@ const MangaDetails = () => {
                 <View style={[S.hero, isWide && S.heroWide]}>
                     <View style={S.heroGlow} />
                     <View style={S.coverShadow}>
-                        <SourceCover urls={coverUrls} style={[S.cover, isWide && S.coverWide]}
+                        <SourceCover urls={coverUrls} seriesId={storageKey} source={isMgeko ? 'mgeko' : isMangadex ? 'mangadex' : isAsura ? 'asura' : 'mangapill'} style={[S.cover, isWide && S.coverWide]}
                             placeholder={<View style={[S.cover, isWide && S.coverWide, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
                                 <Ionicons name="book-outline" size={38} color={C.text3} />
                             </View>} />

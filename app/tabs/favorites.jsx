@@ -261,7 +261,7 @@ export default function Favorites() {
 
                 {/* Cover — proxied through the correct source-specific proxy */}
                 <View style={[S.coverWrap, desktopRows && S.coverWrapDesktop]}>
-                    <SourceCover urls={coverUrls}
+                    <SourceCover urls={coverUrls} seriesId={item.url} source={src}
                         style={[S.cover, desktopRows && S.coverDesktop, isCompleted && S.coverCompleted]}
                         placeholder={<View style={[S.cover, desktopRows && S.coverDesktop, S.coverEmpty]}>
                             <Ionicons name="book-outline" size={20} color={C.text3} />

@@ -160,7 +160,7 @@ const DiscoveryCard = React.memo(function DiscoveryCard({ manga, coverUrls, widt
             accessibilityLabel={`Open ${manga.title}`}
         >
             <View style={S.gridCoverWrap}>
-                <SourceCover urls={coverUrls} style={S.gridCover}
+                <SourceCover urls={coverUrls} seriesId={manga.id || manga.url} source={manga.source} style={S.gridCover}
                     placeholder={<View style={S.gridCoverEmpty}><Ionicons name="book-outline" size={20} color={C.text3} /></View>} />
                 {!!coverUrls?.length && <View style={S.gridGradient} />}
                 <View style={[S.gridBadge, { backgroundColor: color }]}>
@@ -765,7 +765,7 @@ export default function Home() {
                                             style={({ pressed }) => [S.contCoverWrap, viewportWidth >= 700 && S.contCoverDesktop, { opacity: pressed ? 0.75 : 1 }]}
                                             onPress={() => openManga(manga)}
                                         >
-                                            <SourceCover urls={imgUrls} style={S.contCover}
+                                            <SourceCover urls={imgUrls} seriesId={manga.url} source={src} style={S.contCover}
                                                 placeholder={<View style={S.contCoverEmpty}>
                                                     <Ionicons name="image-outline" size={26} color={C.text3} />
                                                     <Text style={S.contCoverEmptyText}>No cover</Text>
@@ -969,7 +969,7 @@ export default function Home() {
                                                 onPress={() => openResult(item)}
                                                 style={({ pressed }) => [S.resRow, { backgroundColor: pressed ? C.bg3 : 'transparent' }]}
                                             >
-                                                <SourceCover urls={coverUrls} style={S.resCover}
+                                                <SourceCover urls={coverUrls} seriesId={item.id || item.url} source={item.source} style={S.resCover}
                                                     placeholder={<View style={[S.resCover, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
                                                         <Ionicons name="book-outline" size={18} color={C.text3} />
                                                     </View>} />
