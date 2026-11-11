@@ -5,10 +5,11 @@ function cleanBase(base) {
 }
 
 const API_BASE = cleanBase(BASE);
+const IMAGE_PROXY_BASE = (process.env.EXPO_PUBLIC_IMAGE_PROXY_URL || API_BASE || '').replace(/\/+$/, '');
 
 export function proxied(src) {
     if (!src) return "";
-    return `${API_BASE}/api/image_proxy?url=${encodeURIComponent(src)}`;
+    return `${IMAGE_PROXY_BASE}${IMAGE_PROXY_BASE.includes('workers.dev') ? '' : '/api/image_proxy'}?url=${encodeURIComponent(src)}`;
 }
 
 // Live Mgeko search is independent of the small curated title catalog.

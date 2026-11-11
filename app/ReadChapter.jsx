@@ -109,7 +109,7 @@ const ReadChapter = () => {
                     if (!res.ok) throw new Error(`Chapter API HTTP ${res.status}: ${requestUrl}`);
                     const json = await res.json();
                     if (!Array.isArray(json?.pages)) throw new Error(`Invalid pages response from ${requestUrl}`);
-                    urls = json.pages.map(u => `${BACKEND}/api/image_proxy?url=${encodeURIComponent(u)}`);
+                    urls = json.pages.map(u => proxiedAsura(u));
                 } else if (isMgeko && seriesId) {
                     if (!BACKEND) throw new Error('EXPO_PUBLIC_CHAPTERS_API is not configured');
                     const requestUrl = `${BACKEND}/api/mgeko-chapters?seriesId=${encodeURIComponent(seriesId)}&chapterId=${encodeURIComponent(selectedCh)}&live=1`;

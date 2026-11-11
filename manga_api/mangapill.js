@@ -4,6 +4,7 @@ function cleanBase(base) {
     return base?.endsWith("/") ? base.slice(0, -1) : base;
 }
 const API_BASE = cleanBase(BASE);
+const IMAGE_PROXY_BASE = (process.env.EXPO_PUBLIC_IMAGE_PROXY_URL || API_BASE || '').replace(/\/+$/, '');
 
 export async function browseMangapill(limit = 24) {
     if (!API_BASE) throw new Error('EXPO_PUBLIC_MANGAPILL_API is not configured');
@@ -35,8 +36,8 @@ export function unwrapImageProxyUrl(src) {
 
 export function proxied(src) {
     const original = unwrapImageProxyUrl(src);
-    if (!original || !API_BASE) return '';
-    return `${API_BASE}/api/image_proxy?url=${encodeURIComponent(original)}`;
+    if (!original || !IMAGE_PROXY_BASE) return '';
+    return `${IMAGE_PROXY_BASE}${IMAGE_PROXY_BASE.includes('workers.dev') ? '' : '/api/image_proxy'}?url=${encodeURIComponent(original)}`;
 }
 
 export async function searchMangapill(title, limit = 10) {

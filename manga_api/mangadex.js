@@ -35,8 +35,8 @@ export function proxied(src) {
     try {
         const url = new URL(src);
         if (url.hostname !== 'uploads.mangadex.org' || !url.pathname.startsWith('/covers/')) return src;
-        const base = API_BASE || 'https://manga-ko.vercel.app';
-        return `${base}/api/image_proxy?url=${encodeURIComponent(src)}`;
+        const base = (process.env.EXPO_PUBLIC_IMAGE_PROXY_URL || API_BASE || 'https://manga-ko.vercel.app').replace(/\/+$/, '');
+        return `${base}${base.includes('workers.dev') ? '' : '/api/image_proxy'}?url=${encodeURIComponent(src)}`;
     } catch {
         return src;
     }

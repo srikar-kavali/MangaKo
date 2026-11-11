@@ -1,100 +1,105 @@
+// Cloudflare edge image proxy. Only fetches approved public manga image hosts.
+// Deploy with: cd worker && npx wrangler deploy
+const ALLOWED_HOSTS = new Set([
+  'mangapill.com', 'www.mangapill.com',
+  'readdetectiveconan.com', 'cdn.readdetectiveconan.com',
+  'mgeko.cc', 'www.mgeko.cc',
+  'asurascans.com', 'cdn.asurascans.com',
+  'asuracomic.net', 'gg.asuracomic.net',
+  'uploads.mangadex.org', 'mangadex.org', 'api.mangadex.org',
+]);
+const MAX_BYTES = 12 * 1024 * 1024;
+const MAX_REDIRECTS = 3;
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+function allowedUrl(raw) {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:' || u.username || u.password || (u.port && u.port !== '443')) return null;
+    const host = u.hostname.toLowerCase();
+    if (!ALLOWED_HOSTS.has(host) && !/^imgsrv[0-9]+\.com$/.test(host)) return null;
+    return u;
+  } catch { return null; }
+}
+function upstreamHeaders(host) {
+  const headers = new Headers({
+    'User-Agent': 'Mozilla/5.0 (compatible; MangaKo/1.0)',
+    'Accept': 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
+  });
+  if (host.includes('mangapill') || host.includes('readdetectiveconan')) {
+    headers.set('Referer', 'https://mangapill.com/');
+  } else if (host.startsWith('imgsrv') || host.includes('mgeko')) {
+    headers.set('Referer', 'https://www.mgeko.cc/');
+  } else if (host.includes('asura')) {
+    headers.set('Referer', 'https://asurascans.com/');
+  }
+  return headers;
+}
+function error(status, message) {
+  return new Response(message, {
+    status, headers: { ...CORS, 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
 export default {
-    async fetch(request, env, ctx) {
-        const url = new URL(request.url);
-        const targetUrlStr = url.searchParams.get("url");
+  async fetch(request, env, ctx) {
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+    if (!['GET', 'HEAD'].includes(request.method)) return error(405, 'Method not allowed');
+    const requestUrl = new URL(request.url);
+    const target = allowedUrl(requestUrl.searchParams.get('url'));
+    if (!target) return error(400, 'Missing or disallowed image URL');
 
-        if (!targetUrlStr) {
-            return new Response("Missing 'url' parameter", { status: 400 });
+    const cache = caches.default;
+    const cacheKey = new Request(requestUrl.toString(), { method: 'GET' });
+    const cached = await cache.match(cacheKey);
+    if (cached) {
+      const headers = new Headers(cached.headers);
+      headers.set('X-Proxy-Cache', 'HIT');
+      return new Response(request.method === 'HEAD' ? null : cached.body, { status: cached.status, headers });
+    }
+
+    try {
+      let current = target;
+      let response;
+      for (let i = 0; i <= MAX_REDIRECTS; i++) {
+        response = await fetch(current.toString(), {
+          method: 'GET',
+          headers: upstreamHeaders(current.hostname),
+          redirect: 'manual',
+        });
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          const location = response.headers.get('location');
+          const redirected = location ? allowedUrl(new URL(location, current).toString()) : null;
+          if (!redirected) return error(502, 'Upstream redirect not allowed');
+          current = redirected;
+          continue;
         }
-
-        // 1. Check Cloudflare's Edge Cache first
-        const cache = caches.default;
-        const cacheKey = new Request(request.url, request);
-        let cachedResponse = await cache.match(cacheKey);
-
-        if (cachedResponse) {
-            const headers = new Headers(cachedResponse.headers);
-            headers.set("X-Proxy-Cache", "HIT");
-            return new Response(cachedResponse.body, {
-                status: cachedResponse.status,
-                statusText: cachedResponse.statusText,
-                headers
-            });
-        }
-
-        try {
-            const targetUrl = new URL(targetUrlStr);
-            // NOTE: JS URL objects don't have .netloc (that's a Python/urllib
-            // concept) — this was always falling through to .hostname via the
-            // || anyway, but writing it directly avoids the confusing dead
-            // reference.
-            const host = targetUrl.hostname;
-
-            // 2. Mirror your exact working Python proxy headers
-            const headers = new Headers({
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.9",
-                "Sec-Fetch-Dest": "image",
-                "Sec-Fetch-Mode": "no-cors",
-                "Sec-Fetch-Site": "cross-site",
-                "Host": host
-            });
-
-            // Match the pristine referrer mapping from your Python code
-            if (host.includes("asura") || host.includes("gg.asuracomic")) {
-                headers.set("Referer", "https://asurascans.com/");
-                headers.set("Origin", "https://asurascans.com");
-            } else if (host.includes("readdetectiveconan.com") || host.includes("mangapill")) {
-                headers.set("Referer", "https://mangapill.com/");
-                headers.set("sec-ch-ua", '"Not_A Brand";v="8", "Chromium";v="120"');
-                headers.set("sec-ch-ua-mobile", "?0");
-                headers.set("sec-ch-ua-platform", '"Windows"');
-            } else if (host.includes("imgsrv4.com") || host.includes("mgeko")) {
-                // Real mgeko URLs are all under www.mgeko.cc — a bare
-                // "mgeko.cc" Referer is a different origin as far as most
-                // hotlink checks go. Fixed to match the working Python
-                // proxy. (This alone won't resolve the 525 you're seeing —
-                // that fails before headers are ever read — but it's still
-                // wrong and worth having correct.)
-                headers.set("Referer", "https://www.mgeko.cc/");
-                headers.set("Origin", "https://www.mgeko.cc");
-            } else {
-                headers.set("Referer", `https://${host.replace('cdn.', '')}/`);
-            }
-
-            // 3. Fetch the image from the upstream server
-            const response = await fetch(targetUrl.toString(), { headers });
-
-            if (!response.ok) {
-                return new Response(`Upstream server responded with status: ${response.status}`, {
-                    status: response.status
-                });
-            }
-
-            // 4. Prepare clean headers for the client response
-            const responseHeaders = new Headers(response.headers);
-
-            responseHeaders.set("Access-Control-Allow-Origin", "*");
-            responseHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
-
-            // Match your Python app's strong 1-year immutable caching
-            responseHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
-            responseHeaders.set("X-Proxy-Cache", "MISS");
-
-            const modifiedResponse = new Response(response.body, {
-                status: response.status,
-                statusText: response.statusText,
-                headers: responseHeaders,
-            });
-
-            // 5. Cache asynchronously
-            ctx.waitUntil(cache.put(cacheKey, modifiedResponse.clone()));
-
-            return modifiedResponse;
-
-        } catch (error) {
-            return new Response(`Proxy error: ${error.message}`, { status: 500 });
-        }
-    },
+        break;
+      }
+      if (!response || [301, 302, 303, 307, 308].includes(response.status)) return error(502, 'Too many redirects');
+      if (!response.ok) return error(502, 'Upstream image unavailable');
+      const type = (response.headers.get('content-type') || '').split(';')[0].toLowerCase();
+      if (!type.startsWith('image/') || type === 'image/svg+xml') return error(502, 'Unsupported image content');
+      const length = Number(response.headers.get('content-length') || 0);
+      if (length > MAX_BYTES) return error(413, 'Image too large');
+      const data = await response.arrayBuffer();
+      if (data.byteLength > MAX_BYTES) return error(413, 'Image too large');
+      const headers = new Headers({
+        ...CORS,
+        'Content-Type': type,
+        'Content-Length': String(data.byteLength),
+        'Cache-Control': 'public, max-age=86400',
+        'X-Proxy-Cache': 'MISS',
+      });
+      const output = new Response(data, { status: 200, headers });
+      ctx.waitUntil(cache.put(cacheKey, output.clone()));
+      return request.method === 'HEAD'
+        ? new Response(null, { status: 200, headers })
+        : output;
+    } catch {
+      return error(502, 'Unable to retrieve image');
+    }
+  },
 };
