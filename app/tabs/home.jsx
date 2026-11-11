@@ -958,7 +958,7 @@ export default function Home() {
                                     keyboardShouldPersistTaps="handled"
                                     ItemSeparatorComponent={() => <View style={S.resSep} />}
                                     renderItem={({ item }) => {
-                                        const cover = getProxied(item);
+                                        const coverUrls = getCoverCandidates(item);
                                         const isAS = item.source === 'asura';
                                         const isMD = item.source === 'mangadex';
                                         const badgeColor = isAS ? C.accentDim : isMD ? 'rgba(251,146,60,0.14)' : item.source === 'mgeko' ? C.greenDim : 'rgba(56,189,248,0.12)';
@@ -969,12 +969,10 @@ export default function Home() {
                                                 onPress={() => openResult(item)}
                                                 style={({ pressed }) => [S.resRow, { backgroundColor: pressed ? C.bg3 : 'transparent' }]}
                                             >
-                                                {cover
-                                                    ? <Image source={{ uri: cover }} style={S.resCover} />
-                                                    : <View style={[S.resCover, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
+                                                <SourceCover urls={coverUrls} style={S.resCover}
+                                                    placeholder={<View style={[S.resCover, { backgroundColor: C.bg3, alignItems: 'center', justifyContent: 'center' }]}>
                                                         <Ionicons name="book-outline" size={18} color={C.text3} />
-                                                    </View>
-                                                }
+                                                    </View>} />
                                                 <View style={S.resInfo}>
                                                     <Text style={S.resTitle} numberOfLines={2}>{item.title}</Text>
                                                     <View style={[S.resBadge, { backgroundColor: badgeColor }]}>
