@@ -2,8 +2,11 @@ name: Python checks
 
 on:
   push:
-    branches: [cleanup]
+    branches: [main, cleanup]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   image-proxy-tests:
@@ -14,8 +17,20 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install test dependencies
-        run: python -m pip install httpx
+        run: python -m pip install httpx beautifulsoup4
       - name: Compile Python source
-        run: python -m compileall -q api tests
-      - name: Run image proxy security tests
+        run: python -m compileall -q api scrapers manga-scrapers/api tests
+      - name: Run Python security tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+  node-security-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node --test tests/security.test.mjs
+      - run: npx expo export --platform web

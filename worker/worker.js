@@ -8,6 +8,7 @@ const ALLOWED_HOSTS = new Set([
   'asuracomic.net', 'gg.asuracomic.net',
   'uploads.mangadex.org', 'mangadex.org', 'api.mangadex.org',
   'm.media-amazon.com',
+  'r2.capibaratraductor.com',
 ]);
 const MAX_BYTES = 12 * 1024 * 1024;
 const MAX_REDIRECTS = 3;

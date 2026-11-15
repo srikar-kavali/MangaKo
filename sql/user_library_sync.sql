@@ -7,4 +7,7 @@ create table if not exists public.user_library_sync (
   updated_at timestamptz not null default now()
 );
 alter table public.user_library_sync enable row level security;
+-- Block direct application-role access even if a policy is added by mistake.
+revoke all on table public.user_library_sync from public, anon, authenticated;
+grant select, insert, update on table public.user_library_sync to service_role;
 -- No anon/authenticated policies: access is exclusively through verified backend calls.
