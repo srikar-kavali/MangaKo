@@ -1,17 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-// Account syncing must not depend on deployment-specific chapter API URLs.
-// Native devices always use our stable production domain. The production web
-// app uses its own origin, avoiding cross-origin preflights altogether.
+// Send account tokens only to the trusted production API. Preview and custom
+// domains must be explicitly allowed by the production API for web sync.
 const PRODUCTION_API = 'https://manga-ko.vercel.app';
-function getSyncApiBase() {
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    const origin = window.location.origin;
-    if (origin.startsWith('https://') && origin.endsWith('.vercel.app')) return origin;
-  }
-  return PRODUCTION_API;
-}
 const KEYS = ['favorites', 'lastReadChapters', 'hiddenContinueReading', 'completed_manga'];
 const PREFIXES = ['status:', 'lastviewed:', 'mangako:preferred-source:', 'mangako:preferred-selection:'];
 const META_OWNER = '@mangako/sync-owner';
@@ -33,8 +25,9 @@ async function identity() {
 }
 
 async function request(token, method, payload) {
-  const response = await fetch(`${getSyncApiBase()}/api/library-sync`, {
+  const response = await fetch(`${PRODUCTION_API}/api/library-sync`, {
     method,
+    redirect: 'error',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     ...(payload ? { body: JSON.stringify(payload) } : {}),
   });

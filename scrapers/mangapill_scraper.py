@@ -3,15 +3,37 @@ import os
 import sys
 import re
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from fastapi.middleware.cors import CORSMiddleware
 
 from typing import List, Dict
-from urllib.parse import urljoin, urlencode, quote_plus
+from urllib.parse import urljoin, urlencode, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup
 
 BASE = "https://mangapill.com"
+PAGE_HOSTS = {"mangapill.com", "www.mangapill.com"}
+MAX_PAGE_REDIRECTS = 3
+
+
+class InvalidPageURL(ValueError):
+    pass
+
+
+def manga_page_url(raw: str) -> str:
+    # Resolve relative paths first, then validate the actual HTTP client URL.
+    try:
+        parsed = httpx.URL(urljoin(BASE, raw))
+        parts = urlsplit(str(parsed))
+        if (
+            parsed.scheme != "https"
+            or parsed.host not in PAGE_HOSTS
+            or parsed.port not in (None, 443)
+            or "@" in parts.netloc
+        ):
+            raise ValueError
+        return str(parsed)
+    except (ValueError, httpx.InvalidURL):
+        raise InvalidPageURL("Only HTTPS MangaPill page URLs are allowed") from None
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -31,7 +53,8 @@ class MangapillScraper:
         self.client = httpx.Client(
             headers=BROWSER_HEADERS,
             timeout=30.0,
-            follow_redirects=True,
+            follow_redirects=False,
+            trust_env=False,
         )
 
     # ---- helpers -------------------------------------------------------------
@@ -39,11 +62,15 @@ class MangapillScraper:
         return urljoin(BASE, href)
 
     def _soup(self, url: str) -> BeautifulSoup:
-        if not url.startswith("http"):
-            url = self._abs(url)
-        r = self.client.get(url)
-        r.raise_for_status()
-        return BeautifulSoup(r.text, "html.parser")
+        for _ in range(MAX_PAGE_REDIRECTS + 1):
+            url = manga_page_url(url)
+            response = self.client.get(url)
+            if response.has_redirect_location:
+                url = urljoin(url, response.headers["location"])
+                continue
+            response.raise_for_status()
+            return BeautifulSoup(response.text, "html.parser")
+        raise ValueError("Too many MangaPill redirects")
 
     # ---- /search -------------------------------------------------------------
     def search(self, q: str, limit: int = 20) -> List[Dict]:
@@ -153,6 +180,7 @@ class MangapillScraper:
         Accepts an absolute or site-relative URL to a manga page.
         Extracts title, description, tags, cover image, and the list of chapters.
         """
+        url = manga_page_url(url)
         if re.match(r"^https://mangapill\.com/manga/[^/]+$", url):
             # Try to find correct URL from search
             slug = url.rstrip("/").split("/")[-1]
@@ -229,64 +257,56 @@ class MangapillScraper:
           - https://mangapill.com/chapters/2-10003000/one-piece-chapter-3
           - https://mangapill.com/manga/2/one-piece
         """
-        try:
-            # --- Normalize URL ---
-            url = url.strip()
-            if not url.startswith("http"):
-                url = f"https://mangapill.com{url}"
-            url = url.rstrip("/")
+        # --- Normalize URL ---
+        url = manga_page_url(url.strip()).rstrip("/")
 
-            # --- Extract slug safely ---
-            parts = url.split("/")
-            slug = parts[-1] if parts else ""
-            base_name = ""
-            if "-chapter-" in slug:
-                base_name = slug.split("-chapter-")[0]
-            elif len(parts) >= 2:
-                base_name = parts[-2]
-            else:
-                base_name = slug or "chapter"
+        # --- Extract slug safely ---
+        parts = url.split("/")
+        slug = parts[-1] if parts else ""
+        base_name = ""
+        if "-chapter-" in slug:
+            base_name = slug.split("-chapter-")[0]
+        elif len(parts) >= 2:
+            base_name = parts[-2]
+        else:
+            base_name = slug or "chapter"
 
-            # --- Resolve to full chapter URL if not a direct chapter link ---
-            if "/chapters/" not in url:
-                search_results = self.search(base_name, limit=3)
-                for r in search_results:
-                    manga_data = self.get_manga(r["url"])
-                    for ch in manga_data.get("chapters", []):
-                        if slug in ch["url"]:
-                            url = ch["url"]
-                            break
-                    if "/chapters/" in url:
+        # --- Resolve to full chapter URL if not a direct chapter link ---
+        if "/chapters/" not in url:
+            search_results = self.search(base_name, limit=3)
+            for r in search_results:
+                manga_data = self.get_manga(r["url"])
+                for ch in manga_data.get("chapters", []):
+                    if slug in ch["url"]:
+                        url = ch["url"]
                         break
+                if "/chapters/" in url:
+                    break
 
-            # --- Fetch and parse chapter HTML ---
-            soup = self._soup(url)
-            imgs: List[str] = []
+        # --- Fetch and parse chapter HTML ---
+        soup = self._soup(url)
+        imgs: List[str] = []
 
-            # Extract images (<img src> or lazy-loaded versions)
-            for img in soup.select("img"):
-                src = img.get("src") or img.get("data-src") or img.get("data-original")
-                if not src:
+        # Extract images (<img src> or lazy-loaded versions)
+        for img in soup.select("img"):
+            src = img.get("src") or img.get("data-src") or img.get("data-original")
+            if not src:
+                continue
+            if any(bad in src for bad in (".svg", "data:image")):
+                continue
+            imgs.append(self._abs(src))
+
+        # Fallback: <picture><source srcset>
+        if not imgs:
+            for source in soup.select("picture source"):
+                srcset = source.get("srcset")
+                if not srcset:
                     continue
-                if any(bad in src for bad in (".svg", "data:image")):
-                    continue
-                imgs.append(self._abs(src))
+                first = srcset.split(",")[0].strip().split(" ")[0]
+                if first:
+                    imgs.append(self._abs(first))
 
-            # Fallback: <picture><source srcset>
-            if not imgs:
-                for source in soup.select("picture source"):
-                    srcset = source.get("srcset")
-                    if not srcset:
-                        continue
-                    first = srcset.split(",")[0].strip().split(" ")[0]
-                    if first:
-                        imgs.append(self._abs(first))
+        if not imgs:
+            raise ValueError(f"No images found for chapter: {url}")
 
-            if not imgs:
-                raise ValueError(f"No images found for chapter: {url}")
-
-            return imgs
-
-        except Exception as e:
-            print(f"[ERROR] get_chapter_pages failed for {url}: {e}")
-            raise
+        return imgs

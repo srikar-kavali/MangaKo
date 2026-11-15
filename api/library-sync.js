@@ -9,32 +9,40 @@ const verifier = CognitoJwtVerifier.create({
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const allowedOrigins = (process.env.SYNC_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
 
-export default async function handler(req, res) {
+export default function handler(req, res) {
+  return syncLibrary(req, res, verifier, supabase, allowedOrigins);
+}
+
+export async function syncLibrary(req, res, verifier, supabase, allowedOrigins) {
   const origin = req.headers.origin;
   if (origin && allowedOrigins.includes(origin)) res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
   res.setHeader('Cache-Control', 'no-store');
-  if (req.method === 'OPTIONS') return res.status(204).end();
-  if (!['GET','PUT'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' });
   if (origin && !allowedOrigins.includes(origin)) return res.status(403).json({ error: 'Origin not allowed' });
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  if (!['GET', 'PUT'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' });
   const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   let identity;
   try { identity = await verifier.verify(token); }
   catch { return res.status(401).json({ error: 'Invalid or expired session' }); }
-  const userId = identity.sub;
+  const userId = identity?.sub;
+  if (typeof userId !== 'string' || !userId) return res.status(401).json({ error: 'Invalid session identity' });
+  const { snapshot, revision } = req.body || {};
+  if (req.method === 'PUT' && (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) ||
+      Buffer.byteLength(JSON.stringify(snapshot)) > 1_000_000 ||
+      !Object.values(snapshot).every(value => typeof value === 'string') ||
+      !Number.isSafeInteger(revision) || revision < 0)) {
+    return res.status(400).json({ error: 'Invalid sync payload' });
+  }
   try {
     const { data, error } = await supabase.from('user_library_sync')
       .select('snapshot,revision,updated_at').eq('user_id', userId).maybeSingle();
     if (error) throw error;
     if (req.method === 'GET') return res.status(200).json({ snapshot: data?.snapshot ?? null, revision: data?.revision ?? 0, updatedAt: data?.updated_at ?? null });
-    const { snapshot, revision } = req.body || {};
-    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) || JSON.stringify(snapshot).length > 1000000 ||
-        !Number.isInteger(revision) || revision < 0)
-      return res.status(400).json({ error: 'Invalid sync payload' });
-    if (!data && revision !== 0 || data && revision !== data.revision)
+    if (revision !== (data?.revision ?? 0))
       return res.status(409).json({ error: 'Revision conflict', snapshot: data?.snapshot ?? null, revision: data?.revision ?? 0 });
     // A compare-and-set update prevents clobbering concurrent devices.
     if (data) {
@@ -52,7 +60,7 @@ export default async function handler(req, res) {
     if (result.error) throw result.error;
     return res.status(200).json({ revision: result.data.revision });
   } catch (error) {
-    console.error('library-sync failure:', error?.message);
+    console.error('library-sync failure', error?.code || 'unknown');
     return res.status(500).json({ error: 'Sync temporarily unavailable' });
   }
 }

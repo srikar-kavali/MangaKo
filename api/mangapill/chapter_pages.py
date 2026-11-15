@@ -3,11 +3,11 @@ from __future__ import annotations
 import sys
 import os
 import json
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..'))
-from scrapers.mangapill_scraper import MangapillScraper
+from scrapers.mangapill_scraper import InvalidPageURL, MangapillScraper
 
 scraper = MangapillScraper()
 
@@ -15,7 +15,7 @@ class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
-        url = unquote(params.get('url', [''])[0])
+        url = params.get('url', [''])[0]
 
         if not url:
             body = json.dumps({'error': 'url parameter required'}).encode()
@@ -43,9 +43,10 @@ class handler(BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-        except Exception as e:
-            body = json.dumps({'error': str(e)}).encode()
-            self.send_response(500)
+        except Exception as error:
+            invalid_url = isinstance(error, InvalidPageURL)
+            body = json.dumps({'error': str(error) if invalid_url else 'Unable to retrieve MangaPill page'}).encode()
+            self.send_response(400 if invalid_url else 502)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Content-Length', str(len(body)))

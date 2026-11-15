@@ -2,9 +2,8 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
-import requests
 
 from src.manganato import Manganato
 from src.mangareader import Mangareader
@@ -25,7 +24,7 @@ app.add_middleware(
         "http://localhost:8081",
         "https://manga-6h3txymbl-srikar-kavalis-projects.vercel.app"
     ],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -73,12 +72,7 @@ def manganato(category: str, path: str = None):
         else:
             return Manganato().hotest()
     elif category == "images":
-        if path:
-            headers = {
-                "Referer": "https://chapmanganato.to/"
-            }
-            content = requests.get(url=path, headers=headers).content
-            return Response(content=content, media_type="image/jpg")
+        raise HTTPException(410, "Legacy image proxy retired")
     else:
         return {
             "detail": "Invalid parameter"
@@ -119,16 +113,7 @@ def mangapill(category:str, path:str):
     elif category == "recent":
         return Mangapill().recent()
     elif category == "images":
-        if path:
-            headers = {
-                "Referer": "https://mangapill.com/"
-            }
-            content = requests.get(url=path, headers=headers).content
-            return Response(content=content, media_type="image/jpg")
-        else:
-            return {
-                "detail": "image url is required"
-            }
+        raise HTTPException(410, "Legacy image proxy retired")
     else:
         return {
             "detail": "Invalid parameter"

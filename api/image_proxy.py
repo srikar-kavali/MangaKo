@@ -12,7 +12,7 @@ import httpx
 # Add other verified image origins with IMAGE_PROXY_ALLOWED_HOSTS on the server.
 DEFAULT_HOSTS = {
     "mangapill.com", "www.mangapill.com", "readdetectiveconan.com",
-    "cdn.readdetectiveconan.com",
+    "cdn.readdetectiveconan.com", "r2.capibaratraductor.com",
     "mgeko.cc", "www.mgeko.cc", "asurascans.com",
     "cdn.asurascans.com", "asuracomic.net", "gg.asuracomic.net",
     "uploads.mangadex.org", "mangadex.org", "api.mangadex.org",
