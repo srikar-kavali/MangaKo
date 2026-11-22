@@ -109,3 +109,30 @@ test('single provider items retain their own metadata', async () => {
     description: 'Its original synopsis', cover: 'https://example.com/original.jpg' };
   assert.deepEqual(applyCanonicalMetadata(item), item);
 });
+
+test('Sword Clan alternate names display as one series with both source IDs', async () => {
+  const { applyCanonicalMetadata, canonicalMetadataFor } = await import('../services/canonicalMetadata.js');
+  const entries = [
+    hit('asura', 'regressing-as-the-reincarnated-bastard-of-the-swor',
+      'Regressing as the Reincarnated Bastard of the Sword Clan'),
+    hit('mgeko', 'mgeko__regressed-life-of-the-sword-clans-ignoble-reincarnator',
+      "Regressed Life of the Sword Clan's Ignoble Reincarnator"),
+  ];
+  const grouped = groupSearchResults(entries);
+  assert.equal(grouped.length, 1);
+  assert.deepEqual(grouped[0].searchSources.map(entry => entry.source), ['asura', 'mgeko']);
+  const canonical = canonicalMetadataFor(entries[1].title);
+  assert.ok(canonical);
+  const card = applyCanonicalMetadata(grouped[0]);
+  assert.equal(card.image, canonical.cover);
+  assert.equal(card.description, canonical.description);
+  assert.equal(card.searchSources.length, 2);
+});
+
+test('unrelated Sword Clan series are not grouped by title similarity', () => {
+  assert.equal(groupSearchResults([
+    hit('asura', 'regressing-as-the-reincarnated-bastard-of-the-swor',
+      'Regressing as the Reincarnated Bastard of the Sword Clan'),
+    hit('mgeko', 'different-sword', 'Sword Clan Chronicles'),
+  ]).length, 2);
+});
