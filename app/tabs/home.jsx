@@ -42,7 +42,7 @@ const C = {
 };
 
 const LIVE_DELAY_MS = 300;
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const BACKEND = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
 
 const BATCH_SIZE = 5;
@@ -502,12 +502,14 @@ export default function Home() {
                     const t = (i.title || '').toLowerCase();
                     return t === qL ? 1000 : t.startsWith(qL) ? 500 : t.includes(qL) ? 100 : 0;
                 };
-                const all = [
-                    ...(ar || []).map(i => ({ ...i, source: i.source || 'asura' })),
-                    ...(mr || []).map(i => ({ ...i, source: 'mangapill', id: i.url })),
-                    ...(dr || []).map(i => ({ ...i, source: 'mangadex' })),
-                    ...(gr || []).map(i => ({ ...i, source: 'mgeko' })),
-                ].map(i => ({ ...i, score: score(i) })).sort((a, b) => b.score - a.score);
+                // Include locally curated Mgeko matches even if its live endpoint is unavailable.
+                // Preserve provider-specific entries so readers can deliberately choose translations.
+                const all = mergeCatalogItems(
+                    (ar || []).map(i => ({ ...i, source: i.source || 'asura' })),
+                    (mr || []).map(i => ({ ...i, source: 'mangapill', id: i.url })),
+                    (dr || []).map(i => ({ ...i, source: 'mangadex' })),
+                    (gr || []).map(i => ({ ...i, source: 'mgeko' })),
+                ).map(i => ({ ...i, score: score(i) })).sort((a, b) => b.score - a.score);
                 if (!ctrl.signal.aborted) { cacheRef.current.set(key, all); setSearchResults(all); }
             } catch (e) {
                 if (!ctrl.signal.aborted) { setSearchResults([]); setSearchWarning('Search failed. Please retry.'); }
@@ -551,20 +553,7 @@ export default function Home() {
         const src = item.source || getSource(item);
         const id = item.id || item.url;
         const titleParam = item.title ? `&title=${encodeURIComponent(item.title)}` : '';
-        if (src === 'mangadex' && item.title) {
-            setOpeningTitle(String(id));
-            try {
-                const match = await findMangapillMatch(item.title, searchMangapill);
-                if (match) {
-                    router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(match.url)}&source=mangapill${titleParam}`);
-                    return;
-                }
-            } catch (error) {
-                console.warn('MangaPill lookup unavailable; falling back to MangaDex', error);
-            } finally {
-                setOpeningTitle(null);
-            }
-        }
+        // Keep the selected search result's source; the detail page offers verified alternatives.
         if (src === 'asura' || src === 'mgeko' || src === 'mangadex') {
             const coverParam = src === 'mgeko' && (item.cover || item.coverUrl)
                 ? '&coverUrl=' + encodeURIComponent(item.cover || item.coverUrl) : '';
