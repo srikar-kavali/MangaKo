@@ -52,6 +52,13 @@ export const COVER_URLS = {
     "the-genius-knight-of-a-fallen-race":                           "https://cdn.asurascans.com/asura-images/covers/the-genius-knight-of-a-fallen-race.6b6fc4-400.webp",
     "reincarnators-stream":                                         "https://cdn.asurascans.com/asura-images/covers/reincarnators-stream.c8c699-400.webp",
 
+    "damn-reincarnation": "https://cdn.asurascans.com/asura-images/covers/damn-reincarnation.d3e33a-400.webp",
+    "eleceed": "https://cdn.asurascans.com/asura-images/covers/eleceed.53e8fe-400.webp",
+    "the-legend-of-the-northern-blade": "https://cdn.asurascans.com/asura-images/covers/the-legend-of-the-northern-blade.d8dc92-400.webp",
+    "absolute-domination": "https://cdn.asurascans.com/asura-images/covers/absolute-domination.f6bad6-400.webp",
+    "sword-of-the-undying": "https://cdn.asurascans.com/asura-images/covers/sword-of-the-undying.ff1731-400.webp",
+    "regressing-as-the-reincarnated-bastard-of-the-swor": "https://cdn.asurascans.com/asura-images/covers/regressing-as-the-reincarnated-bastard-of-the-swor.2afccc-400.webp",
+
     "mgeko__a-returner-s-magic-should-be-special-mg1-njfia":        "https://imgsrv5.com/avatar/288x412/media/manga_covers/a-returner-s-magic-should-be-speci.png",
     "mgeko__absolute-dominion":                                     "https://imgsrv5.com/avatar/288x412/media/manga_covers/Absolute-Dominion-193x278.webp",
     "mgeko__bowblade-spirit-mg12":                                  "https://imgsrv5.com/avatar/288x412/media/manga_covers/bowblade-spirit.jpeg",
