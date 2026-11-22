@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image } from 'react-native';
 import { proxied as proxiedMangapill, unwrapImageProxyUrl } from '../manga_api/mangapill';
+import { proxied as proxiedMangadex } from '../manga_api/mangadex';
 
 const BACKEND = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
 const metadataCache = new Map();
@@ -67,8 +68,11 @@ export default function SourceCover({
                     variants.push(original, original + '.512.jpg');
                 }
             }
+            // Mobile Safari/iOS often cannot hotlink MangaDex CDN artwork.
+            // Try our server-side allowlisted proxy before direct CDN URLs;
+            // try each cover size through the proxy before falling back.
             const choices = isMangadexCover
-                ? [...variants, proxiedMangapill(url)]
+                ? [...variants.map(proxiedMangadex), ...variants]
                 : [proxiedMangapill(url)];
             for (const candidate of choices) {
                 if (candidate && !seen.has(candidate)) {
