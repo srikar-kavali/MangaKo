@@ -20,6 +20,7 @@ import {
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { discoverCatalog, mergeCatalogItems } from '../../services/catalog';
 import { groupSearchResults } from '../../services/seriesIdentity';
+import { applyCanonicalMetadata } from '../../services/canonicalMetadata';
 import { searchMangapill, getMangapillManga, proxied as proxiedMangapill, unwrapImageProxyUrl } from '../../manga_api/mangapill';
 import { findMangapillMatch } from '../../services/mangapillMatch';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
@@ -164,9 +165,9 @@ const DiscoveryCard = React.memo(function DiscoveryCard({ manga, coverUrls, widt
                 <SourceCover urls={coverUrls} seriesId={manga.id || manga.url} source={manga.source} style={S.gridCover}
                     placeholder={<View style={S.gridCoverEmpty}><Ionicons name="book-outline" size={20} color={C.text3} /></View>} />
                 {!!coverUrls?.length && <View style={S.gridGradient} />}
-                <View style={[S.gridBadge, { backgroundColor: color }]}>
+                {manga.searchSources?.length <= 1 && <View style={[S.gridBadge, { backgroundColor: color }]}>
                     <Text style={S.gridBadgeText}>{badge}</Text>
-                </View>
+                </View>}
             </View>
             <Text style={S.gridTitle} numberOfLines={2}>{manga.title}</Text>
             {checking && <Text style={S.sourceSearching}>Checking MangaPill…</Text>}
@@ -197,7 +198,7 @@ export default function Home() {
     // Group identical series across curated providers and MangaDex pages, just
     // as the search overlay does. Keep the provider references for MangaDetails.
     const filteredBrowse = groupSearchResults(browseManga.filter(item => catalogGenre === 'All' ||
-        (Array.isArray(item.genres) && item.genres.some(g => String(g).toLowerCase() === catalogGenre.toLowerCase()))));
+        (Array.isArray(item.genres) && item.genres.some(g => String(g).toLowerCase() === catalogGenre.toLowerCase())))).map(applyCanonicalMetadata);
     if (catalogSort === 'az') filteredBrowse.sort((a, b) => a.title.localeCompare(b.title));
     if (catalogSort === 'za') filteredBrowse.sort((a, b) => b.title.localeCompare(a.title));
     // Group titles into virtualized rows so the carousel and hero remain above the grid.
@@ -514,7 +515,7 @@ export default function Home() {
                     (gr || []).map(i => ({ ...i, source: 'mgeko' })),
                 ).map(i => ({ ...i, score: score(i) })).sort((a, b) => b.score - a.score);
                 if (!ctrl.signal.aborted) {
-                    const grouped = groupSearchResults(all);
+                    const grouped = groupSearchResults(all).map(applyCanonicalMetadata);
                     cacheRef.current.set(key, grouped);
                     setSearchResults(grouped);
                 }
