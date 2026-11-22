@@ -136,3 +136,17 @@ test('unrelated Sword Clan series are not grouped by title similarity', () => {
     hit('mgeko', 'different-sword', 'Sword Clan Chronicles'),
   ]).length, 2);
 });
+
+
+test('actual apostrophe spelling in Mgeko catalog groups with Asura title', async () => {
+  const { canonicalSeriesTitle } = await import('../services/seriesIdentity.js');
+  const mgekoTitle = "Regressed Life of the Sword Clan's Ignoble Reincarnator";
+  const asuraTitle = 'Regressing as the Reincarnated Bastard of the Sword Clan';
+  assert.equal(canonicalSeriesTitle(mgekoTitle), canonicalSeriesTitle(asuraTitle));
+  const grouped = groupSearchResults([
+    hit('mgeko', 'mgeko__regressed-life-of-the-sword-clans-ignoble-reincarnator', mgekoTitle),
+    hit('asura', 'regressing-as-the-reincarnated-bastard-of-the-swor', asuraTitle),
+  ]);
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].searchSources.length, 2);
+});

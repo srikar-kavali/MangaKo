@@ -10,6 +10,7 @@ const TITLE_ALIASES = {
     'absolute dominion': 'absolute domination',
     // Verified alternate English titles of the same Sword Clan series.
     'regressed life of the sword clans ignoble reincarnator': 'sword clan bastard regression',
+    'regressed life of the sword clan s ignoble reincarnator': 'sword clan bastard regression',
     'regressing as the reincarnated bastard of the sword clan': 'sword clan bastard regression',
 };
 
