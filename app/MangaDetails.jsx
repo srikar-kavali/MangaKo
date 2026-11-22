@@ -320,7 +320,7 @@ const MangaDetails = () => {
     useEffect(() => {
         if (loading || fetchError || !chapters.length) return;
         const title = mangaData?.title || mangaData?.name || titleParam;
-        const currentSource = isMgeko ? 'mgeko' : isAsura ? 'asura' : isMangapill ? 'mangapill' : null;
+        const currentSource = isMgeko ? 'mgeko' : isAsura ? 'asura' : isMangadex ? 'mangadex' : isMangapill ? 'mangapill' : null;
         const currentId = isMangapill ? resolvedMangapillUrl : seriesId;
         if (!title || !currentSource || !currentId) return;
         let cancelled = false;
