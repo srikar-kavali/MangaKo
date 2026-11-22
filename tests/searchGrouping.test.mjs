@@ -78,3 +78,34 @@ test('Home re-groups titles that arrive during MangaDex pagination', () => {
   assert.equal(rows.length, 2);
   assert.equal(rows[0].searchSources.length, 2);
 });
+
+
+test('canonical cover and description do not depend on selected Eleceed provider', async () => {
+  const { canonicalMetadataFor, applyCanonicalMetadata } = await import('../services/canonicalMetadata.js');
+  const overview = canonicalMetadataFor('Eleceed');
+  assert.ok(overview);
+  assert.match(overview.cover, /asurascans/);
+  const selected = applyCanonicalMetadata(hit('mgeko', 'mgeko__eleceed', 'Eleceed'));
+  assert.equal(selected.id, 'mgeko__eleceed');
+  assert.equal(selected.source, 'mgeko');
+  assert.equal(selected.cover, overview.cover);
+  assert.equal(selected.description, overview.description);
+});
+
+test('Northern Blade aliases keep multiple provider IDs in one series', async () => {
+  const { canonicalMetadataFor } = await import('../services/canonicalMetadata.js');
+  const rows = groupSearchResults([
+    hit('mgeko', 'mgeko__legend-of-the-northern-blade', 'Legend of the Northern Blade'),
+    hit('asura', 'the-legend-of-the-northern-blade', 'The Legend of TheNorthern Blade'),
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].searchSources.length, 2);
+  assert.ok(canonicalMetadataFor('Legend of the Northern Blade'));
+});
+
+test('single provider items retain their own metadata', async () => {
+  const { applyCanonicalMetadata } = await import('../services/canonicalMetadata.js');
+  const item = { id: 'solo-leveling', source: 'asura', title: 'Solo Leveling',
+    description: 'Its original synopsis', cover: 'https://example.com/original.jpg' };
+  assert.deepEqual(applyCanonicalMetadata(item), item);
+});
