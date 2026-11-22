@@ -19,6 +19,7 @@ import {
 } from '../searchStorage';
 import { searchHardcodedManhwa } from '../../manga_api/hardcodedManhwas';
 import { discoverCatalog, mergeCatalogItems } from '../../services/catalog';
+import { groupSearchResults } from '../../services/seriesIdentity';
 import { searchMangapill, getMangapillManga, proxied as proxiedMangapill, unwrapImageProxyUrl } from '../../manga_api/mangapill';
 import { findMangapillMatch } from '../../services/mangapillMatch';
 import { proxied as proxiedAsura } from '../../manga_api/asurascans';
@@ -42,7 +43,7 @@ const C = {
 };
 
 const LIVE_DELAY_MS = 300;
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const BACKEND = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
 
 const BATCH_SIZE = 5;
@@ -510,7 +511,11 @@ export default function Home() {
                     (dr || []).map(i => ({ ...i, source: 'mangadex' })),
                     (gr || []).map(i => ({ ...i, source: 'mgeko' })),
                 ).map(i => ({ ...i, score: score(i) })).sort((a, b) => b.score - a.score);
-                if (!ctrl.signal.aborted) { cacheRef.current.set(key, all); setSearchResults(all); }
+                if (!ctrl.signal.aborted) {
+                    const grouped = groupSearchResults(all);
+                    cacheRef.current.set(key, grouped);
+                    setSearchResults(grouped);
+                }
             } catch (e) {
                 if (!ctrl.signal.aborted) { setSearchResults([]); setSearchWarning('Search failed. Please retry.'); }
             } finally {
@@ -549,20 +554,21 @@ export default function Home() {
         getCoverUrl(item.id), getCoverUrl(item.url)
     );
 
-    const openManga = async (item) => {
+    const openManga = async (item, showSourceChooser = false) => {
         const src = item.source || getSource(item);
         const id = item.id || item.url;
         const titleParam = item.title ? `&title=${encodeURIComponent(item.title)}` : '';
+        const chooserParam = showSourceChooser ? '&sourceChoice=1' : '';
         // Keep the selected search result's source; the detail page offers verified alternatives.
         if (src === 'asura' || src === 'mgeko' || src === 'mangadex') {
             const coverParam = src === 'mgeko' && (item.cover || item.coverUrl)
                 ? '&coverUrl=' + encodeURIComponent(item.cover || item.coverUrl) : '';
-            router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}${titleParam}${coverParam}`);
+            router.push(`/MangaDetails?seriesId=${encodeURIComponent(id)}&source=${src}${titleParam}${coverParam}${chooserParam}`);
         } else {
             const mangapillUrl = id.includes('mangapill.com')
                 ? id
                 : `https://mangapill.com/manga/${id.replace('__', '/')}`;
-            router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill${titleParam}`);
+            router.push(`/MangaDetails?mangapillUrl=${encodeURIComponent(mangapillUrl)}&source=mangapill${titleParam}${chooserParam}`);
         }
     };
 
@@ -573,7 +579,21 @@ export default function Home() {
     const openResult = async (item) => {
         await handleAddSearch(item?.title || query);
         closeSearch();
-        openManga(item);
+        const alternatives = item.searchSources || [];
+        let chosen = item;
+        if (alternatives.length > 1) {
+            // Honor the user's prior choice, without guessing source mappings.
+            try {
+                const value = await AsyncStorage.getItem(sourceSelectionKey(item.title));
+                const selection = value ? JSON.parse(value) : null;
+                const matching = alternatives.find(opt =>
+                    opt.source === selection?.source &&
+                    String(opt.id) === String(selection?.id)
+                );
+                if (matching) chosen = { ...item, ...matching };
+            } catch {}
+        }
+        openManga(chosen, true);
     };
 
     const openChapter = async (manga, chapterId) => {
@@ -948,11 +968,6 @@ export default function Home() {
                                     ItemSeparatorComponent={() => <View style={S.resSep} />}
                                     renderItem={({ item }) => {
                                         const coverUrls = getCoverCandidates(item);
-                                        const isAS = item.source === 'asura';
-                                        const isMD = item.source === 'mangadex';
-                                        const badgeColor = isAS ? C.accentDim : isMD ? 'rgba(251,146,60,0.14)' : item.source === 'mgeko' ? C.greenDim : 'rgba(56,189,248,0.12)';
-                                        const badgeTextColor = isAS ? C.accentBright : isMD ? '#fb923c' : item.source === 'mgeko' ? C.green : '#7dd3fc';
-                                        const badgeLabel = isAS ? 'AsuraScans' : isMD ? 'MangaDex' : item.source === 'mgeko' ? 'Mgeko' : 'MangaPill';
                                         return (
                                             <Pressable
                                                 onPress={() => openResult(item)}
@@ -964,11 +979,11 @@ export default function Home() {
                                                     </View>} />
                                                 <View style={S.resInfo}>
                                                     <Text style={S.resTitle} numberOfLines={2}>{item.title}</Text>
-                                                    <View style={[S.resBadge, { backgroundColor: badgeColor }]}>
-                                                        <Text style={[S.resBadgeText, { color: badgeTextColor }]}>
-                                                            {badgeLabel}
+                                                    {item.searchSources?.length > 1 && (
+                                                        <Text style={{ color: C.text2, fontSize: 12, marginTop: 4 }}>
+                                                            {item.searchSources.length} sources available to compare
                                                         </Text>
-                                                    </View>
+                                                    )}
                                                 </View>
                                                 <Ionicons name="chevron-forward" size={14} color={C.text3} />
                                             </Pressable>
