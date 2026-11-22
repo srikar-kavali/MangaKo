@@ -3,6 +3,7 @@ import { searchMgeko } from '../manga_api/mgeko';
 import { searchMangadex, getMangadexManga } from '../manga_api/mangadex';
 import { searchHardcodedManhwa } from '../manga_api/hardcodedManhwas';
 import { normalizedTitle, findMangapillMatch } from './mangapillMatch';
+import { canonicalSeriesTitle } from './seriesIdentity';
 
 const CHAPTERS_API = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
 const SOURCE_NAMES = { mangapill: 'MangaPill', mgeko: 'Mgeko', asura: 'Asura Scans', mangadex: 'MangaDex' };
@@ -31,15 +32,7 @@ export function sourceStorageKey(item) {
 // Explicitly recognized official/English title variants for the same work.
 // This is intentionally conservative: fuzzy text similarity can match
 // different manga and corrupt cross-source recommendations.
-const TITLE_ALIASES = {
-    'more than a married couple but not lovers': 'fuufu ijou koibito miman',
-    'fuufu ijou koibito miman': 'fuufu ijou koibito miman',
-};
-const canonicalName = name => {
-    const n = normalizedTitle(name);
-    return TITLE_ALIASES[n] || n;
-};
-const sameWork = (a, b) => canonicalName(a) === canonicalName(b) && !!canonicalName(a);
+const sameWork = (a, b) => canonicalSeriesTitle(a) === canonicalSeriesTitle(b) && !!canonicalSeriesTitle(a);
 const identity = item => item.source + ':' + item.id;
 
 function curatedMatches(title) {
@@ -95,7 +88,7 @@ export async function discoverReadingSources({ title, currentSource, currentId, 
     if (!name || !currentId) return [];
     const current = { source: currentSource, id: currentId, title: name,
         count: currentCount, label: SOURCE_NAMES[currentSource] || currentSource };
-    const candidates = [current, ...curatedMatches(name), ...(VERIFIED_EXTRA_SOURCES[canonicalName(name)] || [])];
+    const candidates = [current, ...curatedMatches(name), ...(VERIFIED_EXTRA_SOURCES[canonicalSeriesTitle(name)] || [])];
 
     // Mgeko discovery is no longer restricted to hardcodedManhwas. Never
     // associate ambiguous results: only one distinct exact-title hit qualifies.
