@@ -979,11 +979,7 @@ export default function Home() {
                                                     </View>} />
                                                 <View style={S.resInfo}>
                                                     <Text style={S.resTitle} numberOfLines={2}>{item.title}</Text>
-                                                    {item.searchSources?.length > 1 && (
-                                                        <Text style={{ color: C.text2, fontSize: 12, marginTop: 4 }}>
-                                                            {item.searchSources.length} sources available to compare
-                                                        </Text>
-                                                    )}
+
                                                 </View>
                                                 <Ionicons name="chevron-forward" size={14} color={C.text3} />
                                             </Pressable>
