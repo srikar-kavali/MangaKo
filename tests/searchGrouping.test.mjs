@@ -51,3 +51,30 @@ test('duplicate provider IDs are removed and relevance ordering retained', () =>
   assert.equal(rows[0].title, 'Other');
   assert.equal(rows[1].searchSources.length, 2);
 });
+
+test('Home discovery groups distinct curated providers into one title card', () => {
+  const home = groupSearchResults([
+    hit('mgeko', 'mgeko__eleceed', 'Eleceed'),
+    hit('asura', 'eleceed', 'Eleceed'),
+    hit('mangadex', 'mangadex__uuid', 'Eleceed'),
+    hit('asura', 'other-title', 'Another Series'),
+  ]);
+  assert.equal(home.length, 2);
+  assert.equal(home[0].title, 'Eleceed');
+  assert.deepEqual(home[0].searchSources.map(s => s.source), ['mgeko', 'asura', 'mangadex']);
+});
+
+test('Home re-groups titles that arrive during MangaDex pagination', () => {
+  const initial = [
+    hit('mgeko', 'mgeko__eleceed', 'Eleceed'),
+    hit('asura', 'series-b', 'Series B'),
+  ];
+  const paginated = [
+    ...initial,
+    hit('mangadex', 'mangadex__eleceed', 'Eleceed'),
+  ];
+  assert.equal(groupSearchResults(initial).length, 2);
+  const rows = groupSearchResults(paginated);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].searchSources.length, 2);
+});

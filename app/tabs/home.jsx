@@ -194,8 +194,10 @@ export default function Home() {
     const [catalogGenre, setCatalogGenre] = useState('All');
     const [catalogSort, setCatalogSort] = useState('default');
     const catalogGenres = ['All', 'Action', 'Fantasy', 'Romance', 'Comedy', 'Adventure', 'Martial Arts', 'Drama'];
-    const filteredBrowse = [...browseManga].filter(item => catalogGenre === 'All' ||
-        (Array.isArray(item.genres) && item.genres.some(g => String(g).toLowerCase() === catalogGenre.toLowerCase())));
+    // Group identical series across curated providers and MangaDex pages, just
+    // as the search overlay does. Keep the provider references for MangaDetails.
+    const filteredBrowse = groupSearchResults(browseManga.filter(item => catalogGenre === 'All' ||
+        (Array.isArray(item.genres) && item.genres.some(g => String(g).toLowerCase() === catalogGenre.toLowerCase()))));
     if (catalogSort === 'az') filteredBrowse.sort((a, b) => a.title.localeCompare(b.title));
     if (catalogSort === 'za') filteredBrowse.sort((a, b) => b.title.localeCompare(a.title));
     // Group titles into virtualized rows so the carousel and hero remain above the grid.
@@ -572,28 +574,38 @@ export default function Home() {
         }
     };
 
+    // Shared behavior for discovery cards and search results: the visible card
+    // represents a series, while the reader's saved source determines where it opens.
+    // MangaDetails always presents the verified alternative reading sources.
+    const openGroupedManga = async item => {
+        const alternatives = item.searchSources || [];
+        let chosen = item;
+        try {
+            const value = item.title ? await AsyncStorage.getItem(sourceSelectionKey(item.title)) : null;
+            const selection = value ? JSON.parse(value) : null;
+            const matching = alternatives.find(opt =>
+                opt.source === selection?.source &&
+                String(opt.id) === String(selection?.id)
+            );
+            if (matching) chosen = { ...item, ...matching };
+            else if (selection?.source && selection?.id &&
+                ['mangapill', 'mangadex', 'mgeko', 'asura'].includes(selection.source)) {
+                // The previously selected provider can be absent from the current
+                // discovery page but remains an explicitly chosen series source.
+                chosen = { ...item, source: selection.source, id: selection.id };
+            }
+        } catch { /* Open the canonical catalog entry if preferences are unreadable. */ }
+        openManga(chosen, true);
+    };
+
     const openCardRef = useRef(null);
-    openCardRef.current = openManga;
+    openCardRef.current = openGroupedManga;
     const openDiscoveryCard = useCallback(item => openCardRef.current?.(item), []);
 
     const openResult = async (item) => {
         await handleAddSearch(item?.title || query);
         closeSearch();
-        const alternatives = item.searchSources || [];
-        let chosen = item;
-        if (alternatives.length > 1) {
-            // Honor the user's prior choice, without guessing source mappings.
-            try {
-                const value = await AsyncStorage.getItem(sourceSelectionKey(item.title));
-                const selection = value ? JSON.parse(value) : null;
-                const matching = alternatives.find(opt =>
-                    opt.source === selection?.source &&
-                    String(opt.id) === String(selection?.id)
-                );
-                if (matching) chosen = { ...item, ...matching };
-            } catch {}
-        }
-        openManga(chosen, true);
+        await openGroupedManga(item);
     };
 
     const openChapter = async (manga, chapterId) => {
