@@ -1,10 +1,11 @@
 import { getMangapillManga, searchMangapill, mangapillChapterNumber } from '../manga_api/mangapill';
 import { searchMgeko } from '../manga_api/mgeko';
+import { searchMangadex, getMangadexManga } from '../manga_api/mangadex';
 import { searchHardcodedManhwa } from '../manga_api/hardcodedManhwas';
 import { normalizedTitle, findMangapillMatch } from './mangapillMatch';
 
 const CHAPTERS_API = (process.env.EXPO_PUBLIC_CHAPTERS_API || '').replace(/\/+$/, '');
-const SOURCE_NAMES = { mangapill: 'MangaPill', mgeko: 'Mgeko', asura: 'Asura Scans' };
+const SOURCE_NAMES = { mangapill: 'MangaPill', mgeko: 'Mgeko', asura: 'Asura Scans', mangadex: 'MangaDex' };
 
 // Previously verified cross-source associations. Dynamic provider searches
 // extend these without creating guessed/fuzzy mappings.
@@ -72,6 +73,12 @@ async function chapterCoverageFor(item) {
         const chapters = Array.isArray(result.chapters) ? result.chapters : [];
         return { count: chapters.length, latestNumber: highestChapterNumber(chapters, 'mangapill') };
     }
+    if (item.source === 'mangadex') {
+        const result = await getMangadexManga(item.id);
+        if (!sameWork(result.title, item.title)) return null;
+        const chapters = Array.isArray(result.chapters) ? result.chapters : [];
+        return { count: chapters.length, latestNumber: highestChapterNumber(chapters, 'mangadex') };
+    }
     if (!CHAPTERS_API) return null;
     const endpoint = item.source === 'mgeko' ? 'mgeko-chapters' : 'asura-chapters';
     const params = new URLSearchParams({ seriesId: item.id });
@@ -92,9 +99,10 @@ export async function discoverReadingSources({ title, currentSource, currentId, 
 
     // Mgeko discovery is no longer restricted to hardcodedManhwas. Never
     // associate ambiguous results: only one distinct exact-title hit qualifies.
-    const [mgekoSearch, mangapillSearch] = await Promise.allSettled([
+    const [mgekoSearch, mangapillSearch, mangadexSearch] = await Promise.allSettled([
         searchMgeko(name, 40),
         currentSource === 'mangapill' ? Promise.resolve([]) : findMangapillMatch(name, searchMangapill),
+        currentSource === 'mangadex' ? Promise.resolve([]) : searchMangadex(name, 30),
     ]);
     if (mgekoSearch.status === 'fulfilled' && Array.isArray(mgekoSearch.value)) {
         const matches = [...new Map(mgekoSearch.value
@@ -107,12 +115,21 @@ export async function discoverReadingSources({ title, currentSource, currentId, 
         candidates.push({ id: hit.url, source: 'mangapill', title: name });
     }
 
+    if (mangadexSearch.status === 'fulfilled' && Array.isArray(mangadexSearch.value)) {
+        const matches = [...new Map(mangadexSearch.value
+            .filter(item => item.id?.startsWith('mangadex__') && sameWork(item.title, name))
+            .map(item => [item.id, item])).values()];
+        // Multiple MangaDex entries can be distinct editions or translations;
+        // do not silently choose one when the association is ambiguous.
+        if (matches.length === 1) candidates.push({ ...matches[0], title: name, source: 'mangadex' });
+    }
+
     // A title can only have one automatically matched series per provider.
     // Explicit legacy mappings beat a differently named upstream URL.
     const unique = [...new Map(candidates.filter(i => i.id && i.source)
         .map(i => [identity(i), { ...i, title: name, label: SOURCE_NAMES[i.source] || i.source }])).values()];
     const choices = [current];
-    for (const provider of ['mgeko', 'asura', 'mangapill']) {
+    for (const provider of ['mgeko', 'asura', 'mangapill', 'mangadex']) {
         if (provider === currentSource) continue;
         const options = unique.filter(i => i.source === provider);
         if (options.length !== 1) continue;
