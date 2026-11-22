@@ -15,6 +15,7 @@ import {
     toMangadexChapterKey,
 } from '../manga_api/mangadex';
 import { getManhwaById } from '../manga_api/hardcodedManhwas';
+import { canonicalMetadataFor } from '../services/canonicalMetadata';
 import { Ionicons } from '@expo/vector-icons';
 import { addFavorite, removeFavorite, getFavorites, getLastReadChapter, saveLastReadChapter, clearNewChapterFlag, touchLastViewed, newChapterKey } from "./searchStorage";
 import { getCoverUrl as getStaticCover } from "../services/coverurls";
@@ -372,8 +373,9 @@ const MangaDetails = () => {
         router.replace(sourceDetailPath(option, title));
     };
 
+    const canonicalMetadata = canonicalMetadataFor(titleParam || mangaData?.title || mangaData?.name);
     const getCoverCandidates = () => coverSources(
-        mangaData?.image, mangaData?.cover, mangaData?.coverUrl,
+        canonicalMetadata?.cover, mangaData?.image, mangaData?.cover, mangaData?.coverUrl,
         sharedMetadata?.cover, coverParam, getStaticCover(storageKey)
     );
     const getCoverUrl = () => getCoverCandidates()[0] || null;
@@ -382,8 +384,8 @@ const MangaDetails = () => {
         const freshCover = getCoverUrl();
         return {
             url: storageKey,
-            title: mangaData?.title || mangaData?.name || titleParam || 'Manga',
-            description: mangaData?.description || sharedMetadata?.description || '',
+            title: canonicalMetadata?.title || mangaData?.title || mangaData?.name || titleParam || 'Manga',
+            description: canonicalMetadata?.description || mangaData?.description || sharedMetadata?.description || '',
             coverUrl: freshCover,
             cover: freshCover,
             source: isMangadex ? 'mangadex' : isMangapill ? 'mangapill' : isMgeko ? 'mgeko' : 'asura',
@@ -459,9 +461,11 @@ const MangaDetails = () => {
         </SafeAreaView>
     );
 
-    const title = mangaData?.title || mangaData?.name || titleParam || 'Unknown';
+    const title = canonicalMetadata?.title || mangaData?.title || mangaData?.name || titleParam || 'Unknown';
     const coverUrls = getCoverCandidates();
-    const isOngoing = mangaData?.status === 'Ongoing';
+    const displayStatus = canonicalMetadata?.status || mangaData?.status;
+    const displayGenres = canonicalMetadata?.genres?.length ? canonicalMetadata.genres : mangaData?.genres;
+    const isOngoing = displayStatus === 'Ongoing';
     const srcLabel = isMangadex ? 'MangaDex' : isMangapill ? 'MangaPill' : isMgeko ? 'MgEko' : 'AsuraScans';
     const srcColor = isMangadex ? '#fb923c' : isMangapill ? '#38bdf8' : isMgeko ? '#10b981' : C.accent;
 
@@ -495,22 +499,22 @@ const MangaDetails = () => {
                             <View style={[S.srcDot, { backgroundColor: srcColor }]} />
                             <Text style={S.srcText}>{srcLabel}</Text>
                         </View>
-                        {mangaData?.status && (
+                        {displayStatus && (
                             <View style={[S.statusPill,
                                 isOngoing
                                     ? { borderColor: C.greenBorder, backgroundColor: C.greenDim }
                                     : { borderColor: C.border, backgroundColor: 'transparent' }
                             ]}>
                                 <View style={[S.statusDot, { backgroundColor: isOngoing ? C.green : C.text3 }]} />
-                                <Text style={[S.statusText, { color: isOngoing ? C.green : C.text2 }]}>{mangaData.status}</Text>
+                                <Text style={[S.statusText, { color: isOngoing ? C.green : C.text2 }]}>{displayStatus}</Text>
                             </View>
                         )}
-                        {mangaData?.genres?.length > 0 && (
+                        {displayGenres?.length > 0 && (
                             <View style={S.genreRow}>
-                                {mangaData.genres.slice(0, 3).map((g, i) => (
+                                {displayGenres.slice(0, 3).map((g, i) => (
                                     <View key={i} style={S.genreTag}><Text style={S.genreText}>{g}</Text></View>
                                 ))}
-                                {mangaData.genres.length > 3 && <Text style={S.genreMore}>+{mangaData.genres.length - 3}</Text>}
+                                {displayGenres.length > 3 && <Text style={S.genreMore}>+{displayGenres.length - 3}</Text>}
                             </View>
                         )}
                     </View>
@@ -643,7 +647,7 @@ const MangaDetails = () => {
                 {/* SYNOPSIS */}
                 <View style={S.block}>
                     <Text style={S.blockLabel}>ABOUT THIS SERIES</Text>
-                    <Text style={S.synopsis}>{mangaData?.description || sharedMetadata?.description || 'No description available.'}</Text>
+                    <Text style={S.synopsis}>{canonicalMetadata?.description || mangaData?.description || sharedMetadata?.description || 'No description available.'}</Text>
                 </View>
 
                 {/* TAGS */}
