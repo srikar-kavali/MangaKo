@@ -28,6 +28,7 @@ export function applyCanonicalMetadata(item) {
         description: meta.description || item.description,
         cover: meta.cover || item.cover,
         coverUrl: meta.cover || item.coverUrl,
+        image: meta.cover || item.image,
         genres: meta.genres.length ? meta.genres : item.genres,
         status: meta.status || item.status,
     };
