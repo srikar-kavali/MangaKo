@@ -32,5 +32,5 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - run: node --test tests/security.test.mjs
+      - run: node --test tests/security.test.mjs tests/searchGrouping.test.mjs
       - run: npx expo export --platform web
