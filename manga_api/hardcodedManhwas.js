@@ -949,7 +949,7 @@ export const manhwas = [
     },
     {
         id: "the-legend-of-the-northern-blade",
-        title: "The Legend of TheNorthern Blade",
+        title: "The Legend of the Northern Blade",
         source: "asura",
         description: "Following the destruction of the Northern Heavenly Sect, Jin Mu-Won discovers the secret martial arts techniques left behind by his father and the sect's former leaders.",
         genres: ["Action", "Adventure", "Martial Arts", "Murim", "Shounen"],
