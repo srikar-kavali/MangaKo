@@ -4,6 +4,10 @@ import { normalizedTitle } from './mangapillMatch.js';
 const TITLE_ALIASES = {
     'more than a married couple but not lovers': 'fuufu ijou koibito miman',
     'fuufu ijou koibito miman': 'fuufu ijou koibito miman',
+    'the legend of thenorthern blade': 'legend of the northern blade',
+    'the legend of the northern blade': 'legend of the northern blade',
+    'legend of the northern blade': 'legend of the northern blade',
+    'absolute dominion': 'absolute domination',
 };
 
 export function canonicalSeriesTitle(title) {
