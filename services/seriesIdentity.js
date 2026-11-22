@@ -1,4 +1,4 @@
-import { normalizedTitle } from './mangapillMatch';
+import { normalizedTitle } from './mangapillMatch.js';
 
 // Only known alternative titles are linked. Do not fuzzy-merge similar titles.
 const TITLE_ALIASES = {
